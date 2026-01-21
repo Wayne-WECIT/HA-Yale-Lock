@@ -35,21 +35,33 @@ async def _async_setup_frontend(hass: HomeAssistant) -> None:
     target_dir = www_dir / "yale_lock_manager"
     target_file = target_dir / "yale-lock-manager-card.js"
     
-    # Create target directory if it doesn't exist
-    target_dir.mkdir(parents=True, exist_ok=True)
+    # Check if source exists
+    if not card_source.exists():
+        _LOGGER.warning("Card source file not found at %s", card_source)
+        return
     
-    # Copy the card file if source exists
-    if card_source.exists():
+    # Run file operations in executor to avoid blocking the event loop
+    def copy_card_file():
+        """Copy the card file (runs in executor)."""
         try:
+            # Create target directory if it doesn't exist
+            target_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Copy the card file
             shutil.copy2(card_source, target_file)
-            _LOGGER.info(
-                "Copied Lovelace card to %s - Add resource: /local/yale_lock_manager/yale-lock-manager-card.js",
-                target_file
-            )
+            return True
         except Exception as err:
             _LOGGER.error("Failed to copy Lovelace card: %s", err)
-    else:
-        _LOGGER.warning("Card source file not found at %s", card_source)
+            return False
+    
+    # Run the blocking operation in an executor
+    success = await hass.async_add_executor_job(copy_card_file)
+    
+    if success:
+        _LOGGER.info(
+            "Copied Lovelace card to %s - Add resource: /local/yale_lock_manager/yale-lock-manager-card.js",
+            target_file
+        )
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
