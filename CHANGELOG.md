@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.0.2] - 2026-01-21
+
+### Fixed
+- Improved lock detection to check for actual lock entities (most reliable method)
+- Added multiple detection methods for Yale locks (manufacturer, model, name)
+- Now detects ANY Z-Wave lock with a lock entity, not just Yale
+- Added debug logging for lock detection
+
+### Changed
+- Lock detection now checks entity registry for lock entities first
+- More robust Yale model detection (checks for KFCON model patterns)
+
 ## [1.0.0.1] - 2026-01-21
 
 ### Fixed

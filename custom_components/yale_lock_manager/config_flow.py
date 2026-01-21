@@ -25,31 +25,64 @@ _LOGGER = logging.getLogger(__name__)
 # Door Lock device class
 DEVICE_CLASS_DOOR_LOCK = (64, 3)  # generic=64 (Entry Control), specific=3 (Door Lock)
 
+# Yale manufacturer ID in Z-Wave
+YALE_MANUFACTURER_ID = 0x0129  # 297 in decimal
+
 
 async def _get_zwave_locks(hass: HomeAssistant) -> dict[str, str]:
     """Get all Z-Wave locks from device registry."""
     device_registry = dr.async_get(hass)
+    entity_registry = hass.helpers.entity_registry.async_get(hass)
     locks = {}
 
     for device in device_registry.devices.values():
         # Check if device is from zwave_js
-        if ZWAVE_JS_DOMAIN not in device.identifiers:
+        zwave_identifiers = [
+            identifier for identifier in device.identifiers 
+            if identifier[0] == ZWAVE_JS_DOMAIN
+        ]
+        
+        if not zwave_identifiers:
             continue
 
-        # Get device class info from identifiers
-        for identifier in device.identifiers:
-            if identifier[0] == ZWAVE_JS_DOMAIN:
-                # Get the node_id from the identifier
-                node_id = identifier[1].split("-")[0]  # Format is "node_id-endpoint"
-                
-                # Check for Yale locks - accept if manufacturer is Yale
-                if device.manufacturer and "yale" in device.manufacturer.lower():
-                    locks[node_id] = f"{device.name} (Node {node_id})"
-                    continue
-                
-                # Also check by name for other locks
-                if device.name and "lock" in device.name.lower():
-                    locks[node_id] = f"{device.name} (Node {node_id})"
+        # Get the node_id from the identifier
+        identifier = zwave_identifiers[0]
+        node_id = identifier[1].split("-")[0]  # Format is "node_id-endpoint"
+        
+        # Check if this device has a lock entity
+        has_lock_entity = False
+        for entity in entity_registry.entities.values():
+            if entity.device_id == device.id and entity.domain == "lock":
+                has_lock_entity = True
+                break
+        
+        if not has_lock_entity:
+            continue
+        
+        # Check for Yale locks by multiple methods
+        is_yale = False
+        
+        # Method 1: Check manufacturer string
+        if device.manufacturer and "yale" in device.manufacturer.lower():
+            is_yale = True
+        
+        # Method 2: Check model for Yale model numbers
+        if device.model and ("yale" in device.model.lower() or 
+                            "kfcon" in device.model.lower() or
+                            "p-kfcon" in device.model.lower()):
+            is_yale = True
+        
+        # Method 3: Check device name
+        if device.name and "yale" in device.name.lower():
+            is_yale = True
+        
+        # Add to locks list (Yale or any other lock brand)
+        if is_yale or has_lock_entity:
+            locks[node_id] = f"{device.name} (Node {node_id})"
+            _LOGGER.debug(
+                "Found lock: %s (Node %s) - Manufacturer: %s, Model: %s",
+                device.name, node_id, device.manufacturer, device.model
+            )
 
     return locks
 
