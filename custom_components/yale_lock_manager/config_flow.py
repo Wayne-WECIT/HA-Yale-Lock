@@ -11,7 +11,7 @@ from homeassistant.components.zwave_js import DOMAIN as ZWAVE_JS_DOMAIN
 from homeassistant.const import CONF_NAME
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResult
-from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import device_registry as dr, entity_registry as er
 
 from .const import (
     CONF_LOCK_ENTITY_ID,
@@ -32,7 +32,7 @@ YALE_MANUFACTURER_ID = 0x0129  # 297 in decimal
 async def _get_zwave_locks(hass: HomeAssistant) -> dict[str, str]:
     """Get all Z-Wave locks from device registry."""
     device_registry = dr.async_get(hass)
-    entity_registry = hass.helpers.entity_registry.async_get(hass)
+    entity_registry = er.async_get(hass)
     locks = {}
 
     for device in device_registry.devices.values():
@@ -118,7 +118,7 @@ class YaleLockManagerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             lock_name = locks[node_id]
 
             # Get the lock entity ID from entity registry
-            entity_registry = self.hass.helpers.entity_registry.async_get(self.hass)
+            entity_registry = er.async_get(self.hass)
             lock_entity_id = None
 
             for entity in entity_registry.entities.values():
