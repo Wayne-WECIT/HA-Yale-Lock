@@ -1,11 +1,8 @@
 {
   "name": "Yale Lock Manager",
   "content_in_root": false,
-  "filename": "yale_lock_manager",
   "render_readme": true,
   "domains": ["lock", "sensor", "binary_sensor"],
   "homeassistant": "2026.1.2",
-  "iot_class": "Local Polling",
-  "zip_release": true,
-  "country": ["GB", "US", "CA", "AU", "NZ"]
+  "iot_class": "Local Polling"
 }
