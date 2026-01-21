@@ -1,0 +1,70 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*.*'
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Get version from tag
+        id: get_version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref }}
+          release_name: Release ${{ github.ref }}
+          body: |
+            ## Yale Lock Manager v${{ steps.get_version.outputs.VERSION }}
+            
+            ### Installation
+            
+            **Via HACS:**
+            1. Go to HACS → Integrations
+            2. Click the three dots menu → Custom repositories
+            3. Add: `https://github.com/Wayne-WECIT/HA-Yale-Lock`
+            4. Install "Yale Lock Manager"
+            
+            **Manual:**
+            1. Download the Source code (zip) below
+            2. Extract `custom_components/yale_lock_manager` to your HA config
+            3. Extract `www/yale-lock-manager-card` to your HA config
+            4. Restart Home Assistant
+            
+            ### What's Changed
+            See CHANGELOG.md for details.
+            
+            **Full Changelog**: https://github.com/Wayne-WECIT/HA-Yale-Lock/compare/${{ github.event.before }}...${{ github.ref }}
+          draft: false
+          prerelease: false
+
+      - name: Create ZIP file
+        run: |
+          mkdir -p release
+          cp -r custom_components release/
+          cp -r www release/
+          cp README.md release/
+          cp LICENSE release/
+          cp CHANGELOG.md release/
+          cd release
+          zip -r ../yale-lock-manager.zip .
+
+      - name: Upload Release Asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./yale-lock-manager.zip
+          asset_name: yale-lock-manager-${{ steps.get_version.outputs.VERSION }}.zip
+          asset_content_type: application/zip

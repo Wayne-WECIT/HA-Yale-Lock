@@ -1,0 +1,30 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Yale Lock Manager Setup",
+        "description": "Select your Yale Z-Wave lock",
+        "data": {
+          "lock_node_id": "Lock"
+        }
+      }
+    },
+    "error": {
+      "lock_entity_not_found": "Could not find lock entity for selected device",
+      "unknown": "Unexpected error occurred"
+    },
+    "abort": {
+      "zwave_js_not_found": "Z-Wave JS integration not found. Please set up Z-Wave JS first.",
+      "no_locks_found": "No Yale locks found. Please ensure your lock is paired with Z-Wave JS.",
+      "single_instance_allowed": "Only one lock can be configured at this time."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Yale Lock Manager Options",
+        "description": "Configure options for Yale Lock Manager"
+      }
+    }
+  }
+}

@@ -1,0 +1,159 @@
+set_user_code:
+  name: Set User Code
+  description: Set a user code for the Yale lock
+  fields:
+    slot:
+      name: Slot Number
+      description: User code slot number (1-20)
+      required: true
+      example: 1
+      selector:
+        number:
+          min: 1
+          max: 20
+          mode: box
+    code:
+      name: Code
+      description: PIN code (4-10 digits)
+      required: true
+      example: "1234"
+      selector:
+        text:
+    name:
+      name: Name
+      description: User name
+      required: true
+      example: "John Doe"
+      selector:
+        text:
+    code_type:
+      name: Code Type
+      description: Type of code (PIN or FOB)
+      required: false
+      default: "pin"
+      example: "pin"
+      selector:
+        select:
+          options:
+            - label: "PIN"
+              value: "pin"
+            - label: "FOB/RFID"
+              value: "fob"
+
+clear_user_code:
+  name: Clear User Code
+  description: Clear a user code from the Yale lock
+  fields:
+    slot:
+      name: Slot Number
+      description: User code slot number (1-20)
+      required: true
+      example: 1
+      selector:
+        number:
+          min: 1
+          max: 20
+          mode: box
+
+set_user_schedule:
+  name: Set User Schedule
+  description: Set time-based access schedule for a user code
+  fields:
+    slot:
+      name: Slot Number
+      description: User code slot number (1-20)
+      required: true
+      example: 1
+      selector:
+        number:
+          min: 1
+          max: 20
+          mode: box
+    start_datetime:
+      name: Start Date/Time
+      description: When the code becomes active (leave empty for no start restriction)
+      required: false
+      example: "2026-01-01 00:00:00"
+      selector:
+        datetime:
+    end_datetime:
+      name: End Date/Time
+      description: When the code expires (leave empty for no end restriction)
+      required: false
+      example: "2026-12-31 23:59:59"
+      selector:
+        datetime:
+
+set_usage_limit:
+  name: Set Usage Limit
+  description: Set maximum number of uses for a user code
+  fields:
+    slot:
+      name: Slot Number
+      description: User code slot number (1-20)
+      required: true
+      example: 1
+      selector:
+        number:
+          min: 1
+          max: 20
+          mode: box
+    max_uses:
+      name: Maximum Uses
+      description: Maximum number of times the code can be used (leave empty for unlimited)
+      required: false
+      example: 10
+      selector:
+        number:
+          min: 1
+          max: 1000
+          mode: box
+
+push_code_to_lock:
+  name: Push Code to Lock
+  description: Manually push a user code to the lock
+  fields:
+    slot:
+      name: Slot Number
+      description: User code slot number (1-20)
+      required: true
+      example: 1
+      selector:
+        number:
+          min: 1
+          max: 20
+          mode: box
+
+pull_codes_from_lock:
+  name: Pull Codes from Lock
+  description: Pull all user codes from the lock and update local storage
+
+enable_user:
+  name: Enable User
+  description: Enable a user code
+  fields:
+    slot:
+      name: Slot Number
+      description: User code slot number (1-20)
+      required: true
+      example: 1
+      selector:
+        number:
+          min: 1
+          max: 20
+          mode: box
+
+disable_user:
+  name: Disable User
+  description: Disable a user code
+  fields:
+    slot:
+      name: Slot Number
+      description: User code slot number (1-20)
+      required: true
+      example: 1
+      selector:
+        number:
+          min: 1
+          max: 20
+          mode: box
