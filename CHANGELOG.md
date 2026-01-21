@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.1.1] - 2026-01-21
+
+### Changed
+- Card is now automatically copied to `www/yale_lock_manager/` during integration setup
+- Card URL changed from `/local/community/yale_lock_manager/` to `/local/yale_lock_manager/`
+- No manual card file copying needed - fully automatic!
+- Works correctly with HACS custom repositories
+
+### Technical
+- Added `_async_setup_frontend()` function to handle card installation
+- Integration automatically creates `www/yale_lock_manager/` directory if needed
+
 ## [1.0.1.0] - 2026-01-21
 
 ### Fixed

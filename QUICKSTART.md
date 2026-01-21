@@ -49,11 +49,11 @@ Your lock is now configured! You'll see:
    - Go to **Settings** → **Dashboards**
    - Click **three dots** → **Resources**
    - Click **"+ Add Resource"**
-   - URL: `/local/community/yale_lock_manager/yale-lock-manager-card.js`
+   - URL: `/local/yale_lock_manager/yale-lock-manager-card.js`
    - Resource type: **JavaScript Module**
    - Click **Create**
    
-   **Note:** If installed via HACS, the card is automatically placed in the correct location.
+   **Note:** The integration automatically copies the card file to `www/yale_lock_manager/` during setup.
 
 2. **Add the Card to Dashboard:**
    - Go to any dashboard

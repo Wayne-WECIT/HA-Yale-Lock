@@ -2,6 +2,9 @@
 from __future__ import annotations
 
 import logging
+import os
+import shutil
+from pathlib import Path
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
@@ -21,9 +24,40 @@ PLATFORMS: list[Platform] = [
 ]
 
 
+async def _async_setup_frontend(hass: HomeAssistant) -> None:
+    """Set up the frontend resources."""
+    # Get the path to this integration's directory
+    integration_dir = Path(__file__).parent
+    card_source = integration_dir / "www" / "yale-lock-manager-card.js"
+    
+    # Create the target directory in www
+    www_dir = Path(hass.config.path("www"))
+    target_dir = www_dir / "yale_lock_manager"
+    target_file = target_dir / "yale-lock-manager-card.js"
+    
+    # Create target directory if it doesn't exist
+    target_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Copy the card file if source exists
+    if card_source.exists():
+        try:
+            shutil.copy2(card_source, target_file)
+            _LOGGER.info(
+                "Copied Lovelace card to %s - Add resource: /local/yale_lock_manager/yale-lock-manager-card.js",
+                target_file
+            )
+        except Exception as err:
+            _LOGGER.error("Failed to copy Lovelace card: %s", err)
+    else:
+        _LOGGER.warning("Card source file not found at %s", card_source)
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Yale Lock Manager from a config entry."""
     _LOGGER.debug("Setting up Yale Lock Manager integration")
+
+    # Set up frontend resources (copy card to www)
+    await _async_setup_frontend(hass)
 
     # Create coordinator
     coordinator = YaleLockCoordinator(hass, entry)
