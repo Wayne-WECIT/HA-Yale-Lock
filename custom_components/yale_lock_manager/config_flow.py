@@ -42,15 +42,13 @@ async def _get_zwave_locks(hass: HomeAssistant) -> dict[str, str]:
                 # Get the node_id from the identifier
                 node_id = identifier[1].split("-")[0]  # Format is "node_id-endpoint"
                 
-                # Check device class - look for Door Lock
-                # We'll check the model/name for Yale locks
+                # Check for Yale locks - accept if manufacturer is Yale
                 if device.manufacturer and "yale" in device.manufacturer.lower():
-                    if device.model and "lock" in device.model.lower():
-                        locks[node_id] = f"{device.name} (Node {node_id})"
-                        continue
+                    locks[node_id] = f"{device.name} (Node {node_id})"
+                    continue
                 
-                # Also check by name if manufacturer detection didn't work
-                if "lock" in device.name.lower():
+                # Also check by name for other locks
+                if device.name and "lock" in device.name.lower():
                     locks[node_id] = f"{device.name} (Node {node_id})"
 
     return locks
