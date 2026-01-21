@@ -187,9 +187,10 @@ class YaleLockLastAccessMethodSensor(CoordinatorEntity, SensorEntity):
 
     def _setup_listener(self) -> None:
         """Set up event listener."""
+        from homeassistant.core import callback
         from .const import EVENT_ACCESS
 
-        @self.coordinator.hass.callback
+        @callback
         def handle_access_event(event):
             """Handle access event."""
             self._last_method = event.data.get("method")

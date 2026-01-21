@@ -8,6 +8,7 @@ from typing import Any
 from homeassistant.components.zwave_js import DOMAIN as ZWAVE_JS_DOMAIN
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers import device_registry as dr, entity_registry as er
 from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
@@ -283,7 +284,7 @@ class YaleLockCoordinator(DataUpdateCoordinator):
         """Get a Z-Wave JS value."""
         try:
             # Get the device from device registry
-            device_registry = self.hass.helpers.device_registry.async_get(self.hass)
+            device_registry = dr.async_get(self.hass)
             device = None
             
             for dev in device_registry.devices.values():
@@ -299,7 +300,7 @@ class YaleLockCoordinator(DataUpdateCoordinator):
                 return None
 
             # Get entity from entity registry that matches this device and has the value
-            entity_registry = self.hass.helpers.entity_registry.async_get(self.hass)
+            entity_registry = er.async_get(self.hass)
             
             for entity in entity_registry.entities.values():
                 if entity.device_id == device.id:

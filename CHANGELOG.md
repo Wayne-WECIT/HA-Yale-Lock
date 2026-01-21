@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.1.0] - 2026-01-21
+
+### Fixed
+- Fixed multiple `'HomeAssistant' object has no attribute 'helpers'` errors in coordinator
+- Fixed `'HomeAssistant' object has no attribute 'callback'` error in sensor
+- Properly imported device_registry and entity_registry modules throughout
+- Fixed @callback decorator usage in event listeners
+
+### Changed
+- Moved Lovelace card from `www/yale-lock-manager-card/` to `custom_components/yale_lock_manager/www/`
+- Card is now served from `/local/community/yale_lock_manager/yale-lock-manager-card.js`
+- Card file is automatically installed with the integration via HACS
+
 ## [1.0.0.3] - 2026-01-21
 
 ### Fixed

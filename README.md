@@ -64,7 +64,7 @@ A comprehensive Home Assistant custom integration for managing Yale front door l
 1. Add the custom card resource:
    - Go to **Settings** → **Dashboards** → **Resources** (three dots menu)
    - Click **"+ Add Resource"**
-   - URL: `/local/yale-lock-manager-card/yale-lock-manager-card.js`
+   - URL: `/local/community/yale_lock_manager/yale-lock-manager-card.js`
    - Resource type: **JavaScript Module**
    - Click **Create**
 
