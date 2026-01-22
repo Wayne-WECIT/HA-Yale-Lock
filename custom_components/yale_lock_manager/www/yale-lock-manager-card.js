@@ -735,6 +735,25 @@ class YaleLockManagerCard extends HTMLElement {
             ${rows}
           </tbody>
         </table>
+        
+        <hr style="margin: 24px 0 16px 0;">
+        <div id="clear-cache-section" style="text-align: center; padding: 16px 0;">
+          ${this._showClearCacheConfirm ? `
+            <div style="background: var(--warning-color-background, rgba(255, 152, 0, 0.1)); border: 1px solid var(--warning-color, #ff9800); border-radius: 4px; padding: 12px; margin-bottom: 12px;">
+              <p style="margin: 0 0 12px 0; color: var(--warning-color, #ff9800); font-weight: 500;">⚠️ Are you sure you want to clear all local cache?</p>
+              <div style="display: flex; gap: 8px; justify-content: center;">
+                <button onclick="card.confirmClearCache()" style="background: var(--error-color, #f44336); color: white;">Yes, Clear Cache</button>
+                <button class="secondary" onclick="card.cancelClearCache()">Cancel</button>
+              </div>
+            </div>
+          ` : ''}
+          <button class="secondary" onclick="card.showClearCacheConfirm()" style="background: var(--error-color-background, rgba(244, 67, 54, 0.1)); color: var(--error-color, #f44336); border: 1px solid var(--error-color, #f44336);">
+            🗑️ Clear Local Cache
+          </button>
+          <p style="color: var(--secondary-text-color); font-size: 0.85em; margin-top: 8px;">
+            This will remove all locally stored user data. Use "Refresh from lock" to reload from the physical lock.
+          </p>
+        </div>
       </ha-card>
     `;
   }
