@@ -997,13 +997,19 @@ class YaleLockCoordinator(DataUpdateCoordinator):
                     user_data["synced_to_lock"] = False
                     raise ValueError(f"Verification failed: Code mismatch in slot {slot}")
                 else:
-                    # Verification succeeded!
+                    # Verification succeeded! Update lock fields with pulled data
                     _LOGGER.info("✓ Verified: Code successfully written to slot %s", slot)
-                    user_data["synced_to_lock"] = True
-                    user_data["lock_code"] = verification_code  # Update lock_code with verified value
-                    user_data["lock_status_from_lock"] = verification_status  # Update lock status from lock
-                    user_data["lock_enabled"] = verification_status == USER_STATUS_ENABLED  # Update lock_enabled (for compatibility)
-                    _LOGGER.info("✓ Updated lock_code for slot %s: %s", slot, "***" if verification_code else "None")
+                    user_data["lock_code"] = verification_code  # Update lock_code from lock
+                    user_data["lock_status_from_lock"] = verification_status  # Update lock_status_from_lock
+                    user_data["lock_enabled"] = verification_status == USER_STATUS_ENABLED  # Update lock_enabled
+                    
+                    # Recalculate sync status after pull
+                    codes_match = (user_data["code"] == verification_code)
+                    status_match = (user_data["lock_status"] == verification_status)
+                    user_data["synced_to_lock"] = codes_match and status_match
+                    _LOGGER.info("Slot %s sync after push - Cached code: %s, Lock code: %s, Codes match: %s, Status match: %s, Synced: %s",
+                                slot, "***" if user_data["code"] else "None", "***" if verification_code else "None", 
+                                codes_match, status_match, user_data["synced_to_lock"])
             
             await self.async_save_user_data()
             await self.async_request_refresh()
