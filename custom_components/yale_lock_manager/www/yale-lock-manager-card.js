@@ -829,8 +829,7 @@ class YaleLockManagerCard extends HTMLElement {
           <div class="lock-status">
             <div class="status-icon">${isLocked ? '🔒' : '🔓'}</div>
             <div class="status-info">
-              <div class="status-line">🔋 ${batteryLevel}% Battery</div>
-              <div class="status-line">• Bolt: ${boltStatus} • Door: ${doorStatus}</div>
+              <div class="status-line">🔋 ${batteryLevel}% Battery • Bolt: ${boltStatus} • Door: ${doorStatus}</div>
             </div>
           </div>
           <div class="controls">
