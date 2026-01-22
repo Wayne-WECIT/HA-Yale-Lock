@@ -11,6 +11,7 @@ class YaleLockManagerCard extends HTMLElement {
     this._hass = null;
     this._expandedSlot = null;
     this._statusMessages = {}; // Per-slot status messages
+    this._showClearCacheConfirm = false;
   }
 
   setConfig(config) {
