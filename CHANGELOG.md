@@ -379,6 +379,22 @@ After updating, you may need to:
 
 ### Planned Features
 
+## [1.3.2.0] - 2026-01-22
+
+### Fixed
+- **CRITICAL FIX**: Corrected all service names in Lovelace card
+  - `set_usercode` → `set_user_code`
+  - `push_usercode` → `push_code_to_lock`
+  - `clear_usercode` → `clear_user_code`
+  - `enable_usercode` → `enable_user` / `disable_user`
+  - `refresh_codes` → `pull_codes_from_lock`
+  - `set_schedule` → `set_user_schedule`
+- Fixed service parameter names:
+  - `start_time`/`end_time` → `start_datetime`/`end_datetime`
+  - `limit` → `max_uses`
+  - `enabled` parameter removed (use separate enable/disable services)
+- Card now properly communicates with backend services
+
 ## [1.3.1.0] - 2026-01-22
 
 ### Fixed

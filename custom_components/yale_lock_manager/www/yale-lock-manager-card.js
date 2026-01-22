@@ -537,7 +537,7 @@ class YaleLockManagerCard extends HTMLElement {
   }
 
   async handleRefresh() {
-    await this._hass.callService('yale_lock_manager', 'refresh_codes', {
+    await this._hass.callService('yale_lock_manager', 'pull_codes_from_lock', {
       entity_id: this._config.entity
     });
   }
@@ -557,7 +557,7 @@ class YaleLockManagerCard extends HTMLElement {
       return;
     }
 
-    await this._hass.callService('yale_lock_manager', 'set_usercode', {
+    await this._hass.callService('yale_lock_manager', 'set_user_code', {
       entity_id: this._config.entity,
       slot: slot,
       name: name,
@@ -572,7 +572,7 @@ class YaleLockManagerCard extends HTMLElement {
   async handlePushCode(slot) {
     if (!confirm(`Push this code to the lock now?`)) return;
 
-    await this._hass.callService('yale_lock_manager', 'push_usercode', {
+    await this._hass.callService('yale_lock_manager', 'push_code_to_lock', {
       entity_id: this._config.entity,
       slot: slot
     });
@@ -583,7 +583,7 @@ class YaleLockManagerCard extends HTMLElement {
   async handleClearCode(slot) {
     if (!confirm(`Clear slot ${slot}? This will remove all settings.`)) return;
 
-    await this._hass.callService('yale_lock_manager', 'clear_usercode', {
+    await this._hass.callService('yale_lock_manager', 'clear_user_code', {
       entity_id: this._config.entity,
       slot: slot
     });
@@ -594,10 +594,10 @@ class YaleLockManagerCard extends HTMLElement {
   }
 
   async handleToggleUser(slot, currentState) {
-    await this._hass.callService('yale_lock_manager', 'enable_usercode', {
+    const service = currentState ? 'disable_user' : 'enable_user';
+    await this._hass.callService('yale_lock_manager', service, {
       entity_id: this._config.entity,
-      slot: slot,
-      enabled: !currentState
+      slot: slot
     });
   }
 
@@ -605,11 +605,11 @@ class YaleLockManagerCard extends HTMLElement {
     const start = this.shadowRoot.getElementById(`start-${slot}`).value;
     const end = this.shadowRoot.getElementById(`end-${slot}`).value;
 
-    await this._hass.callService('yale_lock_manager', 'set_schedule', {
+    await this._hass.callService('yale_lock_manager', 'set_user_schedule', {
       entity_id: this._config.entity,
       slot: slot,
-      start_time: start,
-      end_time: end
+      start_datetime: start,
+      end_datetime: end
     });
 
     alert(`✅ Schedule saved`);
@@ -621,7 +621,7 @@ class YaleLockManagerCard extends HTMLElement {
     await this._hass.callService('yale_lock_manager', 'set_usage_limit', {
       entity_id: this._config.entity,
       slot: slot,
-      limit: limit
+      max_uses: limit
     });
 
     alert(`✅ Usage limit saved`);
