@@ -614,8 +614,8 @@ class YaleLockManagerCard extends HTMLElement {
                 </div>
                 
                 <hr>
-                
-                <div class="form-group">
+                          
+                          <div class="form-group">
                   <label class="toggle-label">
                     <label class="toggle-switch">
                       <input type="checkbox" id="schedule-toggle-${user.slot}" onchange="card.toggleSchedule(${user.slot}, this.checked)" ${user.schedule?.start || user.schedule?.end ? 'checked' : ''}>
@@ -632,17 +632,17 @@ class YaleLockManagerCard extends HTMLElement {
                       <div style="flex: 1; min-width: 200px;">
                         <label style="font-size: 0.85em;">Start:</label>
                         <input type="datetime-local" id="start-${user.slot}" value="${user.schedule?.start ? user.schedule.start.substring(0, 16) : ''}">
-                      </div>
+                              </div>
                       <div style="flex: 1; min-width: 200px;">
                         <label style="font-size: 0.85em;">End:</label>
                         <input type="datetime-local" id="end-${user.slot}" value="${user.schedule?.end ? user.schedule.end.substring(0, 16) : ''}">
-                      </div>
-                    </div>
+                              </div>
+                            </div>
                   </div>
-                </div>
-                
+                          </div>
+                          
                 ${!isFob ? `
-                <div class="form-group">
+                          <div class="form-group">
                   <label class="toggle-label">
                     <label class="toggle-switch">
                       <input type="checkbox" id="limit-toggle-${user.slot}" onchange="card.toggleLimit(${user.slot}, this.checked)" ${user.usage_limit ? 'checked' : ''}>
@@ -692,8 +692,8 @@ class YaleLockManagerCard extends HTMLElement {
                     onclick="card.pushCode(${user.slot})"
                     style="${!user.synced_to_lock ? 'background: #ff9800; color: white; font-weight: bold;' : ''}"
                   >${user.synced_to_lock ? 'Push' : 'Push Required'}</button>
-                </div>
-                ` : ''}
+                          </div>
+                        ` : ''}
                       </div>
                     </td>
                   </tr>
@@ -1173,9 +1173,21 @@ class YaleLockManagerCard extends HTMLElement {
       // Show success message (will persist until slot is collapsed or Push is clicked)
       this.showStatus(slot, '✅ User saved successfully!', 'success');
       
-      // Render will be triggered by the refresh from check_sync_status
-      // But add a small delay to ensure data is updated
-      setTimeout(() => this.render(), 1000);
+      // After saving, we need to ensure the form field shows the NEW cached code
+      // The entity state will have the new code, but we need to restore it to the form
+      // Wait for entity state to update, then restore form values
+      setTimeout(() => {
+        // Get the updated user data from entity state
+        const updatedUser = this.getUserData().find(u => u.slot === slot);
+        if (updatedUser && this.shadowRoot) {
+          // Update the form field with the new cached code
+          const codeField = this.shadowRoot.getElementById(`code-${slot}`);
+          if (codeField && updatedUser.code) {
+            codeField.value = updatedUser.code;
+          }
+        }
+        this.render();
+      }, 1000);
       
     } catch (error) {
       if (error.message && error.message.includes('occupied by an unknown code')) {
