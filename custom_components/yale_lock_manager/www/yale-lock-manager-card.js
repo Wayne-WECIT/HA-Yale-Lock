@@ -483,10 +483,12 @@ class YaleLockManagerCard extends HTMLElement {
                   </td>
           <td>${user.synced_to_lock ? '✓' : '⚠️'}</td>
           <td>
+            ${!isFob ? `
             <button 
               onclick="event.stopPropagation(); card.pushCode(${user.slot})"
               style="${!user.synced_to_lock ? 'background: #ff9800; color: white; font-weight: bold;' : ''}"
             >${user.synced_to_lock ? 'Push' : 'Push Required'}</button>
+            ` : '<span style="color: var(--secondary-text-color); font-size: 0.85em;">N/A</span>'}
                   </td>
                 </tr>
                 ${isExpanded ? `
