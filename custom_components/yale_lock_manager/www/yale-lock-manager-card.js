@@ -26,20 +26,60 @@ class YaleLockManagerCard extends HTMLElement {
 
   showStatus(slot, message, type = 'info') {
     this._statusMessages[slot] = { message, type };
-    this.render();
+    
+    // Update only the status message area, not the whole card
+    this.updateStatusMessage(slot);
     
     // Auto-clear success messages after 3 seconds
     if (type === 'success') {
       setTimeout(() => {
         delete this._statusMessages[slot];
-        this.render();
+        this.updateStatusMessage(slot);
       }, 3000);
     }
   }
 
   clearStatus(slot) {
     delete this._statusMessages[slot];
-    this.render();
+    this.updateStatusMessage(slot);
+  }
+  
+  updateStatusMessage(slot) {
+    // Find the status message container for this slot
+    const expandedContent = this.shadowRoot.querySelector(`[data-slot="${slot}"] .expanded-content, button[data-slot="${slot}"]`)?.closest('tr')?.nextElementSibling?.querySelector('.expanded-content');
+    
+    if (!expandedContent) {
+      // Slot not expanded or not found, do a full render
+      this.render();
+      return;
+    }
+    
+    // Find or create status message area (it should be first after h3)
+    let statusArea = expandedContent.querySelector('.status-message-area');
+    if (!statusArea) {
+      statusArea = document.createElement('div');
+      statusArea.className = 'status-message-area';
+      const h3 = expandedContent.querySelector('h3');
+      if (h3) {
+        h3.after(statusArea);
+      } else {
+        expandedContent.prepend(statusArea);
+      }
+    }
+    
+    // Update the status message HTML
+    statusArea.innerHTML = this.getStatusMessageHTML(slot);
+    
+    // Re-attach event listeners for the new buttons in the status message
+    statusArea.querySelectorAll('[data-action]').forEach(el => {
+      el.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const action = el.dataset.action;
+        const slot = el.dataset.slot ? parseInt(el.dataset.slot, 10) : null;
+        const confirmed = el.dataset.confirmed === 'true';
+        this.handleAction(action, slot, el, confirmed);
+      });
+    });
   }
 
   render() {
@@ -371,7 +411,9 @@ class YaleLockManagerCard extends HTMLElement {
               <div class="expanded-content">
                 <h3>Slot ${user.slot} Settings</h3>
                 
-                ${this.getStatusMessageHTML(user.slot)}
+                <div class="status-message-area">
+                  ${this.getStatusMessageHTML(user.slot)}
+                </div>
                 
                 <div class="form-group">
                   <label>User Name:</label>
@@ -527,9 +569,10 @@ class YaleLockManagerCard extends HTMLElement {
       });
     });
 
-    // Handle toggles
+    // Handle toggles - show/hide fields WITHOUT re-rendering
     this.shadowRoot.querySelectorAll('[data-toggle]').forEach(el => {
       el.addEventListener('change', (e) => {
+        e.stopPropagation();
         const toggleId = el.dataset.toggle;
         const fields = this.shadowRoot.getElementById(`${toggleId}-fields`);
         if (fields) {
@@ -538,10 +581,44 @@ class YaleLockManagerCard extends HTMLElement {
       });
     });
 
-    // Handle type changes to show/hide code field
+    // Handle type changes - DON'T re-render, just show/hide fields
     this.shadowRoot.querySelectorAll('[data-action="change-type"]').forEach(el => {
-      el.addEventListener('change', () => {
-        this.render();
+      el.addEventListener('change', (e) => {
+        e.stopPropagation();
+        const slot = el.dataset.slot;
+        const newType = e.target.value;
+        
+        // Get the expanded content for this slot
+        const codeField = this.shadowRoot.getElementById(`code-${slot}`)?.parentElement;
+        const fobNotice = this.shadowRoot.querySelector(`.fob-notice`);
+        const scheduleSection = this.shadowRoot.getElementById(`schedule-fields-${slot}`)?.closest('.form-group');
+        const limitSection = this.shadowRoot.getElementById(`limit-fields-${slot}`)?.closest('.form-group');
+        const hr = scheduleSection?.previousElementSibling;
+        
+        if (newType === 'fob') {
+          // Hide PIN field, schedule, usage limit
+          if (codeField) codeField.style.display = 'none';
+          if (scheduleSection) scheduleSection.style.display = 'none';
+          if (limitSection) limitSection.style.display = 'none';
+          if (hr) hr.style.display = 'none';
+          
+          // Show FOB notice (create if doesn't exist)
+          if (!this.shadowRoot.querySelector('.fob-notice')) {
+            const notice = document.createElement('div');
+            notice.className = 'fob-notice';
+            notice.innerHTML = '🏷️ FOB/RFID cards don\'t require a PIN. The card ID is read automatically when presented to the lock.';
+            el.parentElement.parentElement.insertBefore(notice, el.parentElement.nextSibling);
+          }
+        } else {
+          // Show PIN field, schedule, usage limit
+          if (codeField) codeField.style.display = '';
+          if (scheduleSection) scheduleSection.style.display = '';
+          if (limitSection) limitSection.style.display = '';
+          if (hr) hr.style.display = '';
+          
+          // Remove FOB notice
+          this.shadowRoot.querySelectorAll('.fob-notice').forEach(n => n.remove());
+        }
       });
     });
   }
@@ -606,11 +683,26 @@ class YaleLockManagerCard extends HTMLElement {
 
   async handleToggleUser(slot, currentState) {
     const service = currentState ? 'disable_user' : 'enable_user';
-    await this._hass.callService('yale_lock_manager', service, {
-      entity_id: this._config.entity,
-      slot: parseInt(slot, 10)
-    });
-    this.showStatus(slot, `User ${currentState ? 'disabled' : 'enabled'}`, 'success');
+    try {
+      await this._hass.callService('yale_lock_manager', service, {
+        entity_id: this._config.entity,
+        slot: parseInt(slot, 10)
+      });
+      this.showStatus(slot, `User ${currentState ? 'disabled' : 'enabled'}`, 'success');
+      
+      // Update the toggle's data-state attribute immediately for visual feedback
+      const toggle = this.shadowRoot.querySelector(`[data-action="toggle-user"][data-slot="${slot}"]`);
+      if (toggle) {
+        toggle.dataset.state = (!currentState).toString();
+      }
+    } catch (error) {
+      this.showStatus(slot, `Failed to ${currentState ? 'disable' : 'enable'} user: ${error.message}`, 'error');
+      // Revert the toggle
+      const toggle = this.shadowRoot.querySelector(`[data-action="toggle-user"][data-slot="${slot}"]`);
+      if (toggle) {
+        toggle.checked = currentState;
+      }
+    }
   }
 
   async handlePushCode(slot, confirmed) {
@@ -667,37 +759,40 @@ class YaleLockManagerCard extends HTMLElement {
       if (codeType === 'pin') {
         const scheduleToggle = this.shadowRoot.getElementById(`schedule-toggle-${slot}`);
         if (scheduleToggle?.checked) {
-          const start = this.shadowRoot.getElementById(`start-${slot}`)?.value || '';
-          const end = this.shadowRoot.getElementById(`end-${slot}`)?.value || '';
+          const start = this.shadowRoot.getElementById(`start-${slot}`)?.value || null;
+          const end = this.shadowRoot.getElementById(`end-${slot}`)?.value || null;
           
-          // Validate dates
-          const now = new Date();
-          if (start && new Date(start) < now) {
-            this.showStatus(slot, 'Start date must be in the future', 'error');
-            return;
-          }
-          if (end && new Date(end) < now) {
-            this.showStatus(slot, 'End date must be in the future', 'error');
-            return;
-          }
-          if (start && end && new Date(end) <= new Date(start)) {
-            this.showStatus(slot, 'End date must be after start date', 'error');
-            return;
-          }
+          // Only send schedule if at least one date is set
+          if (start || end) {
+            // Validate dates
+            const now = new Date();
+            if (start && new Date(start) < now) {
+              this.showStatus(slot, 'Start date must be in the future', 'error');
+              return;
+            }
+            if (end && new Date(end) < now) {
+              this.showStatus(slot, 'End date must be in the future', 'error');
+              return;
+            }
+            if (start && end && new Date(end) <= new Date(start)) {
+              this.showStatus(slot, 'End date must be after start date', 'error');
+              return;
+            }
 
-          await this._hass.callService('yale_lock_manager', 'set_user_schedule', {
-            entity_id: this._config.entity,
-            slot: parseInt(slot, 10),
-            start_datetime: start,
-            end_datetime: end
-          });
+            await this._hass.callService('yale_lock_manager', 'set_user_schedule', {
+              entity_id: this._config.entity,
+              slot: parseInt(slot, 10),
+              start_datetime: start,
+              end_datetime: end
+            });
+          }
         } else {
-          // Clear schedule
+          // Clear schedule - don't send empty strings, send null
           await this._hass.callService('yale_lock_manager', 'set_user_schedule', {
             entity_id: this._config.entity,
             slot: parseInt(slot, 10),
-            start_datetime: '',
-            end_datetime: ''
+            start_datetime: null,
+            end_datetime: null
           });
         }
 
@@ -722,22 +817,28 @@ class YaleLockManagerCard extends HTMLElement {
       }
 
       this.showStatus(slot, 'User saved successfully', 'success');
+      // DON'T call this.render() here - it clears the form!
       
     } catch (error) {
       if (error.message && error.message.includes('occupied by an unknown code')) {
         if (!confirmed) {
           this.showStatus(slot, 'Slot contains an unknown code. Overwrite it?', 'confirm');
           this._statusMessages[slot].confirmAction = 'save-all';
-          this.render();
+          // DON'T call render() - it will clear the form fields!
+          // showStatus() already calls render()
           return;
         } else {
-          // Retry with override
+          // Retry with override (re-read form values since we're in a retry)
+          const retryName = this.shadowRoot.getElementById(`name-${slot}`).value.trim();
+          const retryCodeType = this.shadowRoot.getElementById(`type-${slot}`).value;
+          const retryCode = retryCodeType === 'pin' ? (this.shadowRoot.getElementById(`code-${slot}`)?.value.trim() || '') : '';
+          
           await this._hass.callService('yale_lock_manager', 'set_user_code', {
             entity_id: this._config.entity,
             slot: parseInt(slot, 10),
-            name: name,
-            code: code,
-            code_type: codeType,
+            name: retryName,
+            code: retryCode,
+            code_type: retryCodeType,
             override_protection: true
           });
           this.showStatus(slot, 'User saved (unknown code overwritten)', 'success');

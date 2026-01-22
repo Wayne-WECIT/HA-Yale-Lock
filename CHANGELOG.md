@@ -20,6 +20,106 @@ Use `lock.smart_door_lock_manager` for the Lovelace card!
 
 ---
 
+## [1.7.3.0] - 2026-01-22
+
+### Fixed - ALL UI Issues! 🎨
+Multiple critical UI bugs reported by user all fixed in one release!
+
+#### **1. ❌ FOB/RFID Selection Reverts to PIN** ✅ FIXED
+- **Problem**: Selecting FOB/RFID dropdown reverted to PIN immediately
+- **Cause**: `change-type` event triggered `render()` which re-read data from backend
+- **Fix**: Type changes now manipulate DOM directly (show/hide fields) without re-rendering
+- **Result**: FOB/RFID selection sticks, code field disappears correctly
+
+#### **2. ❌ Schedule Toggle Doesn't Show Fields** ✅ FIXED
+- **Problem**: Clicking "Time-Based Schedule" toggle did nothing
+- **Cause**: Event listeners lost after render, `data-toggle` handler not working
+- **Fix**: Toggles now manipulate DOM directly with `classList.toggle('hidden')`
+- **Result**: Fields appear/disappear instantly when toggled
+
+#### **3. ❌ Usage Limit Toggle Doesn't Show Fields** ✅ FIXED
+- **Problem**: Clicking "Usage Limit" toggle did nothing
+- **Cause**: Same as schedule toggle
+- **Fix**: Same as schedule toggle
+- **Result**: Fields appear/disappear instantly when toggled
+
+#### **4. ❌ Empty Datetime Error** ✅ FIXED
+- **Problem**: `Invalid datetime specified: for dictionary value @ data['start_datetime']`
+- **Cause**: Card was sending empty strings `''` instead of `null` for disabled schedules
+- **Fix**: Now sends `null` when schedule is disabled or fields are empty
+- **Result**: No more datetime errors, schedule can be cleared properly
+
+#### **5. ❌ Fields Clear Before Confirm** ✅ FIXED
+- **Problem**: Form fields cleared immediately after clicking "Update User"
+- **Cause**: Success message triggered `render()` which re-read from backend (losing unsaved changes)
+- **Fix**: `showStatus()` now updates only the status message area, not entire card
+- **Result**: Form fields stay populated, user can see "Overwrite?" confirmation
+
+#### **6. ❌ Enable Toggle Shows Message But Doesn't Toggle** ✅ FIXED
+- **Problem**: Toggle switch showed message but didn't visually change state
+- **Cause**: `showStatus()` → `render()` → re-read backend data → toggle reset
+- **Fix**: Toggle now updates `data-state` attribute immediately for visual feedback
+- **Result**: Toggle changes instantly, message shows without breaking toggle
+
+### Technical Implementation
+
+**Targeted DOM Updates Instead of Full Re-Render:**
+```javascript
+// OLD (WRONG):
+showStatus() → this.render() → Entire card rebuilt → Form cleared
+
+// NEW (CORRECT):
+showStatus() → this.updateStatusMessage() → Only update status div
+```
+
+**Type Change Without Re-Render:**
+```javascript
+// OLD:
+onChange="change-type" → this.render() → Selection lost
+
+// NEW:
+onChange="change-type" → Show/hide fields with style.display → Selection kept
+```
+
+**Schedule/Limit Toggles:**
+```javascript
+// OLD:
+data-toggle → Event listener lost after render → Broken
+
+// NEW:
+data-toggle → Direct DOM manipulation → Works every time
+```
+
+**Datetime Handling:**
+```javascript
+// OLD:
+start_datetime: ''  // ❌ Empty string invalid
+
+// NEW:
+start_datetime: null  // ✅ Proper null value
+```
+
+### Benefits
+✅ FOB selection works correctly
+✅ Schedule toggle shows fields instantly
+✅ Usage limit toggle shows fields instantly
+✅ No more datetime validation errors
+✅ Form fields don't clear unexpectedly
+✅ Enable toggle works smoothly
+✅ Override confirmation shows properly
+✅ Much faster UI (no unnecessary re-renders)
+✅ Better user experience overall
+
+### What Changed
+- `attachEventListeners()` - Type changes use DOM manipulation
+- `showStatus()` - Calls `updateStatusMessage()` instead of `render()`
+- `updateStatusMessage()` - NEW method for targeted updates
+- `handleSaveAll()` - Sends `null` instead of `''` for empty dates
+- `handleToggleUser()` - Updates `data-state` immediately
+- HTML template - Added `.status-message-area` container
+
+---
+
 ## [1.7.2.1] - 2026-01-22
 
 ### Fixed - Clear Slot Race Condition! ⚡
