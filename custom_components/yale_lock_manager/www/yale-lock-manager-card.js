@@ -801,10 +801,10 @@ class YaleLockManagerCard extends HTMLElement {
       statusSelect.appendChild(disabledOption);
       
       // If current value is Available but we have data, default to Enabled
+      // But don't trigger change event - just update UI silently
       if (currentValue === '0') {
         statusSelect.value = '1';
-        // Trigger change to update backend
-        statusSelect.dispatchEvent(new Event('change'));
+        // Don't trigger change event - user will save when they click "Save User"
       }
     }
   }

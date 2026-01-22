@@ -81,6 +81,7 @@ SERVICE_CHECK_SYNC_STATUS: Final = "check_sync_status"
 SERVICE_SET_USER_STATUS: Final = "set_user_status"
 SERVICE_ENABLE_USER: Final = "enable_user"
 SERVICE_DISABLE_USER: Final = "disable_user"
+SERVICE_CLEAR_LOCAL_CACHE: Final = "clear_local_cache"
 
 # Defaults
 DEFAULT_SCAN_INTERVAL: Final = 300  # 5 minutes

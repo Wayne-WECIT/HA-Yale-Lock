@@ -299,6 +299,17 @@ async def async_setup_services(hass: HomeAssistant) -> None:
             _LOGGER.error("Error resetting usage count: %s", err)
             raise HomeAssistantError(f"Failed to reset usage count: {err}") from err
 
+    async def handle_clear_local_cache(call: ServiceCall) -> None:
+        """Handle clear local cache service call."""
+        coordinator = get_coordinator()
+
+        try:
+            await coordinator.async_clear_local_cache()
+            _LOGGER.info("Cleared local cache")
+        except Exception as err:
+            _LOGGER.error("Error clearing local cache: %s", err)
+            raise HomeAssistantError(f"Failed to clear local cache: {err}") from err
+
     # Register services
     hass.services.async_register(
         DOMAIN,

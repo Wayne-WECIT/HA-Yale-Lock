@@ -1167,6 +1167,14 @@ class YaleLockCoordinator(DataUpdateCoordinator):
         await self._store.async_save(self._user_data)
         _LOGGER.debug("Saved user data to storage")
 
+    async def async_clear_local_cache(self) -> None:
+        """Clear all local user data cache."""
+        _LOGGER.info("Clearing all local user data cache")
+        self._user_data["users"] = {}
+        await self.async_save_user_data()
+        await self.async_request_refresh()
+        _LOGGER.info("Local cache cleared - all user data removed")
+
     @property
     def user_data(self) -> dict[str, Any]:
         """Get user data."""
