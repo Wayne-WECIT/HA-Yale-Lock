@@ -1049,15 +1049,25 @@ class YaleLockManagerPanel extends HTMLElement {
       }
       
       // With uncontrolled pattern, field values persist in DOM
-      // Just wait for entity state to update, then re-render (fields won't be overwritten)
+      // Don't re-render - only update status messages and lock fields (read-only)
+      // Editable fields stay as user typed them
       setTimeout(() => {
-        // Re-initialize fields with new entity state (but only if not already initialized)
-        const newUser = this.getUserData().find(u => u.slot === slot);
-        if (newUser && !this._initializedFields[slot]) {
-          this._initializeField(slot, `name-${slot}`, newUser.name || '');
-          this._initializeField(slot, `code-${slot}`, newUser.code || '');
+        // Update status message container only
+        const statusContainer = this.querySelector(`#status-${slot}`);
+        if (statusContainer && this._statusMessages[slot]) {
+          statusContainer.innerHTML = this.renderStatusMessage(slot);
         }
-        this.render();
+        // Update lock fields (read-only) - these can be updated
+        const lockCodeField = this.querySelector(`#lock-code-${slot}`);
+        const lockStatusField = this.querySelector(`#lock-status-${slot}`);
+        const newUser = this.getUserData().find(u => u.slot === slot);
+        if (newUser) {
+          if (lockCodeField) lockCodeField.value = newUser.lock_code || '';
+          if (lockStatusField) {
+            const lockStatus = newUser.lock_status_from_lock ?? newUser.lock_status;
+            lockStatusField.value = lockStatus !== null && lockStatus !== undefined ? lockStatus.toString() : '0';
+          }
+        }
       }, 500);
       
     } catch (error) {
