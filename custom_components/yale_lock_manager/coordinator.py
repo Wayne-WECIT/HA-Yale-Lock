@@ -1,6 +1,7 @@
 """Data coordinator for Yale Lock Manager."""
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime, timedelta
 import logging
 from typing import Any
@@ -348,37 +349,68 @@ class YaleLockCoordinator(DataUpdateCoordinator):
     async def _get_zwave_value(
         self, command_class: int, property_name: str, property_key: int | None = None
     ) -> Any:
-        """Get a Z-Wave JS value."""
+        """Get a Z-Wave JS value using the multicast_set_value service."""
         try:
-            # Get the device from device registry
-            device_registry = dr.async_get(self.hass)
-            device = None
+            # Use Z-Wave JS refresh_value service to get the current value
+            service_data = {
+                "entity_id": self.lock_entity_id,
+                "command_class": command_class,
+                "property": property_name,
+            }
             
-            for dev in device_registry.devices.values():
-                for identifier in dev.identifiers:
-                    if identifier[0] == ZWAVE_JS_DOMAIN and identifier[1].split("-")[0] == self.node_id:
-                        device = dev
-                        break
-                if device:
-                    break
-
-            if not device:
-                _LOGGER.error("Could not find device for node %s", self.node_id)
-                return None
-
-            # Get entity from entity registry that matches this device and has the value
+            if property_key is not None:
+                service_data["property_key"] = property_key
+            
+            _LOGGER.debug(
+                "Getting Z-Wave value - CC: %s, Property: %s, Key: %s",
+                command_class,
+                property_name,
+                property_key,
+            )
+            
+            # First refresh the value from the device
+            try:
+                await self.hass.services.async_call(
+                    ZWAVE_JS_DOMAIN,
+                    "refresh_value",
+                    service_data,
+                    blocking=True,
+                )
+                # Give the lock time to respond
+                await asyncio.sleep(0.5)
+            except Exception as err:
+                _LOGGER.debug("Could not refresh value: %s", err)
+            
+            # Now try to read the value from related entities
+            # Z-Wave JS might expose user codes as separate sensor entities
+            device_registry = dr.async_get(self.hass)
             entity_registry = er.async_get(self.hass)
             
-            for entity in entity_registry.entities.values():
-                if entity.device_id == device.id:
-                    state = self.hass.states.get(entity.entity_id)
-                    if state and state.attributes.get("command_class") == command_class:
-                        if property_key is not None:
-                            if state.attributes.get("property_key") == property_key:
-                                return state.state
-                        elif state.attributes.get("property") == property_name:
-                            return state.state
-
+            # Find the Z-Wave device
+            device = device_registry.async_get_device(
+                identifiers={(ZWAVE_JS_DOMAIN, self.node_id)}
+            )
+            
+            if device:
+                # Search for entities that match our command class and property
+                for entity_entry in er.async_entries_for_device(entity_registry, device.id):
+                    if entity_entry.platform == ZWAVE_JS_DOMAIN:
+                        state = self.hass.states.get(entity_entry.entity_id)
+                        if state and state.attributes:
+                            # Check if this entity matches our query
+                            if (
+                                state.attributes.get("command_class") == command_class
+                                and state.attributes.get("property") == property_name
+                            ):
+                                if property_key is not None:
+                                    if state.attributes.get("property_key") == property_key:
+                                        _LOGGER.debug("Found value: %s", state.state)
+                                        return state.state
+                                else:
+                                    _LOGGER.debug("Found value: %s", state.state)
+                                    return state.state
+            
+            _LOGGER.debug("No value found for CC:%s, Property:%s, Key:%s", command_class, property_name, property_key)
             return None
 
         except Exception as err:

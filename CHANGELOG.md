@@ -5,6 +5,33 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.2.0] - 2026-01-22
+
+### Fixed
+- **Improved user code reading from lock**
+  - Updated `_get_zwave_value()` to use `refresh_value` service
+  - Better error handling when reading user codes
+  - Searches for Z-Wave entities that match command class and property
+  - Added asyncio import for async sleep
+  
+### Storage and Persistence
+- ✅ User data IS saved locally (`.storage/yale_lock_manager.users`)
+- ✅ Data persists across restarts
+- ✅ Card shows stored data immediately on load
+- ✅ `pull_codes_from_lock` service attempts to read codes from lock
+  
+### How It Works
+1. **Set User Codes**: Via card or services → Saved to local storage
+2. **Push to Lock**: Manual button press → Writes code to lock via Z-Wave
+3. **Pull from Lock**: "Refresh from Lock" button → Reads codes from lock (if supported)
+4. **Automatic Save**: All changes auto-saved to storage
+5. **Load on Startup**: All user data loaded from storage on HA restart
+
+### Known Limitations
+- Reading user codes from lock may not work on all Yale models
+- Some locks don't expose user codes via Z-Wave (security feature)
+- Recommend using local storage as source of truth
+
 ## [1.1.1.0] - 2026-01-22
 
 ### Fixed
