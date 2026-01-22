@@ -1123,15 +1123,18 @@ class YaleLockManagerCard extends HTMLElement {
         });
       }
 
-      // After saving, check sync status by querying the lock
-      try {
-        await this._hass.callService('yale_lock_manager', 'check_sync_status', {
-          entity_id: this._config.entity,
-          slot: parseInt(slot, 10)
-        });
-      } catch (syncError) {
-        _LOGGER.warn('Failed to check sync status: %s', syncError);
-        // Don't fail the save operation if sync check fails
+      // After saving, check sync status by querying the lock (only for PINs)
+      // FOBs are added directly to the lock, so no sync check needed
+      if (codeType === 'pin') {
+        try {
+          await this._hass.callService('yale_lock_manager', 'check_sync_status', {
+            entity_id: this._config.entity,
+            slot: parseInt(slot, 10)
+          });
+        } catch (syncError) {
+          _LOGGER.warn('Failed to check sync status: %s', syncError);
+          // Don't fail the save operation if sync check fails
+        }
       }
 
       // Render will be triggered by the refresh from check_sync_status
