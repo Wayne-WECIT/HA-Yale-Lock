@@ -686,28 +686,51 @@ class YaleLockManagerCard extends HTMLElement {
         const startInput = this.shadowRoot.getElementById(`start-${slot}`);
         const endInput = this.shadowRoot.getElementById(`end-${slot}`);
         
-        // Always send schedule service call to sync state
-        const start = (scheduleToggle?.checked && startInput?.value) ? startInput.value : null;
-        const end = (scheduleToggle?.checked && endInput?.value) ? endInput.value : null;
+        // Determine schedule values
+        // If toggle is unchecked, always clear (send null)
+        // If toggle is checked but fields are empty, also clear (send null)
+        let start = null;
+        let end = null;
+        
+        if (scheduleToggle?.checked) {
+          // Toggle is on - check if dates are provided
+          const startVal = startInput?.value?.trim() || '';
+          const endVal = endInput?.value?.trim() || '';
+          
+          // Only set dates if both fields have values
+          // If either is empty, clear both (null)
+          if (startVal && endVal) {
+            start = startVal;
+            end = endVal;
+          } else {
+            // At least one field is empty - clear the schedule
+            start = null;
+            end = null;
+          }
+        } else {
+          // Toggle is off - always clear schedule
+          start = null;
+          end = null;
+        }
         
         // Validate dates if provided
-        if (start || end) {
+        if (start && end) {
           const now = new Date();
-          if (start && new Date(start) < now) {
+          if (new Date(start) < now) {
             this.showStatus(slot, 'Start date must be in the future', 'error');
             return;
           }
-          if (end && new Date(end) < now) {
+          if (new Date(end) < now) {
             this.showStatus(slot, 'End date must be in the future', 'error');
             return;
           }
-          if (start && end && new Date(end) <= new Date(start)) {
+          if (new Date(end) <= new Date(start)) {
             this.showStatus(slot, 'End date must be after start date', 'error');
             return;
           }
         }
 
-        // Send schedule (null clears it)
+        // Always send schedule service call (null clears it)
         await this._hass.callService('yale_lock_manager', 'set_user_schedule', {
           entity_id: this._config.entity,
           slot: parseInt(slot, 10),

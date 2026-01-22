@@ -20,6 +20,52 @@ Use `lock.smart_door_lock_manager` for the Lovelace card!
 
 ---
 
+## [1.8.2.1] - 2026-01-22
+
+### 🔧 FIX - Schedule Clearing Not Persisting
+
+**User feedback**: When clearing start/end dates and clicking "Update User", the date data comes back after refresh.
+
+### The Issue
+
+1. **Missing Refresh**: `async_set_user_schedule()` and `async_set_usage_limit()` were saving data but not triggering a coordinator refresh, so the entity state (and card) showed stale data.
+
+2. **Empty String Handling**: When date fields were cleared, empty strings needed explicit conversion to `null`.
+
+3. **Toggle State**: When toggle was unchecked OR fields were empty, schedule should be cleared.
+
+### The Fix
+
+**1. Added Refresh Calls**:
+```python
+# In async_set_user_schedule() and async_set_usage_limit()
+await self.async_request_refresh()  # Refresh entity state so card updates
+```
+
+**2. Improved Empty String Handling**:
+- Explicitly converts empty strings to `null` when clearing dates
+- If toggle is unchecked, always sends `null` to clear schedule
+- If toggle is checked but fields are empty, also sends `null` to clear
+
+**3. Better Logic**:
+- If toggle is off → always clear (send `null`)
+- If toggle is on but fields are empty → clear (send `null`)
+- If toggle is on and both fields have values → set schedule
+
+### Changed
+- `async_set_user_schedule()`: Now calls `async_request_refresh()` after saving
+- `async_set_usage_limit()`: Now calls `async_request_refresh()` after saving
+- Card `saveUser()`: Improved empty string to null conversion logic
+- Card `saveUser()`: Better handling of cleared date fields
+
+### What's Fixed
+- ✅ Clearing dates now properly persists after refresh
+- ✅ Entity state updates immediately after schedule changes
+- ✅ Card shows cleared dates correctly after update
+- ✅ No more "ghost" dates reappearing after refresh
+
+---
+
 ## [1.8.2.0] - 2026-01-22
 
 ### 🎨 NEW FEATURE - Dual PIN Display & Sync Comparison

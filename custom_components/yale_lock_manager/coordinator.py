@@ -760,6 +760,7 @@ class YaleLockCoordinator(DataUpdateCoordinator):
             "end": end_datetime,
         }
         await self.async_save_user_data()
+        await self.async_request_refresh()  # Refresh entity state so card updates
 
     async def async_set_usage_limit(self, slot: int, max_uses: int | None) -> None:
         """Set usage limit for a user code."""
@@ -768,6 +769,7 @@ class YaleLockCoordinator(DataUpdateCoordinator):
 
         self._user_data["users"][str(slot)]["usage_limit"] = max_uses
         await self.async_save_user_data()
+        await self.async_request_refresh()  # Refresh entity state so card updates
 
     async def async_reset_usage_count(self, slot: int) -> None:
         """Reset usage count for a user code back to 0."""
