@@ -340,8 +340,65 @@ class YaleLockCoordinator(DataUpdateCoordinator):
 
             # Get user codes status (we'll query them periodically)
             data["user_codes"] = await self._get_all_user_codes()
+            
+            # Get config parameters - these are needed for number/select entities
+            # We'll try to get them from the Z-Wave lock's number/select entities
+            try:
+                # Volume (parameter 1)
+                volume_entity = f"number.{zwave_base}_volume"
+                volume_state = self.hass.states.get(volume_entity)
+                if volume_state and volume_state.state not in ("unknown", "unavailable"):
+                    try:
+                        data["volume"] = int(float(volume_state.state))
+                    except (ValueError, TypeError):
+                        data["volume"] = 2  # Default: Low
+                else:
+                    data["volume"] = 2  # Default: Low
+                
+                # Auto Relock (parameter 2) - value is 0 (Disable) or 255 (Enable)
+                auto_relock_entity = f"select.{zwave_base}_auto_relock"
+                auto_relock_state = self.hass.states.get(auto_relock_entity)
+                if auto_relock_state and auto_relock_state.state not in ("unknown", "unavailable"):
+                    # Z-Wave select entity state will be "Enable" or "Disable"
+                    data["auto_relock"] = 255 if auto_relock_state.state == "Enable" else 0
+                else:
+                    data["auto_relock"] = 255  # Default: Enable
+                
+                # Manual Relock Time (parameter 3)
+                manual_entity = f"number.{zwave_base}_manual_relock_time"
+                manual_state = self.hass.states.get(manual_entity)
+                if manual_state and manual_state.state not in ("unknown", "unavailable"):
+                    try:
+                        data["manual_relock_time"] = int(float(manual_state.state))
+                    except (ValueError, TypeError):
+                        data["manual_relock_time"] = 7  # Default
+                else:
+                    data["manual_relock_time"] = 7  # Default
+                
+                # Remote Relock Time (parameter 6)
+                remote_entity = f"number.{zwave_base}_remote_relock_time"
+                remote_state = self.hass.states.get(remote_entity)
+                if remote_state and remote_state.state not in ("unknown", "unavailable"):
+                    try:
+                        data["remote_relock_time"] = int(float(remote_state.state))
+                    except (ValueError, TypeError):
+                        data["remote_relock_time"] = 10  # Default
+                else:
+                    data["remote_relock_time"] = 10  # Default
+                    
+                _LOGGER.debug("Config parameters - Volume: %s, Auto Relock: %s, Manual: %s, Remote: %s",
+                             data.get("volume"), data.get("auto_relock"), 
+                             data.get("manual_relock_time"), data.get("remote_relock_time"))
+                             
+            except Exception as err:
+                _LOGGER.warning("Could not fetch config parameters: %s", err)
+                # Set defaults
+                data["volume"] = 2
+                data["auto_relock"] = "Enable"
+                data["manual_relock_time"] = 7
+                data["remote_relock_time"] = 10
 
-            _LOGGER.info("Coordinator data updated: %s", data)
+            _LOGGER.info("Coordinator data updated successfully")
             return data
 
         except Exception as err:

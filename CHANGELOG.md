@@ -20,6 +20,75 @@ Use `lock.smart_door_lock_manager` for the Lovelace card!
 
 ---
 
+## [1.7.3.1] - 2026-01-22
+
+### Fixed - CRITICAL: Coordinator Crash! 🚨
+- **🔴 Coordinator was crashing** causing all entities to become unavailable
+- **Root Cause**: Config parameter entities (Auto Relock, Volume, Manual/Remote Relock Time) were trying to read data from coordinator, but coordinator wasn't fetching it!
+
+### The Problem (User Reported)
+```
+Activity log showed:
+- "Manager Auto Relock became unavailable"
+- "Manager Volume became unavailable"
+- "Manager Manual Relock Time became unavailable"
+- "Manager Remote Relock Time became unavailable"
+
+All sensors showing "Unknown":
+- Battery: Unknown
+- Door: Unknown
+- Last Access: Unknown
+```
+
+### Root Cause
+The number/select/switch entities were created and trying to read:
+- `coordinator.data["volume"]`
+- `coordinator.data["auto_relock"]`
+- `coordinator.data["manual_relock_time"]`
+- `coordinator.data["remote_relock_time"]`
+
+But `_async_update_data()` NEVER populated these fields!
+Result: Entities became unavailable → Coordinator marked as failed → All entities unavailable
+
+### The Fix
+Added config parameter fetching to coordinator's `_async_update_data()`:
+```python
+# Now fetches from Z-Wave lock's config entities:
+volume_entity = f"number.{zwave_base}_volume"
+auto_relock_entity = f"select.{zwave_base}_auto_relock"
+manual_entity = f"number.{zwave_base}_manual_relock_time"
+remote_entity = f"number.{zwave_base}_remote_relock_time"
+
+# Reads values and adds to data dict
+data["volume"] = int(volume_state.state)
+data["auto_relock"] = 255 if state == "Enable" else 0
+data["manual_relock_time"] = int(manual_state.state)
+data["remote_relock_time"] = int(remote_state.state)
+```
+
+### What Was Fixed
+✅ Coordinator now fetches config parameters
+✅ Volume entity will have data
+✅ Auto Relock switch will have data
+✅ Manual Relock Time entity will have data
+✅ Remote Relock Time entity will have data
+✅ Entities won't become unavailable
+✅ Coordinator won't crash
+✅ Battery/Door/etc sensors will update again
+
+### Benefits
+✅ All entities stay available
+✅ Coordinator updates successfully
+✅ Config parameters are readable
+✅ No more "unavailable" storms in Activity log
+✅ Sensors populate correctly
+
+### Note
+The config parameter entities read from the Z-Wave JS lock's native config entities.
+This is intentional - we're providing a unified interface while leveraging Z-Wave JS's config parameter handling.
+
+---
+
 ## [1.7.3.0] - 2026-01-22
 
 ### Fixed - ALL UI Issues! 🎨
