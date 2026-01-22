@@ -379,6 +379,31 @@ After updating, you may need to:
 
 ### Planned Features
 
+## [1.4.0.0] - 2026-01-22
+
+### Added
+- **🎚️ Toggle Controls** for schedule and usage limit
+  - Clean toggle switches to enable/disable features
+  - Fields automatically show/hide based on toggle state
+  - Cleaner, less cluttered UI
+- **✅ Date Validation** in services and UI
+  - Start/End dates must be in the future
+  - End date must be after start date
+  - Client-side and server-side validation
+  - User-friendly error messages
+
+### Improved
+- **Logic Clarification**:
+  - No schedule set = code works 24/7 indefinitely
+  - No usage limit = unlimited uses
+  - Can configure schedule and limit together or separately
+  - Code auto-disables when date expires OR usage limit reached
+- Better UX for optional features (toggles instead of always-visible fields)
+- Updated field descriptions to explain default behavior
+
+### Fixed
+- Validation in `set_user_schedule` service now checks dates are valid
+
 ## [1.3.3.0] - 2026-01-22
 
 ### Fixed

@@ -269,6 +269,29 @@ class YaleLockManagerCard extends HTMLElement {
         input:checked + .slider:before {
           transform: translateX(20px);
         }
+        .toggle-label {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          margin-bottom: 12px;
+          padding: 8px 0;
+          cursor: pointer;
+          user-select: none;
+        }
+        .toggle-label:hover {
+          opacity: 0.8;
+        }
+        .toggle-label span {
+          font-weight: 500;
+          color: var(--primary-text-color);
+        }
+        .hidden {
+          display: none;
+        }
+        .schedule-fields, .limit-fields {
+          margin-left: 20px;
+          margin-top: 8px;
+        }
       </style>
     `;
   }
@@ -352,39 +375,58 @@ class YaleLockManagerCard extends HTMLElement {
                 <hr style="margin: 16px 0; border: none; border-top: 1px solid var(--divider-color);">
                 
                 <div class="form-group">
-                  <label>Schedule (optional):</label>
-                  <p style="color: var(--secondary-text-color); font-size: 0.85em; margin: 4px 0 8px 0;">
-                    ⏰ Set a time range when this code is valid. Leave blank for 24/7 access.
+                  <label class="toggle-label" data-toggle="schedule-${slot}">
+                    <label class="toggle-switch">
+                      <input type="checkbox" id="schedule-toggle-${slot}" ${user.schedule?.start || user.schedule?.end ? 'checked' : ''}>
+                      <span class="slider"></span>
+                    </label>
+                    <span>⏰ Time-Based Schedule</span>
+                  </label>
+                  <p style="color: var(--secondary-text-color); font-size: 0.85em; margin: 4px 0 8px 20px;">
+                    Enable to limit when this code can be used. Leave disabled for 24/7 access.
                   </p>
-                  <div style="display: flex; gap: 8px; margin-top: 4px;">
-                    <div style="flex: 1;">
-                      <label style="font-size: 0.8em; color: var(--secondary-text-color);">Start Date/Time:</label>
-                      <input type="datetime-local" id="start-${slot}" value="${user.schedule?.start ? user.schedule.start.substring(0, 16) : ''}">
+                  
+                  <div class="schedule-fields ${user.schedule?.start || user.schedule?.end ? '' : 'hidden'}" id="schedule-fields-${slot}">
+                    <div style="display: flex; gap: 8px;">
+                      <div style="flex: 1;">
+                        <label style="font-size: 0.85em; color: var(--secondary-text-color);">Start Date/Time:</label>
+                        <input type="datetime-local" id="start-${slot}" value="${user.schedule?.start ? user.schedule.start.substring(0, 16) : ''}">
+                      </div>
+                      <div style="flex: 1;">
+                        <label style="font-size: 0.85em; color: var(--secondary-text-color);">End Date/Time:</label>
+                        <input type="datetime-local" id="end-${slot}" value="${user.schedule?.end ? user.schedule.end.substring(0, 16) : ''}">
+                      </div>
                     </div>
-                    <div style="flex: 1;">
-                      <label style="font-size: 0.8em; color: var(--secondary-text-color);">End Date/Time:</label>
-                      <input type="datetime-local" id="end-${slot}" value="${user.schedule?.end ? user.schedule.end.substring(0, 16) : ''}">
-                    </div>
+                    <button class="action-button secondary" style="margin-top: 8px;" data-action="save-schedule" data-slot="${slot}">
+                      ${user.schedule?.start || user.schedule?.end ? 'Update Schedule' : 'Set Schedule'}
+                    </button>
                   </div>
-                  <button class="action-button secondary" style="margin-top: 8px;" data-action="save-schedule" data-slot="${slot}">
-                    ${user.schedule?.start || user.schedule?.end ? 'Update Schedule' : 'Set Schedule'}
-                  </button>
                 </div>
                 
                 <div class="form-group">
-                  <label>Usage Limit (optional):</label>
-                  <p style="color: var(--secondary-text-color); font-size: 0.85em; margin: 4px 0 8px 0;">
-                    🔢 Limit how many times this code can be used. Leave blank for unlimited.
+                  <label class="toggle-label" data-toggle="limit-${slot}">
+                    <label class="toggle-switch">
+                      <input type="checkbox" id="limit-toggle-${slot}" ${user.usage_limit ? 'checked' : ''}>
+                      <span class="slider"></span>
+                    </label>
+                    <span>🔢 Usage Limit</span>
+                  </label>
+                  <p style="color: var(--secondary-text-color); font-size: 0.85em; margin: 4px 0 8px 20px;">
+                    Enable to limit how many times this code can be used. Leave disabled for unlimited uses.
                   </p>
-                  <input type="number" id="limit-${slot}" value="${user.usage_limit || ''}" placeholder="Unlimited (e.g., 5 uses)" min="1">
-                  ${user.usage_count ? `
-                    <p style="color: var(--warning-color, #ff9800); font-size: 0.85em; margin: 4px 0;">
-                      ⚠️ Used ${user.usage_count} time${user.usage_count !== 1 ? 's' : ''}${user.usage_limit ? ` / ${user.usage_limit} max` : ''}
-                    </p>
-                  ` : ''}
-                  <button class="action-button secondary" style="margin-top: 8px;" data-action="save-limit" data-slot="${slot}">
-                    ${user.usage_limit ? 'Update Limit' : 'Set Limit'}
-                  </button>
+                  
+                  <div class="limit-fields ${user.usage_limit ? '' : 'hidden'}" id="limit-fields-${slot}">
+                    <label style="font-size: 0.85em; color: var(--secondary-text-color);">Maximum Uses:</label>
+                    <input type="number" id="limit-${slot}" value="${user.usage_limit || ''}" placeholder="e.g., 5" min="1" style="margin-top: 4px;">
+                    ${user.usage_count ? `
+                      <p style="color: var(--warning-color, #ff9800); font-size: 0.85em; margin: 8px 0 0 0;">
+                        ⚠️ Used ${user.usage_count} time${user.usage_count !== 1 ? 's' : ''}${user.usage_limit ? ` / ${user.usage_limit} max` : ''}
+                      </p>
+                    ` : ''}
+                    <button class="action-button secondary" style="margin-top: 8px;" data-action="save-limit" data-slot="${slot}">
+                      ${user.usage_limit ? 'Update Limit' : 'Set Limit'}
+                    </button>
+                  </div>
                 </div>
               </div>
             </td>
@@ -502,6 +544,48 @@ class YaleLockManagerCard extends HTMLElement {
       });
     });
 
+    // Schedule toggles
+    this.shadowRoot.querySelectorAll('[data-toggle^="schedule-"]').forEach(label => {
+      const toggleId = label.dataset.toggle;
+      const slot = parseInt(toggleId.split('-')[1]);
+      const checkbox = this.shadowRoot.getElementById(`schedule-toggle-${slot}`);
+      const fieldsDiv = this.shadowRoot.getElementById(`schedule-fields-${slot}`);
+      
+      if (checkbox && fieldsDiv) {
+        checkbox.addEventListener('change', (e) => {
+          e.stopPropagation();
+          if (checkbox.checked) {
+            fieldsDiv.classList.remove('hidden');
+          } else {
+            fieldsDiv.classList.add('hidden');
+            // Clear schedule when disabled
+            this.handleSaveSchedule(slot, true);
+          }
+        });
+      }
+    });
+
+    // Usage limit toggles
+    this.shadowRoot.querySelectorAll('[data-toggle^="limit-"]').forEach(label => {
+      const toggleId = label.dataset.toggle;
+      const slot = parseInt(toggleId.split('-')[1]);
+      const checkbox = this.shadowRoot.getElementById(`limit-toggle-${slot}`);
+      const fieldsDiv = this.shadowRoot.getElementById(`limit-fields-${slot}`);
+      
+      if (checkbox && fieldsDiv) {
+        checkbox.addEventListener('change', (e) => {
+          e.stopPropagation();
+          if (checkbox.checked) {
+            fieldsDiv.classList.remove('hidden');
+          } else {
+            fieldsDiv.classList.add('hidden');
+            // Clear limit when disabled
+            this.handleSaveUsageLimit(slot, true);
+          }
+        });
+      }
+    });
+
     // All action buttons
     this.shadowRoot.querySelectorAll('[data-action]').forEach(button => {
       const action = button.dataset.action;
@@ -613,9 +697,39 @@ class YaleLockManagerCard extends HTMLElement {
     });
   }
 
-  async handleSaveSchedule(slot) {
-    const start = this.shadowRoot.getElementById(`start-${slot}`).value;
-    const end = this.shadowRoot.getElementById(`end-${slot}`).value;
+  async handleSaveSchedule(slot, clearSchedule = false) {
+    let start = '';
+    let end = '';
+    
+    if (!clearSchedule) {
+      start = this.shadowRoot.getElementById(`start-${slot}`)?.value || '';
+      end = this.shadowRoot.getElementById(`end-${slot}`)?.value || '';
+      
+      // Validate dates are in the future
+      const now = new Date();
+      if (start) {
+        const startDate = new Date(start);
+        if (startDate < now) {
+          alert('⚠️ Start date/time must be in the future');
+          return;
+        }
+      }
+      if (end) {
+        const endDate = new Date(end);
+        if (endDate < now) {
+          alert('⚠️ End date/time must be in the future');
+          return;
+        }
+      }
+      if (start && end) {
+        const startDate = new Date(start);
+        const endDate = new Date(end);
+        if (endDate <= startDate) {
+          alert('⚠️ End date/time must be after start date/time');
+          return;
+        }
+      }
+    }
 
     await this._hass.callService('yale_lock_manager', 'set_user_schedule', {
       entity_id: this._config.entity,
@@ -624,11 +738,13 @@ class YaleLockManagerCard extends HTMLElement {
       end_datetime: end
     });
 
-    alert(`✅ Schedule saved`);
+    if (!clearSchedule) {
+      alert(`✅ Schedule saved`);
+    }
   }
 
-  async handleSaveUsageLimit(slot) {
-    const limit = parseInt(this.shadowRoot.getElementById(`limit-${slot}`).value) || null;
+  async handleSaveUsageLimit(slot, clearLimit = false) {
+    const limit = clearLimit ? null : parseInt(this.shadowRoot.getElementById(`limit-${slot}`)?.value) || null;
 
     await this._hass.callService('yale_lock_manager', 'set_usage_limit', {
       entity_id: this._config.entity,
@@ -636,7 +752,9 @@ class YaleLockManagerCard extends HTMLElement {
       max_uses: limit
     });
 
-    alert(`✅ Usage limit saved`);
+    if (!clearLimit) {
+      alert(`✅ Usage limit saved`);
+    }
   }
 
   getCardSize() {

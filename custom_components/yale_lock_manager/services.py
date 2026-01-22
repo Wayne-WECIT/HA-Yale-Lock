@@ -135,10 +135,21 @@ async def async_setup_services(hass: HomeAssistant) -> None:
 
     async def handle_set_user_schedule(call: ServiceCall) -> None:
         """Handle set user schedule service call."""
+        from datetime import datetime
+        
         coordinator = get_coordinator()
         slot = call.data[ATTR_SLOT]
         start_datetime = call.data.get(ATTR_START_DATETIME)
         end_datetime = call.data.get(ATTR_END_DATETIME)
+
+        # Validate dates
+        now = datetime.now()
+        if start_datetime and start_datetime < now:
+            raise HomeAssistantError("Start date/time must be in the future")
+        if end_datetime and end_datetime < now:
+            raise HomeAssistantError("End date/time must be in the future")
+        if start_datetime and end_datetime and end_datetime <= start_datetime:
+            raise HomeAssistantError("End date/time must be after start date/time")
 
         # Convert datetime objects to ISO strings
         start_str = start_datetime.isoformat() if start_datetime else None
