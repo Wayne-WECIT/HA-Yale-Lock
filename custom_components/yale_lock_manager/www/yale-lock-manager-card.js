@@ -1010,6 +1010,9 @@ class YaleLockManagerCard extends HTMLElement {
       return;
     }
 
+    // Clear any existing status messages before showing push confirmation
+    this.clearStatus(slot);
+    
     this.showStatus(slot, `Push "${user.name}" to the lock now?`, 'confirm', async () => {
       try {
         // Show progress message
