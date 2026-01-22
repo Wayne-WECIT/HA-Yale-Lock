@@ -20,6 +20,315 @@ Use `lock.smart_door_lock_manager` for the Lovelace card!
 
 ---
 
+## [1.8.2.22] - 2026-01-22
+
+### 🎨 UI/UX - Move Push Button to Settings & Persistent Status Messages
+
+**User feedback**: "after clicking update user the updates flash very quickly... we really could do with some user updates so they know what happening"
+
+### The Issue
+
+1. **Status messages disappeared too quickly**: Messages flashed and disappeared before users could read them
+2. **Push button location**: Having Push button in main table row was confusing
+3. **No persistent feedback**: Users couldn't see what happened if they looked away
+
+### The Solution
+
+**Moved Push Button to Settings Section**:
+- Push/Push Required button now appears in the expanded settings section
+- Located below "Update User" and "Clear Slot" buttons
+- Only visible for PIN codes (hidden for FOBs)
+
+**Persistent Status Messages**:
+- Status messages no longer auto-clear after 3 seconds
+- Messages persist until:
+  - User collapses the slot (clicks the row again)
+  - User clicks the Push button (clears previous messages)
+- This ensures users can see what happened even if they look away
+
+**Clear Status on Interaction**:
+- Status messages are cleared when slot is collapsed
+- Status messages are cleared when Push button is clicked (before showing confirmation)
+
+### Changed
+
+- **Frontend (`yale-lock-manager-card.js`)**:
+  - Removed Push button from main table row
+  - Added Push button to settings section (below Update User/Clear Slot)
+  - Modified `showStatus()` to not auto-clear messages
+  - Added `clearStatus()` method
+  - Modified `toggleExpand()` to clear status when collapsing
+  - Modified `pushCode()` to clear status before showing confirmation
+
+### What's Fixed
+
+- ✅ Status messages now persist and are visible until user interaction
+- ✅ Push button is now in a more logical location (settings section)
+- ✅ Better user feedback - users can see what happened even if they look away
+- ✅ Clearer workflow - Update User → Push Required button appears in same section
+
+---
+
+## [1.8.2.21] - 2026-01-22
+
+### 🎨 UI/UX - User Feedback Messages & Lock Code Update Fix
+
+**User feedback**: "we really could do with some user updates so they know what happening as there is no indication anything is happening"
+
+### The Issue
+
+1. **No user feedback**: Operations happened silently with no indication of progress
+2. **Lock PIN not updating**: After pushing code, the lock PIN field wasn't updating to show the new value
+
+### The Solution
+
+**Added Progress Messages**:
+- **When pushing a code**:
+  - "⏳ Pushing code to lock..."
+  - "⏳ Verifying code was set..."
+  - "✅ Code pushed successfully!"
+- **When saving a user**:
+  - "⏳ Saving user data..."
+  - "⏳ Querying lock for current PIN..."
+  - "⏳ Checking sync status..."
+  - "✅ User saved successfully!"
+- **When refreshing**:
+  - "⏳ Refreshing codes from lock... This may take a moment."
+  - "✅ Refreshed from lock successfully!"
+
+**Fixed Lock Code Update After Push**:
+- Modified `async_push_code_to_lock()` to use `_get_user_code_data()` instead of separate status/code calls
+- Now properly updates `lock_code` and `lock_status_from_lock` after verification
+- Ensures UI shows correct lock PIN after push operation
+
+### Changed
+
+- **Backend (`coordinator.py`)**:
+  - Modified `async_push_code_to_lock()` to use `_get_user_code_data()` for verification
+  - Properly updates `lock_code` and `lock_status_from_lock` after successful push
+- **Frontend (`yale-lock-manager-card.js`)**:
+  - Added progress messages to `pushCode()`, `saveUser()`, and `refresh()` methods
+  - Messages show at each stage of the operation
+
+### What's Fixed
+
+- ✅ Users now see clear progress indicators during all operations
+- ✅ Lock PIN field updates correctly after pushing code to lock
+- ✅ Better user experience with visual feedback
+
+---
+
+## [1.8.2.20] - 2026-01-22
+
+### 🔧 FIX - PIN Update & JavaScript Error
+
+**User feedback**: "Failed to perform the action yale_lock_manager/set_user_code. Failed to set user code: name 'existing_user' is not defined"
+
+### The Issue
+
+1. **NameError**: `existing_user` variable was used before being defined in `async_set_user_code()`
+2. **PIN not updating**: When clicking "Update User", the cached PIN wasn't being saved correctly
+3. **JavaScript error**: `changeType()` function tried to access `classList` on null elements
+
+### The Solution
+
+**Fixed Variable Definition**:
+- Added `existing_user = self._user_data["users"].get(str(slot))` at the start of `async_set_user_code()`
+- Ensures variable is defined before use
+
+**Fixed PIN Update**:
+- Modified `async_set_user_code()` to query lock for current `lock_code` and `lock_status_from_lock` before comparing
+- Ensures sync status is calculated correctly with latest lock data
+- Cached PIN is now properly saved when "Update User" is clicked
+
+**Fixed JavaScript Error**:
+- Modified `changeType()` to check if elements exist before accessing `classList`
+- Added null checks: `if (codeField) codeField.classList.add('hidden')`
+
+**Added Refresh Logging**:
+- Added "=== REFRESH: ===" prefix to `async_pull_codes_from_lock()` log message
+- Makes it easier to see when refresh button is clicked in logs
+
+### Changed
+
+- **Backend (`coordinator.py`)**:
+  - Fixed `existing_user` variable definition
+  - Modified `async_set_user_code()` to query lock for current code/status before comparison
+  - Added refresh logging prefix
+- **Frontend (`yale-lock-manager-card.js`)**:
+  - Added null checks in `changeType()` method
+
+### What's Fixed
+
+- ✅ "Update User" now correctly saves cached PIN
+- ✅ Sync status is calculated correctly after save
+- ✅ No more JavaScript errors when changing code type
+- ✅ Better logging for refresh operations
+
+---
+
+## [1.8.2.19] - 2026-01-22
+
+### 🎨 UI/UX - FOB/RFID Improvements
+
+**User feedback**: "when fob type is RFID or FOB the Cached and lock staus and the usage limits can also be hidden as fobs are added to the lock directly"
+
+### The Issue
+
+FOBs/RFID cards are added directly to the lock, so:
+- Status dropdowns don't make sense (can't change status via software)
+- Usage limits don't apply (FOBs don't have usage tracking)
+- Push button doesn't make sense (FOBs are added physically)
+
+### The Solution
+
+**Hidden Fields for FOBs**:
+- **Status dropdowns**: Hidden when code type is FOB/RFID
+- **Usage limit section**: Hidden when code type is FOB/RFID
+- **Push button**: Shows "N/A" for FOBs in main table, hidden in settings
+- **Schedule**: Still visible for FOBs (as requested)
+
+**Prevented Pushing FOBs**:
+- `async_push_code_to_lock()` now detects FOBs and skips push operation
+- Sets `synced_to_lock = True` for FOBs (no sync needed)
+- Logs message explaining FOBs are added directly
+
+**Skip Sync Check for FOBs**:
+- `saveUser()` skips sync check for FOBs
+- Only PINs get sync status checked after save
+
+**Schedule Saved for FOBs**:
+- Schedule is now saved for both PINs and FOBs
+- Only usage limit is PIN-only
+
+### Changed
+
+- **Backend (`coordinator.py`)**:
+  - Modified `async_push_code_to_lock()` to skip push for FOBs
+- **Frontend (`yale-lock-manager-card.js`)**:
+  - Conditionally hide status dropdowns for FOBs
+  - Conditionally hide usage limit section for FOBs
+  - Hide push button for FOBs (show "N/A")
+  - Save schedule for both PINs and FOBs
+  - Skip sync check for FOBs after save
+
+### What's Fixed
+
+- ✅ FOBs now have simplified UI (only name, type, schedule)
+- ✅ No confusing status/usage limit fields for FOBs
+- ✅ Push button hidden for FOBs (they're added directly to lock)
+- ✅ Schedule still works for FOBs
+
+---
+
+## [1.8.2.18] - 2026-01-22
+
+### 🎨 UI/UX - Status Dropdown & Clear Cache Button
+
+**User feedback**: "the caches staus drop down keeps refreshing like the others did before you stopped it"
+
+### The Issue
+
+1. **Status dropdown refresh loop**: Cached status dropdown kept refreshing when options changed
+2. **No way to clear local cache**: Users needed a way to flush all local cache for testing
+
+### The Solution
+
+**Fixed Status Dropdown Refresh Loop**:
+- Removed `dispatchEvent(new Event('change'))` from `updateStatusOptions()`
+- Dropdown options now update without triggering service calls
+- Prevents infinite refresh loop
+
+**Added Clear Local Cache Button**:
+- New button at bottom of card: "Clear Local Cache"
+- Inline confirmation (not popup) for mobile compatibility
+- New service: `yale_lock_manager.clear_local_cache`
+- Clears all user data from `_user_data["users"]` and saves to storage
+
+### Changed
+
+- **Backend (`coordinator.py`)**:
+  - Added `async_clear_local_cache()` method
+- **Backend (`services.py`)**:
+  - Added `handle_clear_local_cache()` and registered `SERVICE_CLEAR_LOCAL_CACHE`
+- **Frontend (`yale-lock-manager-card.js`)**:
+  - Removed `dispatchEvent` from `updateStatusOptions()`
+  - Added "Clear Local Cache" button with inline confirmation
+  - Added `clearLocalCache()`, `confirmClearLocalCache()`, `cancelClearLocalCache()` methods
+
+### What's Fixed
+
+- ✅ Status dropdown no longer refreshes in a loop
+- ✅ Users can now clear all local cache for testing
+- ✅ Better mobile compatibility (no popups)
+
+---
+
+## [1.8.2.17] - 2026-01-22
+
+### 🎨 UI/UX - Status Dropdown Replaces Enabled Toggle
+
+**User feedback**: "change the Enabled toggle to a dropdown menu to show all three statuses (Available, Enabled, Disabled)"
+
+### The Issue
+
+The "Enabled" toggle only showed two states (on/off), but the lock actually has three statuses:
+- **Available (0)**: Slot is empty/available
+- **Enabled (1)**: Code is active and can be used
+- **Disabled (2)**: Code exists but is disabled
+
+### The Solution
+
+**Replaced Toggle with Dropdown**:
+- Removed "Enabled" column from main table
+- Removed "Enabled" toggle from main table row
+- Added status dropdowns in expanded settings section:
+  - **Cached Status (editable)**: Dropdown showing Available/Enabled/Disabled
+  - **Lock Status (from lock)**: Read-only dropdown showing status from physical lock
+- Both dropdowns show side-by-side for easy comparison
+
+**Dynamic Status Options**:
+- If no PIN/name exists: Only "Available" option shown
+- If PIN/name exists: Only "Enabled" and "Disabled" options shown
+- Prevents invalid states (can't have Enabled/Disabled without a code)
+
+**New Service: `set_user_status`**:
+- Replaces `enable_user` and `disable_user` services
+- Takes `status` parameter (0=Available, 1=Enabled, 2=Disabled)
+- Updates `lock_status` (cached status) and `enabled` (for compatibility)
+
+**Sync Status Comparison**:
+- Sync status now compares both:
+  - Cached PIN vs Lock PIN
+  - Cached status vs Lock status
+- Both must match for `synced_to_lock = True`
+
+### Changed
+
+- **Backend (`coordinator.py`)**:
+  - Added `async_set_user_status()` method
+  - Modified `async_set_user_code()` to store `lock_status` (cached status)
+  - Modified `async_pull_codes_from_lock()` to store `lock_status_from_lock` (from lock)
+  - Updated sync status calculation to compare both code and status
+- **Backend (`services.py`)**:
+  - Added `SET_USER_STATUS_SCHEMA` and `handle_set_user_status()`
+  - Removed `ENABLE_USER_SCHEMA`, `DISABLE_USER_SCHEMA`, `handle_enable_user()`, `handle_disable_user()`
+- **Frontend (`yale-lock-manager-card.js`)**:
+  - Removed "Enabled" column and toggle from main table
+  - Added status dropdowns in settings section
+  - Added `changeStatus()` method to call `set_user_status` service
+  - Updated `updateStatusOptions()` to dynamically show options
+  - Updated sync status message to compare cached vs lock status
+
+### What's Fixed
+
+- ✅ Users can now set all three statuses (Available, Enabled, Disabled)
+- ✅ Clear visual comparison between cached and lock status
+- ✅ Dynamic options prevent invalid states
+- ✅ Better sync status calculation (compares both code and status)
+
+---
+
 ## [1.8.2.16] - 2026-01-22
 
 ### ✨ NEW - Sync Status Checking & Visual Indicators
