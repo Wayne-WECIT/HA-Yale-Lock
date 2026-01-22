@@ -20,6 +20,69 @@ Use `lock.smart_door_lock_manager` for the Lovelace card!
 
 ---
 
+## [1.8.2.9] - 2026-01-22
+
+### ✅ SOLUTION - Event-Based Response Capture
+
+**User feedback**: "i dont know how yo should Capture it that what yo are for to hekp me figue rthat out ¬!!!!!!!"
+
+### The Solution
+
+**Using Z-Wave JS Event Bus to Capture Response!**
+
+When `invoke_cc_api` triggers a `get` request, the lock responds and Z-Wave JS fires `zwave_js_value_updated` events. We can listen for these events to capture the response data.
+
+### How It Works
+
+1. **Set up temporary event listener** for `zwave_js_value_updated` events
+2. **Call `invoke_cc_api`** to trigger the lock query
+3. **Wait for value update events** that match our node, command class, and slot
+4. **Capture `userIdStatus` and `userCode`** from the event data
+5. **Return the captured data** when both values are received (or timeout)
+
+### Implementation
+
+```python
+# Set up temporary event listener
+remove_listener = self.hass.bus.async_listen(
+    "zwave_js_value_updated",
+    _capture_value_update,
+)
+
+# Call invoke_cc_api to trigger query
+await self.hass.services.async_call(
+    ZWAVE_JS_DOMAIN,
+    "invoke_cc_api",
+    {
+        "entity_id": self.lock_entity_id,
+        "command_class": CC_USER_CODE,
+        "method_name": "get",
+        "parameters": [slot],
+    },
+    blocking=True,
+)
+
+# Wait for events (with timeout)
+await asyncio.wait_for(event_received.wait(), timeout=3.0)
+```
+
+### What's Fixed
+
+- ✅ **Uses event bus** (not direct client access)
+- ✅ **Captures response** from `zwave_js_value_updated` events
+- ✅ **No `return_response=True`** needed
+- ✅ **No direct client access** required
+- ✅ **"Lock PIN" field should now populate** on the card
+
+### Changed
+
+- `_get_user_code_data()`: Now uses event listener to capture response from `zwave_js_value_updated` events
+- Filters events by node_id, command_class, property_key (slot), and property name
+- Captures both `userIdStatus` and `userCode` from separate events
+- Has timeout protection (3 seconds)
+
+---
+
 ## [1.8.2.8] - 2026-01-22
 
 ### ❌ REMOVED return_response=True (Doesn't Work)
@@ -45,16 +108,6 @@ ServiceValidationError: An action which does not return responses can't be calle
   - `return_response=True` doesn't work for `get` methods
   - Direct client access doesn't work (user confirmed)
   - Reading from cache doesn't work
-
-### Question for User
-
-**How should we capture the response from the CC API method call?**
-
-The response is logged by Z-Wave JS but we need a way to capture it. Options:
-1. Listen for a Z-Wave JS event?
-2. Parse the logged response somehow?
-3. Use a different service call method?
-4. Something else?
 
 ---
 
