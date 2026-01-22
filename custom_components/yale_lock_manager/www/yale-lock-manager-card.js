@@ -1071,15 +1071,11 @@ class YaleLockManagerCard extends HTMLElement {
         this.showStatus(slot, '✅ User saved successfully!', 'success');
       }
       
-      // Rule 3: After confirmed save, refresh editable fields from entity state
-      // Compare with lock fields, update sync status
-      this._editingSlots.delete(slot); // Allow field refresh
-      this._savedSlots.add(slot); // Mark for field refresh
-      
-      // Wait for entity state to update, then refresh fields
+      // Form values are already updated in _formValues, so fields will show correct values
+      // Just wait for entity state to update for lock fields, then render
       setTimeout(() => {
         this.render();
-      }, 1500);
+      }, 500);
       
     } catch (error) {
       if (error.message && error.message.includes('occupied by an unknown code')) {
