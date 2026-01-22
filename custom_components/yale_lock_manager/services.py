@@ -18,6 +18,7 @@ from .const import (
     ATTR_OVERRIDE_PROTECTION,
     ATTR_SLOT,
     ATTR_START_DATETIME,
+    ATTR_STATUS,
     CODE_TYPE_FOB,
     CODE_TYPE_PIN,
     DOMAIN,
