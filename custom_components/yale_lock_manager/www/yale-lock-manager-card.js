@@ -764,13 +764,15 @@ class YaleLockManagerCard extends HTMLElement {
     // Update status dropdown options based on whether there's data
     const nameField = this.shadowRoot.getElementById(`name-${slot}`);
     const codeField = this.shadowRoot.getElementById(`code-${slot}`);
+    const lockCodeField = this.shadowRoot.getElementById(`lock-code-${slot}`);
     const statusSelect = this.shadowRoot.getElementById(`cached-status-${slot}`);
     
     if (!statusSelect) return;
     
-    const hasName = nameField && nameField.value.trim() !== '';
+    const hasName = nameField && nameField.value.trim() !== '' && nameField.value.trim() !== `User ${slot}`;
     const hasCode = codeField && codeField.value.trim() !== '';
-    const hasData = hasName || hasCode;
+    const hasLockCode = lockCodeField && lockCodeField.value.trim() !== '' && lockCodeField.value.trim() !== 'No PIN on lock';
+    const hasData = hasName || hasCode || hasLockCode;
     
     const currentValue = statusSelect.value;
     
