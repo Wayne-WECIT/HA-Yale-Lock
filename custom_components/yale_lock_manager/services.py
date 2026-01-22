@@ -225,6 +225,18 @@ async def async_setup_services(hass: HomeAssistant) -> None:
             _LOGGER.error("Error pulling codes from lock: %s", err)
             raise HomeAssistantError(f"Failed to pull codes from lock: {err}") from err
 
+    async def handle_check_sync_status(call: ServiceCall) -> None:
+        """Handle check sync status service call."""
+        coordinator = get_coordinator()
+        slot = call.data[ATTR_SLOT]
+
+        try:
+            await coordinator.async_check_sync_status(slot)
+            _LOGGER.info("Checked sync status for slot %s", slot)
+        except Exception as err:
+            _LOGGER.error("Error checking sync status: %s", err)
+            raise HomeAssistantError(f"Failed to check sync status: {err}") from err
+
     async def handle_enable_user(call: ServiceCall) -> None:
         """Handle enable user service call."""
         coordinator = get_coordinator()
