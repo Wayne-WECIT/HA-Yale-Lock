@@ -1177,19 +1177,34 @@ class YaleLockManagerCard extends HTMLElement {
       this.showStatus(slot, '✅ User saved successfully!', 'success');
       
       // After saving, skip form value restoration so the entity state can update the form
-      // with the new cached code value
+      // with the new cached values (name, code, status, type)
       this._skipFormRestore = true;
       
       // Render will be triggered by the refresh from check_sync_status
       // But add a small delay to ensure data is updated
       setTimeout(() => {
-        // Get the updated user data from entity state and ensure form shows new code
+        // Get the updated user data from entity state and ensure form shows new values
         const updatedUser = this.getUserData().find(u => u.slot === slot);
         if (updatedUser && this.shadowRoot) {
-          // Update the form field with the new cached code from entity state
+          // Update all cached form fields with new values from entity state
+          const nameField = this.shadowRoot.getElementById(`name-${slot}`);
+          if (nameField && updatedUser.name) {
+            nameField.value = updatedUser.name;
+          }
+          
           const codeField = this.shadowRoot.getElementById(`code-${slot}`);
           if (codeField && updatedUser.code) {
-            codeField.value = updatedUser.code; // This is the new cached code (23432448)
+            codeField.value = updatedUser.code; // New cached PIN
+          }
+          
+          const typeField = this.shadowRoot.getElementById(`type-${slot}`);
+          if (typeField && updatedUser.code_type) {
+            typeField.value = updatedUser.code_type; // pin or fob
+          }
+          
+          const cachedStatusField = this.shadowRoot.getElementById(`cached-status-${slot}`);
+          if (cachedStatusField && updatedUser.lock_status !== null && updatedUser.lock_status !== undefined) {
+            cachedStatusField.value = String(updatedUser.lock_status); // 0, 1, or 2
           }
         }
         this.render();
