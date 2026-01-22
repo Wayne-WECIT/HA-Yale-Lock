@@ -821,7 +821,7 @@ class YaleLockManagerCard extends HTMLElement {
       disabledOption.value = '2';
       disabledOption.textContent = 'Disabled';
       disabledOption.selected = currentValue === '2';
-      disabledOption.appendChild(disabledOption);
+      statusSelect.appendChild(disabledOption);
       
       if (currentValue === '0') {
         statusSelect.value = '1';
