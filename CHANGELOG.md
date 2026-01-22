@@ -20,6 +20,50 @@ Use `lock.smart_door_lock_manager` for the Lovelace card!
 
 ---
 
+## [1.7.0.0] - 2026-01-22
+
+### Fixed
+- **🔧 Z-Wave Communication** - Now uses `invoke_cc_api` instead of `set_value`
+  - More reliable code reading from lock
+  - Properly uses UserCode CC API (get, set, clear methods)
+  - Better error handling and feedback
+  
+- **🧹 Clear Slot** - Now works correctly
+  - Clears from storage AND lock
+  - No more "occupied by unknown code" errors after clearing
+  - Properly refreshes UI after clearing
+
+- **🏷️ FOB/RFID Support** - Fixed handling
+  - FOBs no longer require PIN codes
+  - Auto-generates placeholder code for FOBs (00000000)
+  - FOBs ignore schedule and usage limits
+  - Code input hidden for FOB type
+
+- **🔄 Toggle Fix** - Slot now properly parsed as integer
+  - Fixed "expected int for dictionary value" error
+  - All handlers now use parseInt(slot, 10)
+
+### Improved
+- **Better Service Validation**
+  - Code parameter now optional in schema (for FOBs)
+  - Proper validation based on code type
+  - Clearer error messages
+
+### Technical Details
+- `_get_user_code_status()` - Now uses `invoke_cc_api` with `get` method
+- `_get_user_code()` - Now uses `invoke_cc_api` with `get` method  
+- `async_push_code_to_lock()` - Now uses `invoke_cc_api` with `set` method
+- `async_clear_user_code()` - Now uses `invoke_cc_api` with `clear` method
+- FOB codes use 8-digit placeholder when no code provided
+- Schedule/usage preserved when updating existing users
+
+### Known Issues
+- UI still uses popup dialogs (will be fixed in next release)
+- Schedule/Usage sections still visible for FOBs (will be hidden in next release)  
+- Separate action buttons will be consolidated in next release
+
+---
+
 ## [1.6.1.0] - 2026-01-22
 
 ### Fixed

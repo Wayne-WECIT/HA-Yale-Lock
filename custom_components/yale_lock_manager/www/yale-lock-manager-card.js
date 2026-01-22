@@ -729,7 +729,7 @@ class YaleLockManagerCard extends HTMLElement {
     const service = currentState ? 'disable_user' : 'enable_user';
     await this._hass.callService('yale_lock_manager', service, {
       entity_id: this._config.entity,
-      slot: slot
+      slot: parseInt(slot, 10)  // Ensure slot is an integer
     });
   }
 

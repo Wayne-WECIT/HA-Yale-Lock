@@ -459,13 +459,62 @@ class YaleLockCoordinator(DataUpdateCoordinator):
         return {}
 
     async def _get_user_code_status(self, slot: int) -> int:
-        """Get user code status for a slot."""
-        return await self._get_zwave_value(CC_USER_CODE, PROP_USER_ID_STATUS, slot)
+        """Get user code status for a slot using invoke_cc_api."""
+        try:
+            # Use invoke_cc_api to get user code data
+            result = await self.hass.services.async_call(
+                ZWAVE_JS_DOMAIN,
+                "invoke_cc_api",
+                {
+                    "entity_id": self.lock_entity_id,
+                    "command_class": CC_USER_CODE,
+                    "method_name": "get",
+                    "parameters": [slot],
+                },
+                blocking=True,
+                return_response=True,
+            )
+            
+            if result and "userIdStatus" in result:
+                status = result["userIdStatus"]
+                _LOGGER.debug("Slot %s status from API: %s", slot, status)
+                return status
+            
+            _LOGGER.warning("No status returned for slot %s", slot)
+            return None
+            
+        except Exception as err:
+            _LOGGER.debug("Error getting user code status for slot %s: %s", slot, err)
+            return None
 
     async def _get_user_code(self, slot: int) -> str:
-        """Get user code for a slot."""
-        code = await self._get_zwave_value(CC_USER_CODE, PROP_USER_CODE, slot)
-        return code or ""
+        """Get user code for a slot using invoke_cc_api."""
+        try:
+            # Use invoke_cc_api to get user code data
+            result = await self.hass.services.async_call(
+                ZWAVE_JS_DOMAIN,
+                "invoke_cc_api",
+                {
+                    "entity_id": self.lock_entity_id,
+                    "command_class": CC_USER_CODE,
+                    "method_name": "get",
+                    "parameters": [slot],
+                },
+                blocking=True,
+                return_response=True,
+            )
+            
+            if result and "userCode" in result:
+                code = result["userCode"]
+                _LOGGER.debug("Slot %s code from API: %s", slot, "***" if code else "None")
+                return code or ""
+            
+            _LOGGER.warning("No code returned for slot %s", slot)
+            return ""
+            
+        except Exception as err:
+            _LOGGER.debug("Error getting user code for slot %s: %s", slot, err)
+            return ""
 
     async def async_set_user_code(
         self,
@@ -480,9 +529,30 @@ class YaleLockCoordinator(DataUpdateCoordinator):
         if slot < 1 or slot > MAX_USER_SLOTS:
             raise ValueError(f"Slot must be between 1 and {MAX_USER_SLOTS}")
 
+        # For FOBs, code can be empty or short
+        if code_type == CODE_TYPE_FOB:
+            # FOBs don't need a PIN code, use placeholder
+            if not code or len(code) < 4:
+                code = "00000000"  # 8-digit placeholder for FOBs
+        else:
+            # For PINs, validate code length
+            if not code or len(code) < 4:
+                raise ValueError("PIN code must be at least 4 digits")
+
         # Check slot protection (unless override is True)
         if not override_protection and not await self._is_slot_safe_to_write(slot):
             raise ValueError(f"Slot {slot} is occupied by an unknown code. Use override_protection=True to overwrite.")
+
+        # Preserve existing schedule/usage data if updating
+        existing_user = self._user_data["users"].get(str(slot))
+        if existing_user:
+            schedule = existing_user.get("schedule", {"start": None, "end": None})
+            usage_limit = existing_user.get("usage_limit")
+            usage_count = existing_user.get("usage_count", 0)
+        else:
+            schedule = {"start": None, "end": None}
+            usage_limit = None
+            usage_count = 0
 
         # Store user data
         self._user_data["users"][str(slot)] = {
@@ -490,14 +560,15 @@ class YaleLockCoordinator(DataUpdateCoordinator):
             "code_type": code_type,
             "code": code,  # In production, this should be encrypted
             "enabled": True,
-            "schedule": {"start": None, "end": None},
-            "usage_limit": None,
-            "usage_count": 0,
+            "schedule": schedule if code_type == CODE_TYPE_PIN else {"start": None, "end": None},
+            "usage_limit": usage_limit if code_type == CODE_TYPE_PIN else None,
+            "usage_count": usage_count if code_type == CODE_TYPE_PIN else 0,
             "synced_to_lock": False,
             "last_used": None,
         }
 
         await self.async_save_user_data()
+        await self.async_request_refresh()
 
     async def _is_slot_safe_to_write(self, slot: int) -> bool:
         """Check if a slot is safe to write to."""
@@ -518,10 +589,30 @@ class YaleLockCoordinator(DataUpdateCoordinator):
         return False
 
     async def async_clear_user_code(self, slot: int) -> None:
-        """Clear a user code."""
+        """Clear a user code from storage and lock."""
+        # Remove from storage first
         if str(slot) in self._user_data["users"]:
             del self._user_data["users"][str(slot)]
             await self.async_save_user_data()
+        
+        # Clear from lock using invoke_cc_api
+        try:
+            await self.hass.services.async_call(
+                ZWAVE_JS_DOMAIN,
+                "invoke_cc_api",
+                {
+                    "entity_id": self.lock_entity_id,
+                    "command_class": CC_USER_CODE,
+                    "method_name": "clear",
+                    "parameters": [slot],
+                },
+                blocking=True,
+            )
+            _LOGGER.info("Cleared slot %s from lock", slot)
+        except Exception as err:
+            _LOGGER.warning("Could not clear slot %s from lock: %s", slot, err)
+        
+        await self.async_request_refresh()
 
     async def async_enable_user(self, slot: int) -> None:
         """Enable a user code."""
@@ -574,13 +665,14 @@ class YaleLockCoordinator(DataUpdateCoordinator):
             await self.async_enable_user(slot)
 
     async def async_push_code_to_lock(self, slot: int) -> None:
-        """Push a code to the lock."""
+        """Push a code to the lock using invoke_cc_api."""
         user_data = self._user_data["users"].get(str(slot))
         if not user_data:
             raise ValueError(f"User slot {slot} not found")
 
         code = user_data["code"]
         enabled = user_data["enabled"]
+        code_type = user_data.get("code_type", CODE_TYPE_PIN)
 
         # Determine status based on enabled flag and schedule
         if enabled and self._is_code_valid(slot):
@@ -588,39 +680,29 @@ class YaleLockCoordinator(DataUpdateCoordinator):
         else:
             status = USER_STATUS_DISABLED
 
-        # Use Z-Wave JS service to set the code
-        await self.hass.services.async_call(
-            ZWAVE_JS_DOMAIN,
-            "set_value",
-            {
-                "entity_id": self.lock_entity_id,
-                "command_class": CC_USER_CODE,
-                "property": PROP_USER_CODE,
-                "property_key": slot,
-                "value": code,
-            },
-            blocking=True,
-        )
-
-        # Set the status
-        await self.hass.services.async_call(
-            ZWAVE_JS_DOMAIN,
-            "set_value",
-            {
-                "entity_id": self.lock_entity_id,
-                "command_class": CC_USER_CODE,
-                "property": PROP_USER_ID_STATUS,
-                "property_key": slot,
-                "value": status,
-            },
-            blocking=True,
-        )
-
-        # Mark as synced
-        user_data["synced_to_lock"] = True
-        await self.async_save_user_data()
-
-        _LOGGER.info("Pushed code for slot %s to lock", slot)
+        # Use invoke_cc_api to set the code
+        try:
+            await self.hass.services.async_call(
+                ZWAVE_JS_DOMAIN,
+                "invoke_cc_api",
+                {
+                    "entity_id": self.lock_entity_id,
+                    "command_class": CC_USER_CODE,
+                    "method_name": "set",
+                    "parameters": [slot, status, code],
+                },
+                blocking=True,
+            )
+            
+            # Mark as synced
+            user_data["synced_to_lock"] = True
+            await self.async_save_user_data()
+            
+            _LOGGER.info("Pushed %s code for slot %s to lock (status: %s)", code_type, slot, status)
+            
+        except Exception as err:
+            _LOGGER.error("Failed to push code for slot %s: %s", slot, err)
+            raise ValueError(f"Failed to push code to lock: {err}") from err
 
     async def async_pull_codes_from_lock(self) -> None:
         """Pull all codes from the lock and update our data."""

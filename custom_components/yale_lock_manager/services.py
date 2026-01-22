@@ -43,10 +43,7 @@ SET_USER_CODE_SCHEMA = vol.Schema(
     {
         vol.Optional("entity_id"): cv.entity_id,
         vol.Required(ATTR_SLOT): vol.All(vol.Coerce(int), vol.Range(min=1, max=MAX_USER_SLOTS)),
-        vol.Required(ATTR_CODE): vol.All(
-            cv.string,
-            vol.Length(min=MIN_CODE_LENGTH, max=MAX_CODE_LENGTH),
-        ),
+        vol.Optional(ATTR_CODE, default=""): cv.string,  # Made optional for FOBs
         vol.Required(ATTR_NAME): cv.string,
         vol.Optional(ATTR_CODE_TYPE, default=CODE_TYPE_PIN): vol.In([CODE_TYPE_PIN, CODE_TYPE_FOB]),
         vol.Optional(ATTR_OVERRIDE_PROTECTION, default=False): cv.boolean,
