@@ -743,6 +743,67 @@ class YaleLockManagerCard extends HTMLElement {
   attachEventListeners() {
     // Make card globally accessible for onclick handlers
     window.card = this;
+    
+    // Add event listeners to update status dropdown when name/PIN changes
+    if (this._expandedSlot) {
+      const slot = this._expandedSlot;
+      const nameField = this.shadowRoot.getElementById(`name-${slot}`);
+      const codeField = this.shadowRoot.getElementById(`code-${slot}`);
+      
+      if (nameField) {
+        nameField.addEventListener('input', () => this.updateStatusOptions(slot));
+      }
+      if (codeField) {
+        codeField.addEventListener('input', () => this.updateStatusOptions(slot));
+      }
+    }
+  }
+  
+  updateStatusOptions(slot) {
+    // Update status dropdown options based on whether there's data
+    const nameField = this.shadowRoot.getElementById(`name-${slot}`);
+    const codeField = this.shadowRoot.getElementById(`code-${slot}`);
+    const statusSelect = this.shadowRoot.getElementById(`cached-status-${slot}`);
+    
+    if (!statusSelect) return;
+    
+    const hasName = nameField && nameField.value.trim() !== '';
+    const hasCode = codeField && codeField.value.trim() !== '';
+    const hasData = hasName || hasCode;
+    
+    const currentValue = statusSelect.value;
+    
+    // Clear existing options
+    statusSelect.innerHTML = '';
+    
+    if (!hasData) {
+      // No data - only show Available
+      const option = document.createElement('option');
+      option.value = '0';
+      option.textContent = 'Available';
+      option.selected = currentValue === '0';
+      statusSelect.appendChild(option);
+    } else {
+      // Has data - only show Enabled/Disabled
+      const enabledOption = document.createElement('option');
+      enabledOption.value = '1';
+      enabledOption.textContent = 'Enabled';
+      enabledOption.selected = currentValue === '1';
+      statusSelect.appendChild(enabledOption);
+      
+      const disabledOption = document.createElement('option');
+      disabledOption.value = '2';
+      disabledOption.textContent = 'Disabled';
+      disabledOption.selected = currentValue === '2';
+      statusSelect.appendChild(disabledOption);
+      
+      // If current value is Available but we have data, default to Enabled
+      if (currentValue === '0') {
+        statusSelect.value = '1';
+        // Trigger change to update backend
+        statusSelect.dispatchEvent(new Event('change'));
+      }
+    }
   }
 
   toggleExpand(slot) {
