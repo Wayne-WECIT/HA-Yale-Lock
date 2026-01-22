@@ -618,14 +618,17 @@ class YaleLockCoordinator(DataUpdateCoordinator):
         """Enable a user code."""
         if str(slot) in self._user_data["users"]:
             self._user_data["users"][str(slot)]["enabled"] = True
+            self._user_data["users"][str(slot)]["synced_to_lock"] = False  # Needs push
             await self.async_save_user_data()
+            await self.async_request_refresh()
 
     async def async_disable_user(self, slot: int) -> None:
         """Disable a user code."""
         if str(slot) in self._user_data["users"]:
             self._user_data["users"][str(slot)]["enabled"] = False
-            self._user_data["users"][str(slot)]["synced_to_lock"] = False
+            self._user_data["users"][str(slot)]["synced_to_lock"] = False  # Needs push
             await self.async_save_user_data()
+            await self.async_request_refresh()
 
     async def async_set_user_schedule(
         self,
@@ -665,7 +668,7 @@ class YaleLockCoordinator(DataUpdateCoordinator):
             await self.async_enable_user(slot)
 
     async def async_push_code_to_lock(self, slot: int) -> None:
-        """Push a code to the lock using invoke_cc_api."""
+        """Push a code to the lock using invoke_cc_api with read-back verification."""
         user_data = self._user_data["users"].get(str(slot))
         if not user_data:
             raise ValueError(f"User slot {slot} not found")
@@ -682,6 +685,8 @@ class YaleLockCoordinator(DataUpdateCoordinator):
 
         # Use invoke_cc_api to set the code
         try:
+            _LOGGER.info("Pushing %s code for slot %s to lock (status: %s)", code_type, slot, status)
+            
             await self.hass.services.async_call(
                 ZWAVE_JS_DOMAIN,
                 "invoke_cc_api",
@@ -694,14 +699,38 @@ class YaleLockCoordinator(DataUpdateCoordinator):
                 blocking=True,
             )
             
-            # Mark as synced
-            user_data["synced_to_lock"] = True
-            await self.async_save_user_data()
+            # Wait for lock to process the write
+            await asyncio.sleep(2.0)
             
-            _LOGGER.info("Pushed %s code for slot %s to lock (status: %s)", code_type, slot, status)
+            # VERIFY: Read back the code from the lock
+            _LOGGER.info("Verifying code was written to slot %s...", slot)
+            verification_status = await self._get_user_code_status(slot)
+            verification_code = await self._get_user_code(slot)
+            
+            # Check if verification succeeded
+            if verification_status is None:
+                _LOGGER.warning("Could not verify slot %s - status read returned None", slot)
+                user_data["synced_to_lock"] = False
+            elif verification_status == USER_STATUS_AVAILABLE:
+                _LOGGER.error("Verification failed: Slot %s is empty after push!", slot)
+                user_data["synced_to_lock"] = False
+                raise ValueError(f"Verification failed: Slot {slot} is empty after push")
+            elif verification_code and verification_code != code:
+                _LOGGER.error("Verification failed: Code mismatch in slot %s (expected: ***, got: ***)", slot)
+                user_data["synced_to_lock"] = False
+                raise ValueError(f"Verification failed: Code mismatch in slot {slot}")
+            else:
+                # Verification succeeded!
+                _LOGGER.info("✓ Verified: Code successfully written to slot %s", slot)
+                user_data["synced_to_lock"] = True
+            
+            await self.async_save_user_data()
+            await self.async_request_refresh()
             
         except Exception as err:
             _LOGGER.error("Failed to push code for slot %s: %s", slot, err)
+            user_data["synced_to_lock"] = False
+            await self.async_save_user_data()
             raise ValueError(f"Failed to push code to lock: {err}") from err
 
     async def async_pull_codes_from_lock(self) -> None:

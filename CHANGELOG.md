@@ -20,6 +20,85 @@ Use `lock.smart_door_lock_manager` for the Lovelace card!
 
 ---
 
+## [1.7.2.0] - 2026-01-22
+
+### Fixed - CRITICAL: Push Verification! 🔍
+- **✅ Read-Back Verification** - Now VERIFIES code was written!
+  - After pushing, waits 2 seconds for lock to process
+  - Reads back the code from the lock using `invoke_cc_api`
+  - Compares returned code with expected code
+  - Only marks `synced_to_lock: true` if verification succeeds
+  - If verification fails, marks `synced_to_lock: false` and raises error
+
+### The Problem (Before)
+```python
+await push_code_to_lock()
+synced_to_lock = True  # ❌ Optimistic, no verification!
+```
+- Assumed push succeeded without checking
+- Could show "synced" when lock actually rejected the code
+- No way to know if push really worked
+- False positive feedback to user
+
+### The Solution (Now)
+```python
+await push_code_to_lock()       # Push code
+await asyncio.sleep(2.0)        # Wait for processing
+status = await get_status()     # Read back status
+code = await get_code()         # Read back code
+if status == AVAILABLE:
+    raise "Slot is empty!"      # ❌ Push failed
+if code != expected:
+    raise "Code mismatch!"      # ❌ Wrong code
+synced_to_lock = True           # ✅ Verified!
+```
+
+### What Gets Verified
+1. **Slot Not Empty** - Ensures slot has data after push
+2. **Code Matches** - Verifies exact code was written
+3. **Status Valid** - Checks status is not "Available"
+
+### Error Cases Detected
+- ✅ Lock rejected the push (slot still empty)
+- ✅ Lock wrote wrong code (mismatch detected)  
+- ✅ Communication failed (can't read back)
+- ✅ Lock is offline (timeout on read)
+
+### Additional Fixes
+- **Enable/Disable** now marks as not synced
+  - Toggling user on/off requires push to lock
+  - Checkmark (✓) changes to (✗) until pushed
+  - Clear visual feedback that push needed
+
+### Logging Improvements
+```
+INFO: Pushing pin code for slot 4 to lock (status: 1)
+INFO: Verifying code was written to slot 4...
+INFO: ✓ Verified: Code successfully written to slot 4
+```
+or
+```
+ERROR: Verification failed: Slot 4 is empty after push!
+ERROR: Verification failed: Code mismatch in slot 4
+```
+
+### Benefits
+✅ Reliable sync status - no more false positives
+✅ Immediate feedback if push fails
+✅ Catch lock communication issues
+✅ Verify code before marking complete
+✅ User sees accurate sync state
+✅ Can retry failed pushes with confidence
+
+### Technical Details
+- Uses same `_get_user_code_status()` and `_get_user_code()` methods
+- 2-second delay allows lock to process write operation
+- Verification runs after every successful `invoke_cc_api.set()` call
+- On verification failure: marks `synced_to_lock = False` + raises error
+- On verification success: marks `synced_to_lock = True` + refreshes UI
+
+---
+
 ## [1.7.1.0] - 2026-01-22
 
 ### Fixed - UI COMPLETE REDESIGN! 🎨
