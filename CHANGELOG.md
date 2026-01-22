@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-**📌 Current Entity Structure** (as of v1.2.0.0):
+**📌 Current Entity Structure** (as of v1.2.0.1):
 - **Separate Device: "Smart Door Lock Manager"** (created by integration)
   - Lock: `lock.smart_door_lock_manager`
   - Sensors: `sensor.smart_door_lock_manager_battery`, etc.
@@ -19,6 +19,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Use `lock.smart_door_lock_manager` for the Lovelace card!
 
 ---
+
+## [1.2.0.1] - 2026-01-22
+
+### Documentation
+- **Updated all documentation** to reflect separate device architecture
+- README.md: Added detailed "Device Structure" section
+- QUICKSTART.md: Clarified two-device setup
+- PROJECT_SUMMARY.md: Updated version to 1.2.0.1
+- All docs now explain Yale Lock Manager device vs Z-Wave device
+
+### No Code Changes
+This is a documentation-only release. Code is identical to v1.2.0.0.
 
 ## [1.2.0.0] - 2026-01-22
 

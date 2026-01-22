@@ -76,12 +76,51 @@ A comprehensive Home Assistant custom integration for managing Yale front door l
    entity: lock.smart_door_lock_manager  # Use the Yale Lock Manager entity
    ```
 
-**Important:** The integration creates a `lock.smart_door_lock_manager` entity that:
-- Links to your existing Z-Wave lock device (all entities grouped together)
-- Provides lock/unlock control
-- Exposes user code data and management features
-- Shows battery, door, and bolt status
-- Displays total users and enabled users count
+**Important:** The integration creates a **separate "Smart Door Lock Manager" device** with:
+- Lock entity: `lock.smart_door_lock_manager` (for lock/unlock control)
+- Battery sensor: `sensor.smart_door_lock_manager_battery`
+- Access sensors: Last access, last user, last access method
+- Status sensors: Door and bolt binary sensors
+- All user code management and tracking
+
+Your original Z-Wave lock remains as a separate device.
+
+## 🏗️ Device Structure
+
+The integration creates **two separate devices** in Home Assistant:
+
+### Device 1: Smart Door Lock Manager (Yale Lock Manager)
+This is the management device created by this integration:
+```
+📱 Smart Door Lock Manager
+├── 🔐 lock.smart_door_lock_manager (lock/unlock control)
+├── 🔋 sensor.smart_door_lock_manager_battery
+├── 🕐 sensor.smart_door_lock_manager_last_access
+├── 👤 sensor.smart_door_lock_manager_last_user
+├── 🔑 sensor.smart_door_lock_manager_last_access_method
+├── 🚪 binary_sensor.smart_door_lock_manager_door
+└── 🔩 binary_sensor.smart_door_lock_manager_bolt
+```
+
+**Use this device for:**
+- Setting user codes
+- Managing schedules and limits
+- Monitoring access history
+- Lovelace card configuration
+
+### Device 2: Smart Door Lock (Z-Wave JS)
+This is your original Z-Wave lock device:
+```
+📱 Smart Door Lock
+├── 🔐 lock.smart_door_lock (original Z-Wave entity)
+└── (other Z-Wave sensors)
+```
+
+**Why two devices?**
+- ✅ Clean separation of concerns
+- ✅ No entity naming conflicts
+- ✅ Independent management and control
+- ✅ Both devices show relationship via `via_device`
 
 ## 📖 Usage
 

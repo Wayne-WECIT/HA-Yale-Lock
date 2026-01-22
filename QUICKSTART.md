@@ -38,10 +38,15 @@ This guide will help you get Yale Lock Manager up and running quickly.
 4. Select your Yale lock from the dropdown
 5. Click **Submit**
 
-Your lock is now configured! You'll see:
-- 1 Lock entity
-- 4 Sensors (battery, last access, last user, last method)
-- 2 Binary sensors (door, bolt)
+Your lock is now configured! You'll see a **new device** called **"Smart Door Lock Manager"** with:
+- 🔐 Lock entity: `lock.smart_door_lock_manager`
+- 🔋 Battery sensor
+- 🕐 Last access sensors (timestamp, user, method)
+- 🚪 Door and bolt binary sensors
+
+**Note:** This is separate from your Z-Wave lock device. You'll have two devices:
+1. **Smart Door Lock Manager** (Yale Lock Manager) - For code management
+2. **Smart Door Lock** (Z-Wave JS) - Original lock device
 
 ### 3. Add the Lovelace Card
 

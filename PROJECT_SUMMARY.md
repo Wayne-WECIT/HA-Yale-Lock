@@ -233,7 +233,9 @@ Before announcing the release, test these scenarios:
 
 As requested, the version follows: **X.X.X.X** (Major.Minor.Patch.Build)
 
-**Current Version**: 1.0.0.0
+**Current Version**: 1.2.0.0
+
+**Note**: As of v1.2.0.0, the integration creates a separate "Smart Door Lock Manager" device with all entities, independent from the Z-Wave lock device.
 
 ### When to Increment:
 - **Major (X.0.0.0)**: Breaking changes, major features
