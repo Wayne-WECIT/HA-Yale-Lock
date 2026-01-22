@@ -154,6 +154,15 @@ Nice-to-have improvements for better user experience.
   - Error banner with retry button
   - Validation feedback in real-time
 
+- [ ] **Optimize push verification flow**
+  - Currently: After "Push Required" button, we query lock twice (once in `async_push_code_to_lock` verification, once in `check_sync_status`)
+  - Options to consider:
+    1. Remove redundant `check_sync_status` call after push (push already verifies)
+    2. Keep both but optimize (single source of truth)
+    3. Enhanced verification in push with delay before refresh
+    4. Keep current behavior (double-check for accuracy)
+  - Decision needed: Which approach provides best balance of speed vs reliability?
+
 ---
 
 ## 📚 Documentation
