@@ -49,11 +49,12 @@ class YaleLockDoorSensor(CoordinatorEntity, BinarySensorEntity):
         super().__init__(coordinator)
         self._attr_unique_id = f"{entry.entry_id}_door"
         self._attr_name = "Door"
+        lock_name = entry.data.get(CONF_LOCK_NAME, "Yale Lock")
         self._attr_device_info = {
             "identifiers": {(DOMAIN, entry.entry_id)},
-            "name": entry.data[CONF_LOCK_NAME],
-            "manufacturer": "Yale",
-            "model": "Smart Door Lock",
+            "name": f"{lock_name} Manager",
+            "manufacturer": "Yale Lock Manager",
+            "model": "Lock Code Manager",
         }
 
     @property
@@ -85,11 +86,12 @@ class YaleLockBoltSensor(CoordinatorEntity, BinarySensorEntity):
         super().__init__(coordinator)
         self._attr_unique_id = f"{entry.entry_id}_bolt"
         self._attr_name = "Bolt"
+        lock_name = entry.data.get(CONF_LOCK_NAME, "Yale Lock")
         self._attr_device_info = {
             "identifiers": {(DOMAIN, entry.entry_id)},
-            "name": entry.data[CONF_LOCK_NAME],
-            "manufacturer": "Yale",
-            "model": "Smart Door Lock",
+            "name": f"{lock_name} Manager",
+            "manufacturer": "Yale Lock Manager",
+            "model": "Lock Code Manager",
         }
 
     @property

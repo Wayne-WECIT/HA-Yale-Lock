@@ -41,23 +41,24 @@ class YaleLockManagerLock(CoordinatorEntity, LockEntity):
         """Initialize the lock."""
         super().__init__(coordinator)
         
-        # Get the lock name from the Z-Wave entity
-        lock_state = coordinator.hass.states.get(coordinator.lock_entity_id)
-        base_name = "Smart Door Lock"
-        if lock_state and lock_state.attributes.get("friendly_name"):
-            # Use the Z-Wave lock's name as base
-            base_name = lock_state.attributes["friendly_name"]
+        # Get the lock name from config entry
+        lock_name = entry.data.get(CONF_LOCK_NAME, "Yale Lock")
         
         # Use a unique ID that won't conflict with Z-Wave lock
-        self._attr_unique_id = f"{DOMAIN}_{coordinator.node_id}_manager"
-        self._attr_name = f"{base_name} Manager"  # Creates lock.smart_door_lock_manager
+        self._attr_unique_id = f"{DOMAIN}_{entry.entry_id}_lock"
+        self._attr_name = f"{lock_name} Manager"
         
-        # Link to existing Z-Wave device so all entities are grouped together
+        # Create our own separate device (not linked to Z-Wave device)
         self._attr_device_info = {
-            "identifiers": {(ZWAVE_JS_DOMAIN, coordinator.node_id)},
+            "identifiers": {(DOMAIN, entry.entry_id)},
+            "name": f"{lock_name} Manager",
+            "manufacturer": "Yale Lock Manager",
+            "model": "Lock Code Manager",
+            "sw_version": coordinator.hass.data[DOMAIN].get("version", "1.0.0"),
+            "via_device": (ZWAVE_JS_DOMAIN, coordinator.node_id),  # Show it's related to Z-Wave lock
         }
         
-        _LOGGER.info("Created Yale Lock Manager entity '%s' for node %s", self._attr_name, coordinator.node_id)
+        _LOGGER.info("Created Yale Lock Manager device '%s' for entry %s", lock_name, entry.entry_id)
 
     @property
     def is_locked(self) -> bool | None:

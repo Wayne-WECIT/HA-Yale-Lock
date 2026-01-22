@@ -7,13 +7,61 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-**📌 Current Entity Structure** (as of v1.1.2.1):
-- Lock: `lock.smart_door_lock_manager` (created by integration)
-- Z-Wave Lock: `lock.smart_door_lock` (original Z-Wave entity)
-- Sensors: `sensor.smart_door_lock_*` (battery, last_access, etc.)
-- Use `lock.smart_door_lock_manager` for the Lovelace card
+**📌 Current Entity Structure** (as of v1.2.0.0):
+- **Separate Device: "Smart Door Lock Manager"** (created by integration)
+  - Lock: `lock.smart_door_lock_manager`
+  - Sensors: `sensor.smart_door_lock_manager_battery`, etc.
+  - Binary Sensors: `binary_sensor.smart_door_lock_manager_door`, etc.
+- **Z-Wave Device: "Smart Door Lock"** (original Z-Wave device)
+  - Lock: `lock.smart_door_lock`
+  - Z-Wave sensors: `sensor.smart_door_lock_*`
+  
+Use `lock.smart_door_lock_manager` for the Lovelace card!
 
 ---
+
+## [1.2.0.0] - 2026-01-22
+
+### MAJOR CHANGE - Separate Device Architecture
+- **Created dedicated "Yale Lock Manager" device** (no longer trying to inject into Z-Wave device)
+- Fixes all entity naming issues (`lock.none_manager`, `undefined` device)
+- Clean separation between Z-Wave and Yale Lock Manager
+
+### What Changed
+- Lock entity: `lock.smart_door_lock_manager` (on Yale Lock Manager device) ✅
+- All sensors: Under "Smart Door Lock Manager" device
+- Z-Wave lock: Still exists separately as `lock.smart_door_lock`
+- Device info: "Yale Lock Manager" / "Lock Code Manager"
+- Uses `via_device` to show relationship to Z-Wave lock
+
+### Device Structure
+```
+📱 Smart Door Lock Manager (Yale Lock Manager)
+├── lock.smart_door_lock_manager
+├── sensor.smart_door_lock_manager_battery
+├── sensor.smart_door_lock_manager_last_access
+├── sensor.smart_door_lock_manager_last_user
+├── sensor.smart_door_lock_manager_last_access_method
+├── binary_sensor.smart_door_lock_manager_door
+└── binary_sensor.smart_door_lock_manager_bolt
+
+📱 Smart Door Lock (Z-Wave JS)
+├── lock.smart_door_lock
+└── (other Z-Wave entities)
+```
+
+### User Impact
+- **You'll see TWO devices** (this is intentional and correct)
+- Use the "Smart Door Lock Manager" device for code management
+- Use `lock.smart_door_lock_manager` in Lovelace card
+- No more "undefined" or "unnamed" devices!
+
+### Migration
+After updating to v1.2.0.0:
+1. Remove old integration entry
+2. Restart Home Assistant
+3. Re-add Yale Lock Manager integration
+4. Update Lovelace card entity reference
 
 ## [1.1.2.3] - 2026-01-22
 
