@@ -20,6 +20,48 @@ Use `lock.smart_door_lock_manager` for the Lovelace card!
 
 ---
 
+## [1.8.2.11] - 2026-01-22
+
+### 🔧 FIX - Events Not Fired for invoke_cc_api Responses
+
+**User feedback**: Logs show `invoke_cc_api` returns data but events are not captured.
+
+### The Issue
+
+The logs clearly show:
+- `invoke_cc_api` successfully returns data: `{'userIdStatus': 1, 'userCode': '19992017'}`
+- But `zwave_js_value_updated` events are **NOT fired** for `invoke_cc_api` responses
+- Events are only fired when the lock **spontaneously reports** values, not when we query them
+
+### The Fix
+
+**Changed approach**: Instead of waiting for events (which aren't fired), we now:
+1. Call `invoke_cc_api` to trigger the query
+2. Wait for Z-Wave JS to process the response
+3. Read values directly from the node's cache using `_get_zwave_value`
+4. Retry multiple times (0.5s, 1.0s, 1.5s delays) to account for processing delays
+
+### Changed
+
+- `_get_user_code_data()`: 
+  - Removed event listener approach (events aren't fired for `invoke_cc_api` responses)
+  - Now reads directly from node cache after `invoke_cc_api` call
+  - Multiple retry attempts with increasing delays
+  - Better error messages explaining the limitation
+
+### What's Fixed
+
+- ✅ No longer waiting for events that aren't fired
+- ✅ Direct cache reading after `invoke_cc_api` call
+- ✅ Multiple retry attempts for reliability
+- ✅ Better logging to diagnose cache read issues
+
+### Note
+
+The response from `invoke_cc_api` is logged by Z-Wave JS but not directly accessible. We rely on the values being updated in the node's cache, which we then read using `_get_zwave_value`. If the cache isn't updated, this approach will still fail, but it's the only option since events aren't fired.
+
+---
+
 ## [1.8.2.10] - 2026-01-22
 
 ### 🔧 FIX - Improved Event Listener for User Code Capture

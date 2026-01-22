@@ -512,157 +512,65 @@ class YaleLockCoordinator(DataUpdateCoordinator):
     async def _get_user_code_data(self, slot: int) -> dict[str, Any] | None:
         """Get user code data (status and code) from the lock using invoke_cc_api.
         
-        Uses event listener to capture the response when Z-Wave JS fires the value_updated event.
-        This avoids direct client access while still capturing the response from the CC API method.
+        Since zwave_js_value_updated events are NOT fired for invoke_cc_api responses,
+        we call invoke_cc_api to trigger the query, then read the updated values directly
+        from the node's cache using _get_zwave_value.
         """
-        result_data: dict[str, Any] = {}
-        event_received = asyncio.Event()
-        listener_removed = False
-        events_captured = []
-        
-        @callback
-        def _capture_value_update(event) -> None:
-            """Capture value update event for our specific slot."""
-            nonlocal result_data, listener_removed, events_captured
-            
-            # Log all events for debugging (filtered by node and CC)
-            event_node_id = event.data.get("node_id")
-            event_cc = event.data.get("command_class")
-            event_property = event.data.get("property")
-            event_property_key = event.data.get("property_key")
-            event_value = event.data.get("value")
-            
-            # Check if this is for our node
-            if event_node_id != int(self.node_id):
-                return
-            
-            # Check if this is for User Code command class
-            if event_cc != CC_USER_CODE:
-                return
-            
-            # Log all User Code events for this node (for debugging)
-            _LOGGER.debug(
-                "User Code event received - Property: %s, PropertyKey: %s (type: %s), Value: %s",
-                event_property,
-                event_property_key,
-                type(event_property_key).__name__,
-                "***" if event_property == "userCode" and event_value else event_value,
-            )
-            
-            # Check property_key matches our slot (handle both int and string)
-            # property_key can be int, string, or None
-            slot_match = False
-            if event_property_key is not None:
-                # Try both int and string comparison
-                try:
-                    if int(event_property_key) == slot:
-                        slot_match = True
-                except (ValueError, TypeError):
-                    if str(event_property_key) == str(slot):
-                        slot_match = True
-            else:
-                # If property_key is None, this might be a different event structure
-                # Log it for debugging
-                _LOGGER.debug(
-                    "Event has no property_key - Property: %s, Full event data: %s",
-                    event_property,
-                    {k: v for k, v in event.data.items() if k != "value" or event_property != "userCode"},
-                )
-                return
-            
-            if not slot_match:
-                return
-            
-            # Capture the values we need
-            property_name = event.data.get("property")
-            value = event.data.get("value")
-            
-            _LOGGER.info(
-                "✓ Captured value update for slot %s: property=%s, value=%s",
-                slot,
-                property_name,
-                "***" if property_name == "userCode" and value else value,
-            )
-            
-            events_captured.append(property_name)
-            
-            if property_name == "userIdStatus":
-                result_data["userIdStatus"] = value
-            elif property_name == "userCode":
-                result_data["userCode"] = value
-            
-            # If we have both values, signal we're done
-            if "userIdStatus" in result_data and "userCode" in result_data:
-                if not listener_removed:
-                    listener_removed = True
-                    _LOGGER.info("✓ Both values captured for slot %s, signaling completion", slot)
-                    event_received.set()
-        
         try:
-            _LOGGER.info("Querying lock for user code data for slot %s using event listener...", slot)
+            _LOGGER.info("Querying lock for user code data for slot %s...", slot)
             
-            # Set up temporary event listener BEFORE calling invoke_cc_api
-            # This ensures we don't miss any events
-            remove_listener = self.hass.bus.async_listen(
-                "zwave_js_value_updated",
-                _capture_value_update,
+            # Call invoke_cc_api to trigger the lock to report its user code data
+            # The response is logged by Z-Wave JS but not returned by the service call
+            _LOGGER.debug("Calling invoke_cc_api for slot %s...", slot)
+            await self.hass.services.async_call(
+                ZWAVE_JS_DOMAIN,
+                "invoke_cc_api",
+                {
+                    "entity_id": self.lock_entity_id,
+                    "command_class": CC_USER_CODE,
+                    "method_name": "get",
+                    "parameters": [slot],
+                },
+                blocking=True,
             )
             
-            try:
-                # Small delay to ensure listener is fully registered
-                await asyncio.sleep(0.1)
+            _LOGGER.debug("invoke_cc_api call completed, waiting for node values to update...")
+            
+            # Wait for Z-Wave JS to process the response and update node values
+            # The response is logged, but we need to read it from the node's cache
+            # Try multiple times with increasing delays, as the update might be delayed
+            for attempt in range(3):
+                await asyncio.sleep(0.5 + (attempt * 0.5))  # 0.5s, 1.0s, 1.5s
                 
-                # Call invoke_cc_api to trigger the lock to report its user code data
-                _LOGGER.debug("Calling invoke_cc_api for slot %s...", slot)
-                await self.hass.services.async_call(
-                    ZWAVE_JS_DOMAIN,
-                    "invoke_cc_api",
-                    {
-                        "entity_id": self.lock_entity_id,
-                        "command_class": CC_USER_CODE,
-                        "method_name": "get",
-                        "parameters": [slot],
-                    },
-                    blocking=True,
-                )
+                # Try to read the values from the node's cache
+                status = await self._get_zwave_value(CC_USER_CODE, PROP_USER_ID_STATUS, slot)
+                code = await self._get_zwave_value(CC_USER_CODE, PROP_USER_CODE, slot)
                 
-                _LOGGER.debug("invoke_cc_api call completed, waiting for events...")
-                
-                # Wait for the value update events (with timeout)
-                # The lock should respond with both userIdStatus and userCode
-                try:
-                    await asyncio.wait_for(event_received.wait(), timeout=5.0)
-                    _LOGGER.info("✓ Event received for slot %s", slot)
-                except asyncio.TimeoutError:
-                    _LOGGER.warning(
-                        "Timeout waiting for user code data response for slot %s. "
-                        "Got partial data: %s (events captured: %s)",
-                        slot,
-                        result_data,
-                        events_captured,
-                    )
-                
-                # Return whatever data we captured (even if incomplete)
-                if result_data:
+                if status is not None or code is not None:
+                    # We got at least one value, return what we have
+                    result_data: dict[str, Any] = {}
+                    if status is not None:
+                        result_data["userIdStatus"] = status
+                    if code is not None:
+                        result_data["userCode"] = str(code) if code else ""
+                    
                     _LOGGER.info(
-                        "✓ Captured data for slot %s: status=%s, code=%s",
+                        "✓ Retrieved data for slot %s (attempt %s): status=%s, code=%s",
                         slot,
+                        attempt + 1,
                         result_data.get("userIdStatus"),
                         "***" if result_data.get("userCode") else None,
                     )
-                    return result_data
-                else:
-                    _LOGGER.warning(
-                        "No data captured from value update events for slot %s (events captured: %s)", 
-                        slot,
-                        events_captured,
-                    )
-                    return None
-                    
-            finally:
-                # Always remove the listener
-                remove_listener()
-                listener_removed = True
+                    return result_data if result_data else None
+            
+            # If we still don't have data after all attempts, log warning
+            _LOGGER.warning(
+                "Could not retrieve user code data for slot %s after multiple attempts. "
+                "The invoke_cc_api call succeeded (see Z-Wave JS logs), but values are not "
+                "accessible from the node cache.",
+                slot,
+            )
+            return None
                 
         except Exception as err:
             _LOGGER.error("Error getting user code data for slot %s: %s", slot, err, exc_info=True)
