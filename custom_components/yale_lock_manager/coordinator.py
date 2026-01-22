@@ -626,21 +626,34 @@ class YaleLockCoordinator(DataUpdateCoordinator):
             schedule = existing_user.get("schedule", {"start": None, "end": None})
             usage_limit = existing_user.get("usage_limit")
             usage_count = existing_user.get("usage_count", 0)
+            lock_code = existing_user.get("lock_code", "")  # Preserve lock_code
+            lock_enabled = existing_user.get("lock_enabled", False)  # Preserve lock_enabled
         else:
             schedule = {"start": None, "end": None}
             usage_limit = None
             usage_count = 0
+            lock_code = ""  # No lock_code for new users
+            lock_enabled = False
+
+        # Calculate sync status: compare cached code with lock code (for PINs)
+        if code_type == CODE_TYPE_PIN:
+            synced_to_lock = (code == lock_code)
+        else:
+            # For FOBs, sync is based on enabled status (will be updated on pull)
+            synced_to_lock = False
 
         # Store user data
         self._user_data["users"][str(slot)] = {
             "name": name,
             "code_type": code_type,
-            "code": code,  # In production, this should be encrypted
+            "code": code,  # Cached code (editable)
+            "lock_code": lock_code,  # PIN from lock (read-only, updated on pull/push)
             "enabled": True,
+            "lock_enabled": lock_enabled,  # Enabled status from lock
             "schedule": schedule if code_type == CODE_TYPE_PIN else {"start": None, "end": None},
             "usage_limit": usage_limit if code_type == CODE_TYPE_PIN else None,
             "usage_count": usage_count if code_type == CODE_TYPE_PIN else 0,
-            "synced_to_lock": False,
+            "synced_to_lock": synced_to_lock,  # Calculated based on code comparison
             "last_used": None,
         }
 
@@ -825,6 +838,8 @@ class YaleLockCoordinator(DataUpdateCoordinator):
                 # Verification succeeded!
                 _LOGGER.info("✓ Verified: Code successfully written to slot %s", slot)
                 user_data["synced_to_lock"] = True
+                user_data["lock_code"] = verification_code if verification_code else ""  # Update lock_code
+                user_data["lock_enabled"] = verification_status == USER_STATUS_ENABLED  # Update lock_enabled
             
             await self.async_save_user_data()
             await self.async_request_refresh()
@@ -860,9 +875,24 @@ class YaleLockCoordinator(DataUpdateCoordinator):
             # Check if we already have this slot
             slot_str = str(slot)
             if slot_str in self._user_data["users"]:
-                # Update existing
-                _LOGGER.info("Slot %s already known, marking as synced", slot)
-                self._user_data["users"][slot_str]["synced_to_lock"] = True
+                # Update existing - store lock_code and check sync status
+                user_data = self._user_data["users"][slot_str]
+                user_data["lock_code"] = code if code else ""  # Store PIN from lock
+                user_data["lock_enabled"] = status == USER_STATUS_ENABLED  # Store enabled status from lock
+                
+                # Check if cached code matches lock code (for PINs only)
+                if user_data.get("code_type") == CODE_TYPE_PIN:
+                    cached_code = user_data.get("code", "")
+                    lock_code = user_data.get("lock_code", "")
+                    user_data["synced_to_lock"] = (cached_code == lock_code and 
+                                                  user_data.get("enabled") == user_data.get("lock_enabled"))
+                else:
+                    # For FOBs, just check enabled status
+                    user_data["synced_to_lock"] = (user_data.get("enabled") == user_data.get("lock_enabled"))
+                
+                _LOGGER.info("Slot %s updated - Cached: %s, Lock: %s, Synced: %s", 
+                           slot, "***" if user_data.get("code") else "None", 
+                           "***" if code else "None", user_data["synced_to_lock"])
                 codes_updated += 1
             else:
                 # New code we don't know about
@@ -877,12 +907,14 @@ class YaleLockCoordinator(DataUpdateCoordinator):
                 self._user_data["users"][slot_str] = {
                     "name": f"User {slot}",
                     "code_type": code_type,
-                    "code": code if code else "",
+                    "code": code if code else "",  # Cached code (same as lock for new codes)
+                    "lock_code": code if code else "",  # PIN from lock
                     "enabled": status == USER_STATUS_ENABLED,
+                    "lock_enabled": status == USER_STATUS_ENABLED,  # Enabled status from lock
                     "schedule": {"start": None, "end": None},
                     "usage_limit": None,
                     "usage_count": 0,
-                    "synced_to_lock": True,
+                    "synced_to_lock": True,  # New codes are synced by default
                     "last_used": None,
                 }
                 codes_new += 1

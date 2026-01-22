@@ -117,8 +117,10 @@ class YaleLockManagerCard extends HTMLElement {
       const user = users[slot.toString()] || { 
         name: '', 
         code: '', 
+        lock_code: '',  // PIN from lock (read-only)
         code_type: 'pin', 
         enabled: false,
+        lock_enabled: false,  // Enabled status from lock
         synced_to_lock: false,
         schedule: { start: null, end: null },
         usage_limit: null,
@@ -397,8 +399,27 @@ class YaleLockManagerCard extends HTMLElement {
                 
                 <div id="code-field-${user.slot}" class="${isFob ? 'hidden' : ''}">
                   <div class="form-group">
-                    <label>PIN Code (4-10 digits):</label>
-                    <input type="text" id="code-${user.slot}" value="${user.code || ''}" placeholder="Enter PIN code" maxlength="10" pattern="[0-9]*">
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                      <div>
+                        <label>📝 Cached PIN (editable):</label>
+                        <input type="text" id="code-${user.slot}" value="${user.code || ''}" placeholder="Enter PIN code" maxlength="10" pattern="[0-9]*" style="width: 100%;">
+                        <p style="color: var(--secondary-text-color); font-size: 0.75em; margin: 4px 0 0 0;">PIN stored locally</p>
+                      </div>
+                      <div>
+                        <label>🔒 Lock PIN (from lock):</label>
+                        <input type="text" id="lock-code-${user.slot}" value="${user.lock_code || ''}" placeholder="No PIN on lock" maxlength="10" pattern="[0-9]*" readonly style="width: 100%; background: var(--card-background-color); border: 1px solid var(--divider-color); color: var(--secondary-text-color);">
+                        <p style="color: var(--secondary-text-color); font-size: 0.75em; margin: 4px 0 0 0;">PIN from physical lock</p>
+                      </div>
+                    </div>
+                    ${user.code && user.lock_code && user.code !== user.lock_code ? `
+                      <div style="margin-top: 8px; padding: 8px; background: #ff980015; border-left: 4px solid #ff9800; border-radius: 4px;">
+                        <span style="color: #ff9800; font-size: 0.85em;">⚠️ PINs don't match - Click "Push" to sync</span>
+                      </div>
+                    ` : user.code && user.lock_code && user.code === user.lock_code ? `
+                      <div style="margin-top: 8px; padding: 8px; background: #4caf5015; border-left: 4px solid #4caf50; border-radius: 4px;">
+                        <span style="color: #4caf50; font-size: 0.85em;">✅ PINs match - Synced</span>
+                      </div>
+                    ` : ''}
                   </div>
                 </div>
                 

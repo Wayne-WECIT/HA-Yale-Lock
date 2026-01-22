@@ -20,6 +20,49 @@ Use `lock.smart_door_lock_manager` for the Lovelace card!
 
 ---
 
+## [1.8.2.0] - 2026-01-22
+
+### 🎨 NEW FEATURE - Dual PIN Display & Sync Comparison
+
+**User request**: Show both cached PIN and lock PIN side-by-side to compare and verify sync status.
+
+### What's New
+
+**1. Dual PIN Fields**:
+- **Cached PIN** (editable): The PIN stored locally in Home Assistant
+- **Lock PIN** (read-only): The PIN currently on the physical lock
+- Both fields displayed side-by-side for easy comparison
+
+**2. Visual Sync Indicators**:
+- ✅ Green banner: "PINs match - Synced" when cached == lock
+- ⚠️ Orange banner: "PINs don't match - Click 'Push' to sync" when they differ
+
+**3. Automatic Sync Detection**:
+- `synced_to_lock` is now calculated by comparing `code` (cached) vs `lock_code` (from lock)
+- Updated automatically when:
+  - Pulling codes from lock
+  - Pushing codes to lock (after verification)
+  - Setting/updating codes
+
+**4. Data Structure Changes**:
+- Added `lock_code`: Stores PIN from physical lock (read-only, updated on pull/push)
+- Added `lock_enabled`: Stores enabled status from lock
+- `synced_to_lock`: Now based on code comparison (for PINs) or enabled status (for FOBs)
+
+### Changed
+- `async_pull_codes_from_lock()`: Now stores `lock_code` and `lock_enabled` for each slot
+- `async_push_code_to_lock()`: Updates `lock_code` and `lock_enabled` after successful verification
+- `async_set_user_code()`: Preserves `lock_code` and calculates `synced_to_lock` based on comparison
+- Card UI: Shows both PIN fields side-by-side with visual sync indicators
+
+### Benefits
+- ✅ **Visual Verification**: See exactly what's on the lock vs what's cached
+- ✅ **Sync Status**: Automatically detects if codes are out of sync
+- ✅ **Better UX**: Clear indication when push is needed
+- ✅ **Debugging**: Easy to spot mismatches between cache and lock
+
+---
+
 ## [1.8.1.6] - 2026-01-22
 
 ### 🔧 FIX - Use Value ID Lookup for Cache Reading
