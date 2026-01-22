@@ -388,4 +388,11 @@ async def async_setup_services(hass: HomeAssistant) -> None:
         schema=RESET_USAGE_COUNT_SCHEMA,
     )
 
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_CLEAR_LOCAL_CACHE,
+        handle_clear_local_cache,
+        schema=vol.Schema({vol.Optional("entity_id"): cv.entity_id}),
+    )
+
     _LOGGER.debug("Registered Yale Lock Manager services")

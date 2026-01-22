@@ -1200,6 +1200,29 @@ class YaleLockManagerCard extends HTMLElement {
     });
   }
 
+  showClearCacheConfirm() {
+    this._showClearCacheConfirm = true;
+    this.render();
+  }
+  
+  cancelClearCache() {
+    this._showClearCacheConfirm = false;
+    this.render();
+  }
+  
+  async confirmClearCache() {
+    try {
+      await this._hass.callService('yale_lock_manager', 'clear_local_cache', {
+        entity_id: this._config.entity
+      });
+      this._showClearCacheConfirm = false;
+      this.showStatus(0, 'Local cache cleared', 'success');
+      setTimeout(() => this.render(), 500);
+    } catch (error) {
+      this.showStatus(0, `Failed to clear cache: ${error.message}`, 'error');
+    }
+  }
+
   getCardSize() {
     return 10;
   }
