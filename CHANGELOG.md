@@ -378,6 +378,18 @@ After updating, you may need to:
 ## [Unreleased]
 
 ### Planned Features
+
+## [1.3.1.0] - 2026-01-22
+
+### Fixed
+- **MAJOR FIX**: Completely rewrote Lovelace card with proper event handling
+  - Removed broken `@click` template literal syntax that didn't work in vanilla JavaScript
+  - Implemented proper event listeners with `data-action` and `data-slot` attributes
+  - Fixed unresponsive buttons, toggle switches, and input fields
+  - Removed security vulnerability from `eval()` usage
+  - Card is now fully functional and responsive
+
+### Planned Features
 - Multi-lock support (currently limited to one lock)
 - Enhanced FOB/RFID detection
 - Backup and restore functionality
