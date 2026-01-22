@@ -522,9 +522,10 @@ class YaleLockManagerCard extends HTMLElement {
                           }
                           
                           // Determine which options to show based on whether slot has data
-                          const hasLockPin = user.lock_code && user.lock_code.trim() !== '';
+                          // Check lock_code (from lock), cached code, and name
+                          const hasLockPin = user.lock_code && user.lock_code.trim() !== '' && user.lock_code.trim() !== 'No PIN on lock';
                           const hasCachedPin = user.code && user.code.trim() !== '';
-                          const hasName = user.name && user.name.trim() !== '';
+                          const hasName = user.name && user.name.trim() !== '' && user.name.trim() !== `User ${user.slot}`;
                           const hasData = hasLockPin || hasCachedPin || hasName;
                           
                           // If no data exists, only show Available
