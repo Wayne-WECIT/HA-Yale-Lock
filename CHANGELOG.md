@@ -20,6 +20,51 @@ Use `lock.smart_door_lock_manager` for the Lovelace card!
 
 ---
 
+## [1.8.2.6] - 2026-01-22
+
+### 🔧 FIX - Direct API Call to Capture Response
+
+**User feedback**: Logs confirm service call returns `None` but response is logged by Z-Wave JS.
+
+### The Issue
+
+The logs clearly show:
+- `Service call returned for slot 1: None (type: <class 'NoneType'>)`
+- `Invoked USER_CODE CC API method get... with the following result: {'userIdStatus': 1, 'userCode': '19992017'}`
+
+The response is logged but not accessible through:
+- Service call return value (returns `None`)
+- Node cache (values not stored there)
+
+### The Solution
+
+Since `invoke_cc_api` service call returns `None` for `get` methods, we need to access the Z-Wave JS client directly to call the command class API and capture the response. This is what `invoke_cc_api` does internally, but we need to do it ourselves to get the response.
+
+**New approach**:
+1. Call `invoke_cc_api` to trigger the query (as requested)
+2. Access Z-Wave JS client through `hass.data[ZWAVE_JS_DOMAIN]`
+3. Get node and endpoint
+4. Call `user_code_cc.async_get(slot)` directly to capture response
+5. Store response in `lock_code` and `lock_enabled` for comparison
+
+### Changed
+
+- `_get_user_code_data()`: Now accesses Z-Wave JS client to call command class API directly
+- Captures response from `async_get()` call
+- Falls back to cache reading if direct call fails
+
+### What's Fixed
+
+- ✅ Can now capture response from lock
+- ✅ Response stored in `lock_code` and `lock_enabled` for comparison
+- ✅ "Lock PIN" field should now populate on card
+
+### Note
+
+This accesses the Z-Wave JS client directly, which is what `invoke_cc_api` does internally. We're just capturing the response that the service call doesn't return.
+
+---
+
 ## [1.8.2.5] - 2026-01-22
 
 ### 🔍 DEBUG - Investigating Response Capture Issue
