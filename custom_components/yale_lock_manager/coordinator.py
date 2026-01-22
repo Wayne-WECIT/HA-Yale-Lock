@@ -556,13 +556,6 @@ class YaleLockCoordinator(DataUpdateCoordinator):
             _LOGGER.debug("No data found for slot %s after service call", slot)
             return None
             
-            if result and isinstance(result, dict):
-                _LOGGER.debug("Slot %s data from lock: %s", slot, result)
-                return result
-            
-            _LOGGER.warning("No data returned for slot %s", slot)
-            return None
-            
         except Exception as err:
             _LOGGER.error("Error getting user code data for slot %s: %s", slot, err, exc_info=True)
             return None

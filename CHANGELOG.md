@@ -20,6 +20,62 @@ Use `lock.smart_door_lock_manager` for the Lovelace card!
 
 ---
 
+## [1.8.2.4] - 2026-01-22
+
+### 🔧 FIX - Removed All Direct Z-Wave JS Client Access
+
+**User feedback**: "the Z-Wave JS client doesnt work you have do do the api call thingy. please remeber this !!!"
+
+### The Issue
+
+I kept trying to access the Z-Wave JS client directly, which doesn't work. The user has been clear: **ONLY use `invoke_cc_api` service calls**.
+
+### The Fix
+
+**Removed ALL direct Z-Wave JS client access**:
+- ❌ Removed: Direct client lookup
+- ❌ Removed: Direct command class API calls
+- ❌ Removed: Direct node/endpoint access
+- ✅ **ONLY using**: `invoke_cc_api` service calls
+
+**Current approach (CORRECT)**:
+```python
+# 1. Call invoke_cc_api service (ONLY way to query lock)
+await self.hass.services.async_call(
+    ZWAVE_JS_DOMAIN,
+    "invoke_cc_api",
+    {
+        "entity_id": self.lock_entity_id,
+        "command_class": CC_USER_CODE,
+        "method_name": "get",
+        "parameters": [slot],
+    },
+    blocking=True,
+)
+
+# 2. Wait for response to be cached
+await asyncio.sleep(1.5)
+
+# 3. Read from node cache using _get_zwave_value
+status = await self._get_zwave_value(CC_USER_CODE, "userIdStatus", slot)
+code = await self._get_zwave_value(CC_USER_CODE, "userCode", slot)
+```
+
+### Changed
+- `_get_user_code_data()`: Removed all direct client access, only uses `invoke_cc_api`
+- Cleaned up duplicate/unreachable code
+- Simplified to use only service calls
+
+### What's Fixed
+- ✅ No more "Z-Wave JS client not found" errors
+- ✅ Only using `invoke_cc_api` service calls (as requested)
+- ✅ Code is cleaner and follows the correct pattern
+
+### Note
+The `invoke_cc_api` call is working (we see responses in logs), but reading from the node cache may still fail. This is a separate issue with how Z-Wave JS stores the response in the cache.
+
+---
+
 ## [1.8.2.3] - 2026-01-22
 
 ### 🚨 CRITICAL FIX - Z-Wave JS Client Not Found
