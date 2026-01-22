@@ -28,6 +28,7 @@ from .const import (
     SERVICE_ENABLE_USER,
     SERVICE_PULL_CODES_FROM_LOCK,
     SERVICE_PUSH_CODE_TO_LOCK,
+    SERVICE_RESET_USAGE_COUNT,
     SERVICE_SET_USAGE_LIMIT,
     SERVICE_SET_USER_CODE,
     SERVICE_SET_USER_SCHEDULE,
@@ -85,6 +86,12 @@ ENABLE_USER_SCHEMA = vol.Schema(
 )
 
 DISABLE_USER_SCHEMA = vol.Schema(
+    {
+        vol.Required(ATTR_SLOT): vol.All(vol.Coerce(int), vol.Range(min=1, max=MAX_USER_SLOTS)),
+    }
+)
+
+RESET_USAGE_COUNT_SCHEMA = vol.Schema(
     {
         vol.Required(ATTR_SLOT): vol.All(vol.Coerce(int), vol.Range(min=1, max=MAX_USER_SLOTS)),
     }
@@ -222,6 +229,18 @@ async def async_setup_services(hass: HomeAssistant) -> None:
             _LOGGER.error("Error disabling user: %s", err)
             raise HomeAssistantError(f"Failed to disable user: {err}") from err
 
+    async def handle_reset_usage_count(call: ServiceCall) -> None:
+        """Handle reset usage count service call."""
+        coordinator = get_coordinator()
+        slot = call.data[ATTR_SLOT]
+
+        try:
+            await coordinator.async_reset_usage_count(slot)
+            _LOGGER.info("Reset usage count for slot %s", slot)
+        except Exception as err:
+            _LOGGER.error("Error resetting usage count: %s", err)
+            raise HomeAssistantError(f"Failed to reset usage count: {err}") from err
+
     # Register services
     hass.services.async_register(
         DOMAIN,
@@ -277,6 +296,13 @@ async def async_setup_services(hass: HomeAssistant) -> None:
         SERVICE_DISABLE_USER,
         handle_disable_user,
         schema=DISABLE_USER_SCHEMA,
+    )
+
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_RESET_USAGE_COUNT,
+        handle_reset_usage_count,
+        schema=RESET_USAGE_COUNT_SCHEMA,
     )
 
     _LOGGER.debug("Registered Yale Lock Manager services")

@@ -416,16 +416,35 @@ class YaleLockManagerCard extends HTMLElement {
                   </p>
                   
                   <div class="limit-fields ${user.usage_limit ? '' : 'hidden'}" id="limit-fields-${slot}">
-                    <label style="font-size: 0.85em; color: var(--secondary-text-color);">Maximum Uses:</label>
-                    <input type="number" id="limit-${slot}" value="${user.usage_limit || ''}" placeholder="e.g., 5" min="1" style="margin-top: 4px;">
-                    ${user.usage_count ? `
+                    <div style="display: flex; gap: 12px; margin-top: 4px;">
+                      <div style="flex: 1;">
+                        <label style="font-size: 0.85em; color: var(--secondary-text-color);">Current Uses:</label>
+                        <input type="number" id="count-${slot}" value="${user.usage_count || 0}" readonly style="margin-top: 4px; background: var(--disabled-color, #f0f0f0); cursor: not-allowed;">
+                      </div>
+                      <div style="flex: 1;">
+                        <label style="font-size: 0.85em; color: var(--secondary-text-color);">Maximum Uses:</label>
+                        <input type="number" id="limit-${slot}" value="${user.usage_limit || ''}" placeholder="e.g., 5" min="1" style="margin-top: 4px;">
+                      </div>
+                    </div>
+                    ${user.usage_limit && user.usage_count >= user.usage_limit ? `
+                      <p style="color: var(--error-color, #f44336); font-size: 0.85em; margin: 8px 0 0 0; font-weight: 500;">
+                        🚫 Usage limit reached! Code is disabled.
+                      </p>
+                    ` : user.usage_count > 0 ? `
                       <p style="color: var(--warning-color, #ff9800); font-size: 0.85em; margin: 8px 0 0 0;">
-                        ⚠️ Used ${user.usage_count} time${user.usage_count !== 1 ? 's' : ''}${user.usage_limit ? ` / ${user.usage_limit} max` : ''}
+                        ⚠️ ${user.usage_count} / ${user.usage_limit || '∞'} uses
                       </p>
                     ` : ''}
-                    <button class="action-button secondary" style="margin-top: 8px;" data-action="save-limit" data-slot="${slot}">
-                      ${user.usage_limit ? 'Update Limit' : 'Set Limit'}
-                    </button>
+                    <div style="display: flex; gap: 8px; margin-top: 8px;">
+                      <button class="action-button secondary" data-action="save-limit" data-slot="${slot}">
+                        ${user.usage_limit ? 'Update Limit' : 'Set Limit'}
+                      </button>
+                      ${user.usage_count > 0 ? `
+                        <button class="action-button secondary" data-action="reset-count" data-slot="${slot}">
+                          Reset Counter
+                        </button>
+                      ` : ''}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -613,6 +632,9 @@ class YaleLockManagerCard extends HTMLElement {
           case 'save-limit':
             this.handleSaveUsageLimit(slot);
             break;
+          case 'reset-count':
+            this.handleResetUsageCount(slot);
+            break;
         }
       });
     });
@@ -755,6 +777,18 @@ class YaleLockManagerCard extends HTMLElement {
     if (!clearLimit) {
       alert(`✅ Usage limit saved`);
     }
+  }
+
+  async handleResetUsageCount(slot) {
+    if (!confirm(`Reset usage counter for slot ${slot}? This will set the count back to 0 and re-enable the code if it was disabled due to reaching the limit.`)) return;
+
+    await this._hass.callService('yale_lock_manager', 'reset_usage_count', {
+      entity_id: this._config.entity,
+      slot: slot
+    });
+
+    alert(`✅ Usage counter reset`);
+    this.render();
   }
 
   getCardSize() {

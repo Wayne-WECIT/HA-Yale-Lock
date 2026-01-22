@@ -527,6 +527,19 @@ class YaleLockCoordinator(DataUpdateCoordinator):
         self._user_data["users"][str(slot)]["usage_limit"] = max_uses
         await self.async_save_user_data()
 
+    async def async_reset_usage_count(self, slot: int) -> None:
+        """Reset usage count for a user code back to 0."""
+        if str(slot) not in self._user_data["users"]:
+            raise ValueError(f"User slot {slot} not found")
+
+        self._user_data["users"][str(slot)]["usage_count"] = 0
+        await self.async_save_user_data()
+        
+        # Re-enable the user if they were disabled due to usage limit
+        user_data = self._user_data["users"][str(slot)]
+        if not user_data.get("enabled", False):
+            await self.async_enable_user(slot)
+
     async def async_push_code_to_lock(self, slot: int) -> None:
         """Push a code to the lock."""
         user_data = self._user_data["users"].get(str(slot))

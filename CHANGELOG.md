@@ -379,6 +379,35 @@ After updating, you may need to:
 
 ### Planned Features
 
+## [1.5.0.0] - 2026-01-22
+
+### Added
+- **📊 Usage Count Display**
+  - Current usage count shown in read-only input box
+  - Maximum uses shown in editable input box
+  - Side-by-side display for easy comparison
+  - Visual indicator when limit is reached (🚫 red error)
+  - Warning indicator for partial usage (⚠️ orange)
+- **🔄 Reset Usage Counter Button**
+  - New "Reset Counter" button (appears when usage_count > 0)
+  - Resets usage count back to 0
+  - Automatically re-enables code if it was disabled due to limit
+  - Confirmation dialog before reset
+- **🔧 New Service**: `reset_usage_count`
+  - Resets usage counter for a specific slot
+  - Auto-enables user if they were disabled by limit
+  - Available via UI and service call
+
+### Improved
+- Better visual feedback for usage limits:
+  - Read-only field prevents accidental changes to current count
+  - Clear separation between current and maximum
+  - Color-coded status messages
+- Usage count logic fully implemented:
+  - Counter increments on each access
+  - Code auto-disables when count >= limit
+  - Reset button only shows when needed
+
 ## [1.4.0.0] - 2026-01-22
 
 ### Added
