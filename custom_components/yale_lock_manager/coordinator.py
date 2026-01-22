@@ -271,39 +271,69 @@ class YaleLockCoordinator(DataUpdateCoordinator):
                 _LOGGER.debug("From lock attributes - door: %s, bolt: %s, battery: %s",
                              data.get("door_status"), data.get("bolt_status"), data.get("battery_level"))
 
-            # If not in attributes, try to find related Z-Wave entities
+            # If not in attributes, search for related Z-Wave entities
+            # The Z-Wave entities might have different naming (e.g., lock.smart_door_lock vs lock.smart_door_lock_2)
+            # So we need to search for entities that match patterns
+            
+            # Try to find the base Z-Wave lock entity (without _2 suffix)
             base_name = self.lock_entity_id.split('.')[1]
-            _LOGGER.debug("Looking for entities with base name: %s", base_name)
+            if base_name.endswith('_2'):
+                zwave_base = base_name[:-2]  # Remove _2 suffix
+            else:
+                zwave_base = base_name
+                
+            _LOGGER.debug("Looking for Z-Wave entities with base name: %s (from %s)", zwave_base, base_name)
             
-            # Find battery sensor
-            battery_entity = f"sensor.{base_name}_battery"
-            battery_state = self.hass.states.get(battery_entity)
-            _LOGGER.debug("Battery entity %s: %s", battery_entity, battery_state)
+            # Find battery sensor - try multiple patterns
+            battery_entities = [
+                f"sensor.{zwave_base}_battery_level",
+                f"sensor.{zwave_base}_battery",
+                f"sensor.{base_name}_battery_level",
+                f"sensor.{base_name}_battery",
+            ]
             
-            if battery_state and battery_state.state not in ("unknown", "unavailable"):
-                try:
-                    data["battery_level"] = int(float(battery_state.state))
-                    _LOGGER.debug("Got battery from sensor: %s", data["battery_level"])
-                except (ValueError, TypeError) as err:
-                    _LOGGER.debug("Could not parse battery value: %s", err)
+            for battery_entity in battery_entities:
+                battery_state = self.hass.states.get(battery_entity)
+                if battery_state and battery_state.state not in ("unknown", "unavailable"):
+                    try:
+                        data["battery_level"] = int(float(battery_state.state))
+                        _LOGGER.info("Got battery from %s: %s%%", battery_entity, data["battery_level"])
+                        break
+                    except (ValueError, TypeError) as err:
+                        _LOGGER.debug("Could not parse battery value from %s: %s", battery_entity, err)
 
-            # Find door binary sensor
-            door_entity = f"binary_sensor.{base_name}_door"
-            door_state = self.hass.states.get(door_entity)
-            _LOGGER.debug("Door entity %s: %s", door_entity, door_state)
+            # Find door binary sensor - try multiple patterns
+            door_entities = [
+                f"binary_sensor.{zwave_base}_current_status_of_the_door",
+                f"binary_sensor.{zwave_base}_door",
+                f"binary_sensor.{base_name}_door",
+            ]
             
-            if door_state and door_state.state not in ("unknown", "unavailable"):
-                data["door_status"] = "open" if door_state.state == "on" else "closed"
-                _LOGGER.debug("Got door status from binary_sensor: %s", data["door_status"])
+            for door_entity in door_entities:
+                door_state = self.hass.states.get(door_entity)
+                if door_state and door_state.state not in ("unknown", "unavailable"):
+                    data["door_status"] = "open" if door_state.state == "on" else "closed"
+                    _LOGGER.info("Got door status from %s: %s", door_entity, data["door_status"])
+                    break
 
-            # Find bolt binary sensor  
-            bolt_entity = f"binary_sensor.{base_name}_bolt"
-            bolt_state = self.hass.states.get(bolt_entity)
-            _LOGGER.debug("Bolt entity %s: %s", bolt_entity, bolt_state)
+            # Find bolt binary sensor - try multiple patterns
+            bolt_entities = [
+                f"binary_sensor.{zwave_base}_bolt",
+                f"binary_sensor.{base_name}_bolt",
+            ]
             
-            if bolt_state and bolt_state.state not in ("unknown", "unavailable"):
-                data["bolt_status"] = "locked" if bolt_state.state == "on" else "unlocked"
-                _LOGGER.debug("Got bolt status from binary_sensor: %s", data["bolt_status"])
+            for bolt_entity in bolt_entities:
+                bolt_state = self.hass.states.get(bolt_entity)
+                if bolt_state and bolt_state.state not in ("unknown", "unavailable"):
+                    data["bolt_status"] = "locked" if bolt_state.state == "on" else "unlocked"
+                    _LOGGER.info("Got bolt status from %s: %s", bolt_entity, data["bolt_status"])
+                    break
+                    
+            # If bolt is still not found, use lock state as fallback
+            if "bolt_status" not in data or data["bolt_status"] is None:
+                if lock_state:
+                    data["bolt_status"] = "locked" if lock_state.state == "locked" else "unlocked"
+                    _LOGGER.info("Using lock state for bolt status: %s", data["bolt_status"])
 
             # Get user codes status (we'll query them periodically)
             data["user_codes"] = await self._get_all_user_codes()

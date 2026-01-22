@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.2.0] - 2026-01-22
+
+### Fixed
+- **MAJOR FIX**: Sensors now work correctly! 
+- Fixed entity name mismatch (lock.smart_door_lock_2 vs sensor.smart_door_lock_battery)
+- Coordinator now strips `_2` suffix and searches for correct Z-Wave entities
+- Tries multiple entity name patterns to find battery, door, and bolt sensors
+- Uses lock state as fallback for bolt status
+- Battery, door, and bolt sensors now populate correctly
+
+### Technical
+- Detects and handles entity naming differences
+- Searches for: `sensor.smart_door_lock_battery_level`, `binary_sensor.smart_door_lock_current_status_of_the_door`
+- Smart pattern matching for entity discovery
+
 ## [1.0.1.4] - 2026-01-22
 
 ### Added
