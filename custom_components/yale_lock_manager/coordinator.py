@@ -19,8 +19,8 @@ from .const import (
     ACCESS_METHOD_PIN,
     ALARM_TYPE_AUTO_LOCK,
     ALARM_TYPE_KEYPAD_UNLOCK,
-    ALARM_TYPE_MANUAL_LOCK,
-    ALARM_TYPE_MANUAL_UNLOCK,
+    ALARM_TYPE_RF_LOCK,
+    ALARM_TYPE_RF_UNLOCK,
     CC_BATTERY,
     CC_DOOR_LOCK,
     CC_NOTIFICATION,
@@ -137,10 +137,12 @@ class YaleLockCoordinator(DataUpdateCoordinator):
             await self._handle_access_event(user_slot, ACCESS_METHOD_PIN)
         elif alarm_type == ALARM_TYPE_AUTO_LOCK:
             self._fire_event(EVENT_LOCKED, {"method": ACCESS_METHOD_AUTO})
-        elif alarm_type == ALARM_TYPE_MANUAL_UNLOCK:
-            self._fire_event(EVENT_UNLOCKED, {"method": ACCESS_METHOD_MANUAL})
-        elif alarm_type == ALARM_TYPE_MANUAL_LOCK:
-            self._fire_event(EVENT_LOCKED, {"method": ACCESS_METHOD_MANUAL})
+        elif alarm_type == ALARM_TYPE_RF_LOCK:
+            # Alarm 24: RF lock operation (Z-Wave/Remote locked the lock)
+            self._fire_event(EVENT_LOCKED, {"method": ACCESS_METHOD_REMOTE})
+        elif alarm_type == ALARM_TYPE_RF_UNLOCK:
+            # Alarm 25: RF unlock operation (Z-Wave/Remote unlocked the lock)
+            self._fire_event(EVENT_UNLOCKED, {"method": ACCESS_METHOD_REMOTE})
 
     async def _handle_access_event(self, user_slot: int, method: str) -> None:
         """Handle a user access event."""

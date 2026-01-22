@@ -2,7 +2,7 @@
 from typing import Final
 
 DOMAIN: Final = "yale_lock_manager"
-VERSION: Final = "1.2.0.1"
+VERSION: Final = "1.2.1.0"
 
 # Z-Wave JS Domain
 ZWAVE_JS_DOMAIN: Final = "zwave_js"
@@ -46,11 +46,13 @@ CODE_TYPE_PIN: Final = "pin"
 CODE_TYPE_FOB: Final = "fob"
 
 # Alarm Types (for notifications)
-ALARM_TYPE_KEYPAD_UNLOCK: Final = [144, 19]
-ALARM_TYPE_AUTO_LOCK: Final = 27
-ALARM_TYPE_MANUAL_UNLOCK: Final = 24
-ALARM_TYPE_MANUAL_LOCK: Final = 25
-ALARM_TYPE_JAMMED: Final = 9
+# Source: Z-Wave Database for P-KFCON-MOD-YALE
+# https://devices.zwave-js.io/?jumpTo=0x0129:0x0007:0x0000
+ALARM_TYPE_KEYPAD_UNLOCK: Final = [144, 19]  # Keypad unlock (userId in Alarm Level)
+ALARM_TYPE_AUTO_LOCK: Final = 27              # Auto lock locked operation
+ALARM_TYPE_RF_LOCK: Final = 24                # RF lock operation (Z-Wave/Remote lock)
+ALARM_TYPE_RF_UNLOCK: Final = 25              # RF unlock operation (Z-Wave/Remote unlock)
+ALARM_TYPE_JAMMED: Final = 9                  # Lock jammed
 
 # Access Methods
 ACCESS_METHOD_PIN: Final = "pin"

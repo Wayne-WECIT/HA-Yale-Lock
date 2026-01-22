@@ -20,6 +20,34 @@ Use `lock.smart_door_lock_manager` for the Lovelace card!
 
 ---
 
+## [1.2.1.0] - 2026-01-22
+
+### Fixed
+- **Corrected alarm type mappings** based on official Z-Wave Database
+  - Fixed: Alarm 24 = RF **lock** operation (was incorrectly "manual unlock")
+  - Fixed: Alarm 25 = RF **unlock** operation (was incorrectly "manual lock")
+  - Renamed constants: `ALARM_TYPE_MANUAL_*` → `ALARM_TYPE_RF_*`
+  - Now correctly fires LOCKED event for alarm 24
+  - Now correctly fires UNLOCKED event for alarm 25
+  
+### Added
+- **DEVICE_SPECS.md** - Official Z-Wave device specifications
+  - Complete alarm type mappings from Z-Wave Database
+  - Configuration parameters (Volume, Auto Relock, Relock Times)
+  - Device instructions (Inclusion, Exclusion, Reset)
+  - Association groups
+  - Future enhancement ideas
+
+### Technical
+- Alarm types now match official P-KFCON-MOD-YALE specifications
+- Source: https://devices.zwave-js.io/?jumpTo=0x0129:0x0007:0x0000
+- Method now correctly shows "remote" for RF operations (Z-Wave/HA control)
+
+### User Impact
+- Lock/unlock events from Home Assistant now correctly trigger "remote" method
+- Event tracking is now more accurate
+- Foundation for future config parameter support
+
 ## [1.2.0.1] - 2026-01-22
 
 ### Documentation
