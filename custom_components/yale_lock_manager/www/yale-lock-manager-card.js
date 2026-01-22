@@ -1068,12 +1068,16 @@ class YaleLockManagerCard extends HTMLElement {
     }
 
     try {
-      // Show progress message
+      // Set flag to skip form restoration during save - we want entity state to update fields
+      this._skipFormRestore = true;
+      
+      // Show progress message (update status without full render to avoid form restore)
       this.showStatus(slot, '⏳ Saving user data...', 'info');
-      this.render();
+      this.renderStatusMessage(slot);
+      
       // Set user code
       this.showStatus(slot, '⏳ Querying lock for current PIN...', 'info');
-      this.render();
+      this.renderStatusMessage(slot);
       
       await this._hass.callService('yale_lock_manager', 'set_user_code', {
         entity_id: this._config.entity,
@@ -1161,7 +1165,7 @@ class YaleLockManagerCard extends HTMLElement {
       if (codeType === 'pin') {
         try {
           this.showStatus(slot, '⏳ Checking sync status...', 'info');
-          this.render();
+          this.renderStatusMessage(slot);
           
           await this._hass.callService('yale_lock_manager', 'check_sync_status', {
             entity_id: this._config.entity,
@@ -1176,39 +1180,16 @@ class YaleLockManagerCard extends HTMLElement {
       // Show success message (will persist until slot is collapsed or Push is clicked)
       this.showStatus(slot, '✅ User saved successfully!', 'success');
       
-      // After saving, skip form value restoration so the entity state can update the form
-      // with the new cached values (name, code, status, type)
-      this._skipFormRestore = true;
-      
-      // Render will be triggered by the refresh from check_sync_status
-      // But add a small delay to ensure data is updated
+      // Wait for entity state to update, then render once with updated data
+      // The entity state will have the new cached values, and since _skipFormRestore is true,
+      // we won't restore old form values
       setTimeout(() => {
-        // Get the updated user data from entity state and ensure form shows new values
-        const updatedUser = this.getUserData().find(u => u.slot === slot);
-        if (updatedUser && this.shadowRoot) {
-          // Update all cached form fields with new values from entity state
-          const nameField = this.shadowRoot.getElementById(`name-${slot}`);
-          if (nameField && updatedUser.name) {
-            nameField.value = updatedUser.name;
-          }
-          
-          const codeField = this.shadowRoot.getElementById(`code-${slot}`);
-          if (codeField && updatedUser.code) {
-            codeField.value = updatedUser.code; // New cached PIN
-          }
-          
-          const typeField = this.shadowRoot.getElementById(`type-${slot}`);
-          if (typeField && updatedUser.code_type) {
-            typeField.value = updatedUser.code_type; // pin or fob
-          }
-          
-          const cachedStatusField = this.shadowRoot.getElementById(`cached-status-${slot}`);
-          if (cachedStatusField && updatedUser.lock_status !== null && updatedUser.lock_status !== undefined) {
-            cachedStatusField.value = String(updatedUser.lock_status); // 0, 1, or 2
-          }
-        }
+        // Full render - entity state should now have updated values
+        // _skipFormRestore is still true, so form values won't be restored
         this.render();
-      }, 1000);
+        // Reset flag after render completes
+        this._skipFormRestore = false;
+      }, 1500);
       
     } catch (error) {
       if (error.message && error.message.includes('occupied by an unknown code')) {
