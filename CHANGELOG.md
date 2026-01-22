@@ -20,6 +20,47 @@ Use `lock.smart_door_lock_manager` for the Lovelace card!
 
 ---
 
+## [1.3.0.0] - 2026-01-22
+
+### NEW FEATURE - Configuration Parameters
+- **Added 4 configuration parameter entities** based on official Z-Wave specs!
+  - 🔊 **Select: Volume** (Silent / Low / High)
+  - 🔄 **Switch: Auto Relock** (Enable / Disable)
+  - ⏱️ **Number: Manual Relock Time** (7-60 seconds)
+  - ⏱️ **Number: Remote Relock Time** (10-90 seconds)
+
+### What You Get
+All configuration parameters are now exposed as entities on the "Smart Door Lock Manager" device:
+```
+📱 Smart Door Lock Manager
+├── 🔐 lock.smart_door_lock_manager
+├── 🔊 select.smart_door_lock_manager_volume
+├── 🔄 switch.smart_door_lock_manager_auto_relock
+├── ⏱️ number.smart_door_lock_manager_manual_relock_time
+├── ⏱️ number.smart_door_lock_manager_remote_relock_time
+├── (sensors...)
+```
+
+### How It Works
+- Change volume from Home Assistant (no more keypad programming!)
+- Toggle auto-relock on/off
+- Adjust relock timers dynamically
+- Settings are sent to lock via Z-Wave JS `set_config_parameter` service
+- Values are stored in coordinator data
+
+### New Platforms
+- `number.py` - Manual and Remote relock times
+- `select.py` - Volume selection
+- `switch.py` - Auto relock enable/disable
+
+### Technical
+- Uses Z-Wave JS config parameter service
+- Parameter numbers from official device specs:
+  - Param 1: Volume
+  - Param 2: Auto Relock
+  - Param 3: Manual Relock Time
+  - Param 6: Remote Relock Time
+
 ## [1.2.1.0] - 2026-01-22
 
 ### Fixed
