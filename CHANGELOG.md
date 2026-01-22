@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0.0] - 2026-01-22
+
+### MAJOR CHANGE - Cleaner Design
+- **Removed wrapper lock entity** - No more `lock.smart_door_lock_2`!
+- Integration now works directly with the Z-Wave lock (`lock.smart_door_lock`)
+- **Fixed all entity naming conflicts**
+- Sensors now automatically match the Z-Wave entity names
+- Cleaner, simpler design - no duplicate entities
+
+### What Changed
+- Removed `Platform.LOCK` from integration platforms
+- Lock entity removed from `lock.py` (still in codebase for reference)
+- Users now lock/unlock using the existing Z-Wave lock entity
+- Sensors, services, and Lovelace card provide all the extra functionality
+
+### Configuration
+- When configuring the Lovelace card, use: `entity: lock.smart_door_lock`
+- All sensor entities will be: `sensor.smart_door_lock_*` (no more `_2` suffix)
+
 ## [1.0.2.0] - 2026-01-22
 
 ### Fixed

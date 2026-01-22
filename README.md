@@ -73,8 +73,10 @@ A comprehensive Home Assistant custom integration for managing Yale front door l
 2. Add the card to your dashboard:
    ```yaml
    type: custom:yale-lock-manager-card
-   entity: lock.yale_front_door  # Replace with your lock entity ID
+   entity: lock.smart_door_lock  # Use your Z-Wave lock entity ID
    ```
+
+**Important:** The integration works with your **existing Z-Wave lock entity**. It does not create a duplicate lock entity, avoiding naming conflicts. All sensors and services integrate seamlessly with your Z-Wave lock.
 
 ## 📖 Usage
 

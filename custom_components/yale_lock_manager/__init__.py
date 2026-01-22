@@ -18,7 +18,7 @@ from .services import async_setup_services
 _LOGGER = logging.getLogger(__name__)
 
 PLATFORMS: list[Platform] = [
-    Platform.LOCK,
+    # Platform.LOCK,  # Don't create a wrapper lock - use Z-Wave lock directly
     Platform.SENSOR,
     Platform.BINARY_SENSOR,
 ]
