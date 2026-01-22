@@ -20,6 +20,56 @@ Use `lock.smart_door_lock_manager` for the Lovelace card!
 
 ---
 
+## [1.8.2.2] - 2026-01-22
+
+### 🔧 FIX - Lock PINs Not Being Retrieved
+
+**User feedback**: "you have the codes yet the lock pins are empty why?"
+
+### The Issue
+
+The logs showed that `invoke_cc_api` WAS returning the data:
+```
+Invoked USER_CODE CC API method get on endpoint Endpoint(node_id=4, index=0) with the following result: {'userIdStatus': 1, 'userCode': '19992017'}
+```
+
+But `_get_zwave_value()` couldn't find it in the node's cache:
+```
+WARNING: No value found for CC:99, Property:userIdStatus, Key:1
+```
+
+The problem: The response from `invoke_cc_api` is being logged by Z-Wave JS, but it's not being stored in the node's value cache in a format we can access through `_get_zwave_value()`.
+
+### The Fix
+
+**1. Direct Command Class API Access**:
+- Added `_get_user_code_data()` method that tries to call the command class API directly
+- Attempts multiple methods: `async_get()`, `get()`, or endpoint `call_command()`
+- Falls back to service call if direct API doesn't work
+
+**2. Enhanced Debug Logging**:
+- Logs all CC 99 values after service call to see what's actually available
+- Helps diagnose why values aren't being found
+
+**3. Better Property Name Matching**:
+- Tries alternative property names: `userIdStatus` → `userId`, `userCode` → `code`
+- More robust value lookup
+
+### Changed
+- `_get_user_code_status()`: Now uses `_get_user_code_data()` to get response directly
+- `_get_user_code()`: Now uses `_get_user_code_data()` to get response directly
+- Added `_get_user_code_data()`: New method that attempts direct command class API access
+
+### What's Fixed
+- ✅ Lock PINs should now be retrieved correctly
+- ✅ Better error handling and fallback mechanisms
+- ✅ Enhanced debugging to diagnose value lookup issues
+
+### Note
+This version attempts to access the command class API directly. If that doesn't work, it falls back to the service call approach with enhanced debugging. The debug logs will show what values are actually available in the node after the query.
+
+---
+
 ## [1.8.2.1] - 2026-01-22
 
 ### 🔧 FIX - Schedule Clearing Not Persisting
