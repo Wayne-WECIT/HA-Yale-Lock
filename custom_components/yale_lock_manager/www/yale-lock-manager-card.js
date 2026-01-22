@@ -29,7 +29,7 @@ class YaleLockManagerCard extends HTMLElement {
     this._hass = hass;
     // Only render if not saving and no fields have focus
     if (!this._pendingSave && this._focusedFields.size === 0) {
-      this.render();
+    this.render();
     } else {
       // Just update status messages without full render
       this._updateStatusMessages();
@@ -185,25 +185,25 @@ class YaleLockManagerCard extends HTMLElement {
       
       .error {
         color: var(--error-color);
-        padding: 16px;
+          padding: 16px;
         background: var(--error-color-background, rgba(255, 0, 0, 0.1));
         border-radius: 4px;
-      }
+        }
       
-      .header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 16px;
+        .header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: 16px;
         padding-bottom: 12px;
         border-bottom: 2px solid var(--divider-color);
-      }
+        }
       
       .lock-status {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-      }
+          display: flex;
+          align-items: center;
+          gap: 12px;
+        }
       
       .status-icon { font-size: 32px; }
       .status-info { display: flex; flex-direction: column; gap: 4px; }
@@ -212,12 +212,12 @@ class YaleLockManagerCard extends HTMLElement {
       .controls { display: flex; gap: 8px; }
       
       button, .btn-confirm, .btn-cancel, .btn-close {
-        background: var(--primary-color);
+          background: var(--primary-color);
         color: var(--text-primary-color);
         border: none;
         padding: 8px 16px;
-        border-radius: 4px;
-        cursor: pointer;
+          border-radius: 4px;
+          cursor: pointer;
         font-size: 0.9em;
         transition: opacity 0.2s;
       }
@@ -233,16 +233,16 @@ class YaleLockManagerCard extends HTMLElement {
       .btn-cancel, .btn-close { background: var(--secondary-background-color); padding: 6px 12px; }
       
       table {
-        width: 100%;
-        border-collapse: collapse;
+          width: 100%;
+          border-collapse: collapse;
         margin-top: 16px;
-      }
+        }
       
       th, td {
-        text-align: left;
+          text-align: left;
         padding: 12px 8px;
-        border-bottom: 1px solid var(--divider-color);
-      }
+          border-bottom: 1px solid var(--divider-color);
+        }
       
       th {
         background: var(--table-header-background-color, var(--secondary-background-color));
@@ -278,57 +278,57 @@ class YaleLockManagerCard extends HTMLElement {
       .form-group input, .form-group select {
         width: 100%;
         padding: 8px;
-        border: 1px solid var(--divider-color);
-        border-radius: 4px;
-        background: var(--card-background-color);
-        color: var(--primary-text-color);
-        box-sizing: border-box;
-      }
+          border: 1px solid var(--divider-color);
+          border-radius: 4px;
+          background: var(--card-background-color);
+          color: var(--primary-text-color);
+          box-sizing: border-box;
+        }
       
-      .toggle-switch {
-        position: relative;
+        .toggle-switch {
+          position: relative;
         display: inline-block;
         width: 44px;
         height: 24px;
-      }
+        }
       
-      .toggle-switch input {
-        opacity: 0;
-        width: 0;
-        height: 0;
-      }
+        .toggle-switch input {
+          opacity: 0;
+          width: 0;
+          height: 0;
+        }
       
-      .slider {
-        position: absolute;
-        cursor: pointer;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
+        .slider {
+          position: absolute;
+          cursor: pointer;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
         background-color: var(--disabled-color, #ccc);
         transition: 0.3s;
         border-radius: 24px;
       }
       
-      .slider:before {
-        position: absolute;
-        content: "";
+        .slider:before {
+          position: absolute;
+          content: "";
         height: 18px;
         width: 18px;
-        left: 3px;
-        bottom: 3px;
-        background-color: white;
+          left: 3px;
+          bottom: 3px;
+          background-color: white;
         transition: 0.3s;
-        border-radius: 50%;
-      }
+          border-radius: 50%;
+        }
       
-      input:checked + .slider {
-        background-color: var(--primary-color);
-      }
+        input:checked + .slider {
+          background-color: var(--primary-color);
+        }
       
-      input:checked + .slider:before {
-        transform: translateX(20px);
-      }
+        input:checked + .slider:before {
+          transform: translateX(20px);
+        }
       
       .toggle-label {
         display: flex;
@@ -341,7 +341,7 @@ class YaleLockManagerCard extends HTMLElement {
       .hidden { display: none !important; }
       
       .fob-notice {
-        background: var(--table-row-alternative-background-color);
+          background: var(--table-row-alternative-background-color);
         border-radius: 8px;
         padding: 12px;
         margin: 12px 0;
@@ -426,8 +426,8 @@ class YaleLockManagerCard extends HTMLElement {
       const hasCachedPin = user.code && user.code.trim() !== '';
       const hasName = user.name && user.name.trim() !== '' && user.name.trim() !== `User ${user.slot}`;
       const hasData = hasLockPin || hasCachedPin || hasName;
-      
-      return `
+              
+              return `
         <tr class="clickable" onclick="card.toggleExpand(${user.slot})">
           <td><strong>${user.slot}</strong></td>
           <td>${user.name || `User ${user.slot}`}</td>
@@ -442,19 +442,19 @@ class YaleLockManagerCard extends HTMLElement {
               font-weight: 500;
               font-size: 0.85em;
             ">${statusText}</span>
-          </td>
+                  </td>
           <td>${user.synced_to_lock ? '✓' : '⚠️'}</td>
-        </tr>
-        ${isExpanded ? `
-          <tr class="expanded-row">
-            <td colspan="6">
+                </tr>
+                ${isExpanded ? `
+                  <tr class="expanded-row">
+                    <td colspan="6">
               <div class="expanded-content">
                 <h3>Slot ${user.slot} Settings</h3>
                 
                 <div id="status-${user.slot}"></div>
-                
-                <div class="form-group">
-                  <label>User Name:</label>
+                        
+                        <div class="form-group">
+                          <label>User Name:</label>
                   <input 
                     type="text" 
                     id="name-${user.slot}" 
@@ -463,10 +463,10 @@ class YaleLockManagerCard extends HTMLElement {
                     onfocus="card._handleFocus('${user.slot}-name')"
                     onblur="card._handleBlur('${user.slot}-name')"
                   >
-                </div>
-                
-                <div class="form-group">
-                  <label>Code Type:</label>
+                        </div>
+                        
+                          <div class="form-group">
+                            <label>Code Type:</label>
                   <select 
                     id="type-${user.slot}" 
                     onchange="card.changeType(${user.slot}, this.value)"
@@ -476,10 +476,10 @@ class YaleLockManagerCard extends HTMLElement {
                     <option value="pin" ${!isFob ? 'selected' : ''}>PIN Code</option>
                     <option value="fob" ${isFob ? 'selected' : ''}>FOB/RFID Card</option>
                   </select>
-                </div>
-                
+                          </div>
+                        
                 ${!isFob ? `
-                  <div class="form-group">
+                        <div class="form-group">
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
                       <div>
                         <label>📝 Cached Status (editable):</label>
@@ -496,9 +496,9 @@ class YaleLockManagerCard extends HTMLElement {
                             <option value="1" ${cachedStatus === 1 ? 'selected' : ''}>Enabled</option>
                             <option value="2" ${cachedStatus === 2 ? 'selected' : ''}>Disabled</option>
                           `}
-                        </select>
+                          </select>
                         <p style="color: var(--secondary-text-color); font-size: 0.75em; margin: 4px 0 0 0;">Status stored locally</p>
-                      </div>
+                        </div>
                       <div>
                         <label>🔒 Lock Status (from lock):</label>
                         <select 
@@ -574,17 +574,17 @@ class YaleLockManagerCard extends HTMLElement {
                       <div style="margin-top: 8px; padding: 8px; background: #4caf5015; border-left: 4px solid #4caf50; border-radius: 4px;">
                         <span style="color: #4caf50; font-size: 0.85em;">✅ PINs match - Synced</span>
                       </div>
-                    ` : ''}
+                        ` : ''}
                   </div>
                 </div>
-                
+                        
                 <div id="fob-notice-${user.slot}" class="fob-notice ${!isFob ? 'hidden' : ''}">
                   🏷️ FOB/RFID cards don't require a PIN. The card ID is read automatically when presented to the lock.
                 </div>
-                
+                          
                 <hr>
-                
-                <div class="form-group">
+                          
+                          <div class="form-group">
                   <label class="toggle-label">
                     <label class="toggle-switch">
                       <input 
@@ -612,7 +612,7 @@ class YaleLockManagerCard extends HTMLElement {
                           onfocus="card._handleFocus('${user.slot}-start')"
                           onblur="card._handleBlur('${user.slot}-start')"
                         >
-                      </div>
+                              </div>
                       <div style="flex: 1; min-width: 200px;">
                         <label style="font-size: 0.85em;">End:</label>
                         <input 
@@ -622,13 +622,13 @@ class YaleLockManagerCard extends HTMLElement {
                           onfocus="card._handleFocus('${user.slot}-end')"
                           onblur="card._handleBlur('${user.slot}-end')"
                         >
-                      </div>
-                    </div>
+                              </div>
+                            </div>
                   </div>
-                </div>
-                
+                          </div>
+                          
                 ${!isFob ? `
-                  <div class="form-group">
+                          <div class="form-group">
                     <label class="toggle-label">
                       <label class="toggle-switch">
                         <input 
@@ -691,13 +691,13 @@ class YaleLockManagerCard extends HTMLElement {
                       onclick="card.pushCode(${user.slot})"
                       style="${!user.synced_to_lock ? 'background: #ff9800; color: white; font-weight: bold;' : ''}"
                     >${user.synced_to_lock ? 'Push' : 'Push Required'}</button>
-                  </div>
+                          </div>
+                        ` : ''}
+                      </div>
+                    </td>
+                  </tr>
                 ` : ''}
-              </div>
-            </td>
-          </tr>
-        ` : ''}
-      `;
+              `;
     }).join('');
 
     return `
@@ -971,14 +971,21 @@ class YaleLockManagerCard extends HTMLElement {
   }
 
   async saveUser(slot) {
-    // Clear focus tracking - we're saving, so entity state will update fields
-    this._focusedFields.clear();
+    // Save current form values BEFORE clearing focus - we'll use these to update fields after save
+    const savedFormValues = {
+      name: this.shadowRoot.getElementById(`name-${slot}`).value.trim(),
+      code: codeType === 'pin' ? (this.shadowRoot.getElementById(`code-${slot}`)?.value.trim() || '') : '',
+      codeType: this.shadowRoot.getElementById(`type-${slot}`).value,
+      cachedStatus: parseInt(this.shadowRoot.getElementById(`cached-status-${slot}`)?.value || '0', 10)
+    };
+    
+    // Don't clear focus yet - we'll do it after entity state updates
     this._pendingSave = true;
     
-    const name = this.shadowRoot.getElementById(`name-${slot}`).value.trim();
-    const codeType = this.shadowRoot.getElementById(`type-${slot}`).value;
-    const code = codeType === 'pin' ? (this.shadowRoot.getElementById(`code-${slot}`)?.value.trim() || '') : '';
-    const cachedStatus = parseInt(this.shadowRoot.getElementById(`cached-status-${slot}`)?.value || '0', 10);
+    const name = savedFormValues.name;
+    const codeType = savedFormValues.codeType;
+    const code = savedFormValues.code;
+    const cachedStatus = savedFormValues.cachedStatus;
 
     // Validation
     if (!name) {
@@ -1082,8 +1089,22 @@ class YaleLockManagerCard extends HTMLElement {
 
       this.showStatus(slot, '✅ User saved successfully!', 'success');
       
-      // Wait for entity state to update, then render once
+      // Wait for entity state to update, then explicitly update form fields and render
       setTimeout(() => {
+        // Explicitly update form fields with the values we just saved
+        // This ensures they show the new values even if entity state hasn't updated yet
+        const nameField = this.shadowRoot.getElementById(`name-${slot}`);
+        const codeField = this.shadowRoot.getElementById(`code-${slot}`);
+        const typeField = this.shadowRoot.getElementById(`type-${slot}`);
+        const statusField = this.shadowRoot.getElementById(`cached-status-${slot}`);
+        
+        if (nameField) nameField.value = savedFormValues.name;
+        if (codeField && codeType === 'pin') codeField.value = savedFormValues.code;
+        if (typeField) typeField.value = savedFormValues.codeType;
+        if (statusField) statusField.value = savedFormValues.cachedStatus.toString();
+        
+        // Now clear focus and render - entity state should have updated by now
+        this._focusedFields.clear();
         this._pendingSave = false;
         this.render();
       }, 1500);
@@ -1113,6 +1134,13 @@ class YaleLockManagerCard extends HTMLElement {
               console.warn('Failed to check sync status:', syncError);
             }
             
+            // Update form fields with saved values
+            const nameField = this.shadowRoot.getElementById(`name-${slot}`);
+            const codeField = this.shadowRoot.getElementById(`code-${slot}`);
+            if (nameField) nameField.value = name;
+            if (codeField && codeType === 'pin') codeField.value = code;
+            
+            this._focusedFields.clear();
             setTimeout(() => this.render(), 500);
           } catch (retryError) {
             this.showStatus(slot, `Failed: ${retryError.message}`, 'error');

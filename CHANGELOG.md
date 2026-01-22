@@ -14,7 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Binary Sensors: `binary_sensor.smart_door_lock_manager_door`, etc.
 - **Z-Wave Device: "Smart Door Lock"** (original Z-Wave device)
   - Lock: `lock.smart_door_lock`
-  - Z-Wave sensors: `sensor.smart_door_lock_*`
+  - Z-Wave sensors: `sensor.smart_door_lock_*`image.png
   
 Use `lock.smart_door_lock_manager` for the Lovelace card!
 
