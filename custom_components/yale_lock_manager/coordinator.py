@@ -258,24 +258,42 @@ class YaleLockCoordinator(DataUpdateCoordinator):
             if lock_state:
                 data["lock_state"] = lock_state.state
                 data["lock_attributes"] = dict(lock_state.attributes)
+                
+                # Try to get door/bolt/battery from lock attributes first
+                data["door_status"] = lock_state.attributes.get("door_status")
+                data["bolt_status"] = lock_state.attributes.get("bolt_status")
+                data["battery_level"] = lock_state.attributes.get("battery_level")
 
-            # Get Z-Wave JS values via service calls
-            data["door_status"] = await self._get_zwave_value(
-                CC_DOOR_LOCK, PROP_DOOR_STATUS
-            )
-            data["bolt_status"] = await self._get_zwave_value(
-                CC_DOOR_LOCK, PROP_BOLT_STATUS
-            )
-            data["battery_level"] = await self._get_zwave_value(
-                CC_BATTERY, PROP_BATTERY_LEVEL
-            )
+            # If not in attributes, try to find related Z-Wave entities
+            # Find battery sensor
+            battery_entity = f"sensor.{self.lock_entity_id.split('.')[1]}_battery"
+            battery_state = self.hass.states.get(battery_entity)
+            if battery_state and battery_state.state not in ("unknown", "unavailable"):
+                try:
+                    data["battery_level"] = int(float(battery_state.state))
+                except (ValueError, TypeError):
+                    pass
+
+            # Find door binary sensor
+            door_entity = f"binary_sensor.{self.lock_entity_id.split('.')[1]}_door"
+            door_state = self.hass.states.get(door_entity)
+            if door_state and door_state.state not in ("unknown", "unavailable"):
+                data["door_status"] = "open" if door_state.state == "on" else "closed"
+
+            # Find bolt binary sensor  
+            bolt_entity = f"binary_sensor.{self.lock_entity_id.split('.')[1]}_bolt"
+            bolt_state = self.hass.states.get(bolt_entity)
+            if bolt_state and bolt_state.state not in ("unknown", "unavailable"):
+                data["bolt_status"] = "locked" if bolt_state.state == "on" else "unlocked"
 
             # Get user codes status (we'll query them periodically)
             data["user_codes"] = await self._get_all_user_codes()
 
+            _LOGGER.debug("Coordinator data updated: %s", data)
             return data
 
         except Exception as err:
+            _LOGGER.error("Error in coordinator update: %s", err, exc_info=True)
             raise UpdateFailed(f"Error communicating with lock: {err}") from err
 
     async def _get_zwave_value(
@@ -320,21 +338,10 @@ class YaleLockCoordinator(DataUpdateCoordinator):
 
     async def _get_all_user_codes(self) -> dict[int, dict[str, Any]]:
         """Get all user codes from the lock."""
-        codes = {}
-
-        for slot in range(1, MAX_USER_SLOTS + 1):
-            try:
-                status = await self._get_user_code_status(slot)
-                code = await self._get_user_code(slot)
-
-                codes[slot] = {
-                    "status": status,
-                    "code": code,
-                }
-            except Exception as err:
-                _LOGGER.debug("Error getting code for slot %s: %s", slot, err)
-
-        return codes
+        # For now, return empty dict
+        # User codes will be managed through our storage, not queried from lock
+        # This avoids complex Z-Wave queries that may not work reliably
+        return {}
 
     async def _get_user_code_status(self, slot: int) -> int:
         """Get user code status for a slot."""

@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.1.3] - 2026-01-22
+
+### Fixed
+- Fixed sensors showing "Unknown" - coordinator now reads from Z-Wave entities directly
+- Simplified data fetching to read from existing Z-Wave JS entities
+- Added fallback to read from lock attributes first, then from separate entities
+- Removed complex Z-Wave value queries that weren't working
+- Added better error logging and debug info
+
+### Changed
+- Coordinator now looks for related entities (battery, door, bolt sensors)
+- User codes temporarily not queried from lock (uses storage only)
+- More reliable sensor data updates
+
 ## [1.0.1.2] - 2026-01-21
 
 ### Fixed
