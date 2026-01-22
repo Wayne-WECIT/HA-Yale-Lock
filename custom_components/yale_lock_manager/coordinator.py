@@ -643,6 +643,7 @@ class YaleLockCoordinator(DataUpdateCoordinator):
         name: str,
         code_type: str = CODE_TYPE_PIN,
         override_protection: bool = False,
+        status: int | None = None,
     ) -> None:
         """Set a user code."""
         _LOGGER.info(
@@ -709,7 +710,8 @@ class YaleLockCoordinator(DataUpdateCoordinator):
             else:
                 lock_code = existing_user.get("lock_code", "")
             lock_enabled = existing_user.get("lock_enabled", False)  # Preserve lock_enabled
-            lock_status = existing_user.get("lock_status", USER_STATUS_AVAILABLE)  # Preserve cached status
+            # Use provided status if available, otherwise preserve existing cached status
+            lock_status = status if status is not None else existing_user.get("lock_status", USER_STATUS_AVAILABLE)
             # Use lock_status from query if available, otherwise preserve existing
             if code_type == CODE_TYPE_PIN and lock_code_data:
                 lock_status_from_lock = lock_status_from_lock
@@ -725,7 +727,8 @@ class YaleLockCoordinator(DataUpdateCoordinator):
             else:
                 lock_code = ""
             lock_enabled = False
-            lock_status = USER_STATUS_AVAILABLE  # New users start as Available (cached status)
+            # Use provided status if available, otherwise default to Available
+            lock_status = status if status is not None else USER_STATUS_AVAILABLE
             if code_type == CODE_TYPE_PIN and lock_code_data:
                 lock_status_from_lock = lock_status_from_lock
             else:

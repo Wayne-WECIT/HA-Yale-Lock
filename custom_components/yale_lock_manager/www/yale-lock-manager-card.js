@@ -903,13 +903,23 @@ class YaleLockManagerCard extends HTMLElement {
     const status = parseInt(statusValue, 10);
     
     try {
+      // Don't trigger full render - just update status message
+      // The entity state will update naturally, and render will happen when hass updates
+      // but only if no fields have focus (handled by set hass())
       await this._hass.callService('yale_lock_manager', 'set_user_status', {
         entity_id: this._config.entity,
         slot: parseInt(slot, 10),
         status: status
       });
       
-      setTimeout(() => this.render(), 300);
+      // Show brief success message without full render
+      this.showStatus(slot, 'Status updated', 'success');
+      // Clear message after 2 seconds
+      setTimeout(() => {
+        if (this._statusMessages[slot]?.message === 'Status updated') {
+          this.clearStatus(slot);
+        }
+      }, 2000);
     } catch (error) {
       this.showStatus(slot, `Failed to set status: ${error.message}`, 'error');
     }

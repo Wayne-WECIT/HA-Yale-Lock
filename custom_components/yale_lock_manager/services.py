@@ -54,6 +54,7 @@ SET_USER_CODE_SCHEMA = vol.Schema(
         vol.Required(ATTR_NAME): cv.string,
         vol.Optional(ATTR_CODE_TYPE, default=CODE_TYPE_PIN): vol.In([CODE_TYPE_PIN, CODE_TYPE_FOB]),
         vol.Optional(ATTR_OVERRIDE_PROTECTION, default=False): cv.boolean,
+        vol.Optional(ATTR_STATUS): vol.In([USER_STATUS_AVAILABLE, USER_STATUS_ENABLED, USER_STATUS_DISABLED]),
     }
 )
 
@@ -154,9 +155,10 @@ async def async_setup_services(hass: HomeAssistant) -> None:
         name = call.data[ATTR_NAME]
         code_type = call.data.get(ATTR_CODE_TYPE, CODE_TYPE_PIN)
         override_protection = call.data.get(ATTR_OVERRIDE_PROTECTION, False)
+        status = call.data.get(ATTR_STATUS)  # Optional status parameter
 
         try:
-            await coordinator.async_set_user_code(slot, code, name, code_type, override_protection)
+            await coordinator.async_set_user_code(slot, code, name, code_type, override_protection, status)
             _LOGGER.info("Set user code for slot %s: %s", slot, name)
         except Exception as err:
             _LOGGER.error("Error setting user code: %s", err)
