@@ -20,6 +20,44 @@ Use `lock.smart_door_lock_manager` for the Lovelace card!
 
 ---
 
+## [1.8.1.5] - 2026-01-22
+
+### 🔧 CRITICAL FIX - Use Stored node_id!
+
+**User feedback**: Codes are retrieved but not read from cache:
+```
+WARNING: Could not get node_id from lock entity
+WARNING: No status in cache for slot 1 after query
+```
+
+### The Issue
+
+`_get_zwave_value` was trying to get `node_id` from the lock entity's attributes, but Z-Wave JS entities don't store `node_id` there!
+
+### The Fix
+
+The coordinator **already has** `self.node_id` stored from the config entry (line 63). Just use that directly!
+
+**Before (Broken)**:
+```python
+lock_entity = self.hass.states.get(self.lock_entity_id)
+if "node_id" not in lock_entity.attributes:  # ❌ Always fails!
+    return None
+node_id = lock_entity.attributes["node_id"]
+```
+
+**After (Fixed)**:
+```python
+node_id = int(self.node_id)  # ✅ Use stored value!
+```
+
+### Changed
+- `_get_zwave_value()` now uses `self.node_id` from config entry
+- Removed broken entity attribute lookup
+- Codes should now be read from cache correctly!
+
+---
+
 ## [1.8.1.4] - 2026-01-22
 
 ### 🔧 CRITICAL FIX - Code Retrieval Now Works!

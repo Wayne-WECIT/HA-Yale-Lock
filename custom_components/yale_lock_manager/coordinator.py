@@ -417,13 +417,8 @@ class YaleLockCoordinator(DataUpdateCoordinator):
                 property_key,
             )
             
-            # Get the lock entity to find the node_id
-            lock_entity = self.hass.states.get(self.lock_entity_id)
-            if not lock_entity or "node_id" not in lock_entity.attributes:
-                _LOGGER.warning("Could not get node_id from lock entity")
-                return None
-            
-            node_id = lock_entity.attributes["node_id"]
+            # Use the node_id we already have from config entry
+            node_id = int(self.node_id)
             
             # Access Z-Wave JS integration data directly
             if ZWAVE_JS_DOMAIN not in self.hass.data:
