@@ -1,6 +1,8 @@
 /**
  * Yale Lock Manager Card
- * Complete rewrite with clean architecture
+ * Clean rebuild - v1.8.2.27
+ * Architecture: Entity state is single source of truth
+ * Form preservation: Only when user is actively editing (has focus)
  */
 
 class YaleLockManagerCard extends HTMLElement {
@@ -12,7 +14,8 @@ class YaleLockManagerCard extends HTMLElement {
     this._expandedSlot = null;
     this._statusMessages = {}; // Per-slot status messages
     this._showClearCacheConfirm = false;
-    this._skipFormRestore = false; // Flag to skip form value restoration after save
+    this._focusedFields = new Set(); // Track which fields have focus
+    this._pendingSave = false; // Flag to prevent form preservation during save
   }
 
   setConfig(config) {
@@ -24,63 +27,17 @@ class YaleLockManagerCard extends HTMLElement {
 
   set hass(hass) {
     this._hass = hass;
-    // Only re-render if no form is currently being edited
-    // This prevents form fields from being cleared while user is typing
-    if (!this._isFormBeingEdited()) {
-    this.render();
+    // Only render if not saving and no fields have focus
+    if (!this._pendingSave && this._focusedFields.size === 0) {
+      this.render();
     } else {
-      // Just update the data reference, don't re-render
-      // This allows status messages to work without clearing forms
-      this._updateDataOnly();
+      // Just update status messages without full render
+      this._updateStatusMessages();
     }
   }
-  
-  _isFormBeingEdited() {
-    // Check if any form field has focus or has been modified
-    if (!this.shadowRoot) return false;
-    
-    const activeElement = this.shadowRoot.activeElement;
-    if (activeElement && (
-      activeElement.tagName === 'INPUT' || 
-      activeElement.tagName === 'SELECT' ||
-      activeElement.tagName === 'TEXTAREA'
-    )) {
-      return true;
-    }
-    
-    // Also check if any input has a value that differs from the stored value
-    // This catches cases where user typed but field lost focus
-    if (this._expandedSlot) {
-      const slot = this._expandedSlot;
-      const nameInput = this.shadowRoot.getElementById(`name-${slot}`);
-      const codeInput = this.shadowRoot.getElementById(`code-${slot}`);
-      
-      if (nameInput && nameInput.value && nameInput.value !== (this._getStoredValue(slot, 'name') || '')) {
-        return true;
-      }
-      if (codeInput && codeInput.value && codeInput.value !== (this._getStoredValue(slot, 'code') || '')) {
-        return true;
-      }
-    }
-    
-    return false;
-  }
-  
-  _getStoredValue(slot, field) {
-    // Get the stored value from entity state
-    const stateObj = this._hass?.states[this._config?.entity];
-    const users = stateObj?.attributes?.users || {};
-    const user = users[slot.toString()] || {};
-    return user[field];
-  }
-  
-  _updateDataOnly() {
-    // Update internal data reference without re-rendering
-    // This allows status messages and other updates to work
-    // without clearing form fields
-    if (!this._hass || !this._config) return;
-    
-    // Update status messages if needed (they don't require full render)
+
+  _updateStatusMessages() {
+    // Update status messages without full render
     if (this._expandedSlot) {
       this.renderStatusMessage(this._expandedSlot);
     }
@@ -91,9 +48,6 @@ class YaleLockManagerCard extends HTMLElement {
   showStatus(slot, message, type = 'info', confirmAction = null) {
     this._statusMessages[slot] = { message, type, confirmAction };
     this.renderStatusMessage(slot);
-    
-    // Don't auto-clear messages - they persist until slot is collapsed or user interacts
-    // Messages will stay visible for user feedback
   }
 
   clearStatus(slot) {
@@ -102,8 +56,8 @@ class YaleLockManagerCard extends HTMLElement {
   }
   
   renderStatusMessage(slot) {
-    const container = this.shadowRoot.querySelector(`#status-${slot}`);
-    if (!container) return; // Slot not expanded
+    const container = this.shadowRoot?.querySelector(`#status-${slot}`);
+    if (!container) return;
     
     const status = this._statusMessages[slot];
     if (!status) {
@@ -149,7 +103,7 @@ class YaleLockManagerCard extends HTMLElement {
       </div>
     `;
 
-    // Attach event listeners to new buttons
+    // Attach event listeners
     if (status.type === 'confirm') {
       container.querySelector('.btn-confirm').onclick = () => {
         const action = this._statusMessages[slot].confirmAction;
@@ -165,7 +119,7 @@ class YaleLockManagerCard extends HTMLElement {
   // ========== DATA HELPERS ==========
 
   getUserData() {
-    const stateObj = this._hass.states[this._config.entity];
+    const stateObj = this._hass?.states[this._config?.entity];
     const users = stateObj?.attributes?.users || {};
     const usersArray = [];
     
@@ -173,11 +127,12 @@ class YaleLockManagerCard extends HTMLElement {
       const user = users[slot.toString()] || { 
         name: '',
         code: '', 
-        lock_code: '',  // PIN from lock (read-only)
+        lock_code: '',
         code_type: 'pin',
         enabled: false,
-        lock_status: null,  // Status from lock (0=Available, 1=Enabled, 2=Disabled)
-        lock_enabled: false,  // Enabled status from lock (for compatibility)
+        lock_status: null,
+        lock_status_from_lock: null,
+        lock_enabled: false,
         synced_to_lock: false,
         schedule: { start: null, end: null },
         usage_limit: null,
@@ -207,9 +162,6 @@ class YaleLockManagerCard extends HTMLElement {
       return;
     }
 
-    // Save form values before re-render if a form is expanded
-    const savedValues = this._saveFormValues();
-
     const users = this.getUserData();
     const isLocked = stateObj.state === 'locked';
     const batteryLevel = stateObj.attributes.battery_level || 0;
@@ -224,13 +176,6 @@ class YaleLockManagerCard extends HTMLElement {
     `;
 
     this.attachEventListeners();
-    
-    // Restore form values after re-render (unless we just saved - then let entity state update it)
-    if (savedValues && savedValues.slot && !this._skipFormRestore) {
-      this._restoreFormValues(savedValues);
-    }
-    // Reset the flag after render
-    this._skipFormRestore = false;
   }
 
   getStyles() {
@@ -240,25 +185,25 @@ class YaleLockManagerCard extends HTMLElement {
       
       .error {
         color: var(--error-color);
-          padding: 16px;
+        padding: 16px;
         background: var(--error-color-background, rgba(255, 0, 0, 0.1));
         border-radius: 4px;
-        }
+      }
       
-        .header {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          margin-bottom: 16px;
+      .header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 16px;
         padding-bottom: 12px;
         border-bottom: 2px solid var(--divider-color);
-        }
+      }
       
       .lock-status {
-          display: flex;
-          align-items: center;
-          gap: 12px;
-        }
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
       
       .status-icon { font-size: 32px; }
       .status-info { display: flex; flex-direction: column; gap: 4px; }
@@ -267,12 +212,12 @@ class YaleLockManagerCard extends HTMLElement {
       .controls { display: flex; gap: 8px; }
       
       button, .btn-confirm, .btn-cancel, .btn-close {
-          background: var(--primary-color);
+        background: var(--primary-color);
         color: var(--text-primary-color);
         border: none;
         padding: 8px 16px;
-          border-radius: 4px;
-          cursor: pointer;
+        border-radius: 4px;
+        cursor: pointer;
         font-size: 0.9em;
         transition: opacity 0.2s;
       }
@@ -288,16 +233,16 @@ class YaleLockManagerCard extends HTMLElement {
       .btn-cancel, .btn-close { background: var(--secondary-background-color); padding: 6px 12px; }
       
       table {
-          width: 100%;
-          border-collapse: collapse;
+        width: 100%;
+        border-collapse: collapse;
         margin-top: 16px;
-        }
+      }
       
       th, td {
-          text-align: left;
+        text-align: left;
         padding: 12px 8px;
-          border-bottom: 1px solid var(--divider-color);
-        }
+        border-bottom: 1px solid var(--divider-color);
+      }
       
       th {
         background: var(--table-header-background-color, var(--secondary-background-color));
@@ -333,57 +278,57 @@ class YaleLockManagerCard extends HTMLElement {
       .form-group input, .form-group select {
         width: 100%;
         padding: 8px;
-          border: 1px solid var(--divider-color);
-          border-radius: 4px;
-          background: var(--card-background-color);
-          color: var(--primary-text-color);
-          box-sizing: border-box;
-        }
+        border: 1px solid var(--divider-color);
+        border-radius: 4px;
+        background: var(--card-background-color);
+        color: var(--primary-text-color);
+        box-sizing: border-box;
+      }
       
-        .toggle-switch {
-          position: relative;
+      .toggle-switch {
+        position: relative;
         display: inline-block;
         width: 44px;
         height: 24px;
-        }
+      }
       
-        .toggle-switch input {
-          opacity: 0;
-          width: 0;
-          height: 0;
-        }
+      .toggle-switch input {
+        opacity: 0;
+        width: 0;
+        height: 0;
+      }
       
-        .slider {
-          position: absolute;
-          cursor: pointer;
-          top: 0;
-          left: 0;
-          right: 0;
-          bottom: 0;
+      .slider {
+        position: absolute;
+        cursor: pointer;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
         background-color: var(--disabled-color, #ccc);
         transition: 0.3s;
         border-radius: 24px;
       }
       
-        .slider:before {
-          position: absolute;
-          content: "";
+      .slider:before {
+        position: absolute;
+        content: "";
         height: 18px;
         width: 18px;
-          left: 3px;
-          bottom: 3px;
-          background-color: white;
+        left: 3px;
+        bottom: 3px;
+        background-color: white;
         transition: 0.3s;
-          border-radius: 50%;
-        }
+        border-radius: 50%;
+      }
       
-        input:checked + .slider {
-          background-color: var(--primary-color);
-        }
+      input:checked + .slider {
+        background-color: var(--primary-color);
+      }
       
-        input:checked + .slider:before {
-          transform: translateX(20px);
-        }
+      input:checked + .slider:before {
+        transform: translateX(20px);
+      }
       
       .toggle-label {
         display: flex;
@@ -396,7 +341,7 @@ class YaleLockManagerCard extends HTMLElement {
       .hidden { display: none !important; }
       
       .fob-notice {
-          background: var(--table-row-alternative-background-color);
+        background: var(--table-row-alternative-background-color);
         border-radius: 8px;
         padding: 12px;
         margin: 12px 0;
@@ -427,19 +372,15 @@ class YaleLockManagerCard extends HTMLElement {
       const isExpanded = this._expandedSlot === user.slot;
       const isFob = user.code_type === 'fob';
       
-      // Get status text from lock_status value
-      // If lock_status is not available, try to derive from lock_enabled or enabled
       const getStatusText = (status, lockEnabled, enabled) => {
         if (status !== null && status !== undefined) {
           if (status === 0) return 'Available';
           if (status === 1) return 'Enabled';
           if (status === 2) return 'Disabled';
         }
-        // Fallback: if we have lock_enabled, derive status
         if (lockEnabled !== null && lockEnabled !== undefined) {
           return lockEnabled ? 'Enabled' : 'Disabled';
         }
-        // Fallback: if we have enabled, use that
         if (enabled !== null && enabled !== undefined) {
           return enabled ? 'Enabled' : 'Disabled';
         }
@@ -448,22 +389,45 @@ class YaleLockManagerCard extends HTMLElement {
       
       const getStatusColor = (status, lockEnabled, enabled) => {
         if (status !== null && status !== undefined) {
-          if (status === 0) return '#9e9e9e';  // Gray for Available
-          if (status === 1) return '#4caf50';  // Green for Enabled
-          if (status === 2) return '#f44336';  // Red for Disabled
+          if (status === 0) return '#9e9e9e';
+          if (status === 1) return '#4caf50';
+          if (status === 2) return '#f44336';
         }
-        // Fallback colors
         if (lockEnabled !== null && lockEnabled !== undefined || enabled !== null && enabled !== undefined) {
           const isEnabled = lockEnabled !== null && lockEnabled !== undefined ? lockEnabled : enabled;
           return isEnabled ? '#4caf50' : '#f44336';
         }
-        return '#9e9e9e';  // Gray for Unknown
+        return '#9e9e9e';
       };
       
       const statusText = getStatusText(user.lock_status, user.lock_enabled, user.enabled);
       const statusColor = getStatusColor(user.lock_status, user.lock_enabled, user.enabled);
-              
-              return `
+      
+      // Get current field values - preserve focused fields, otherwise use entity state
+      const getFieldValue = (fieldId, defaultValue) => {
+        const fieldKey = `${user.slot}-${fieldId}`;
+        if (this._focusedFields.has(fieldKey)) {
+          // Field has focus - preserve current value from DOM
+          const element = this.shadowRoot?.getElementById(`${fieldId}-${user.slot}`);
+          return element ? element.value : defaultValue;
+        }
+        // No focus - use entity state
+        return defaultValue;
+      };
+      
+      // Get cached status for dropdown
+      let cachedStatus = user.lock_status;
+      if (cachedStatus === null || cachedStatus === undefined) {
+        cachedStatus = user.enabled ? 1 : 2;
+      }
+      
+      // Determine status dropdown options
+      const hasLockPin = user.lock_code && user.lock_code.trim() !== '' && user.lock_code.trim() !== 'No PIN on lock';
+      const hasCachedPin = user.code && user.code.trim() !== '';
+      const hasName = user.name && user.name.trim() !== '' && user.name.trim() !== `User ${user.slot}`;
+      const hasData = hasLockPin || hasCachedPin || hasName;
+      
+      return `
         <tr class="clickable" onclick="card.toggleExpand(${user.slot})">
           <td><strong>${user.slot}</strong></td>
           <td>${user.name || `User ${user.slot}`}</td>
@@ -478,125 +442,127 @@ class YaleLockManagerCard extends HTMLElement {
               font-weight: 500;
               font-size: 0.85em;
             ">${statusText}</span>
-                  </td>
+          </td>
           <td>${user.synced_to_lock ? '✓' : '⚠️'}</td>
-                  </td>
-                </tr>
-                ${isExpanded ? `
-                  <tr class="expanded-row">
-                    <td colspan="6">
+        </tr>
+        ${isExpanded ? `
+          <tr class="expanded-row">
+            <td colspan="6">
               <div class="expanded-content">
                 <h3>Slot ${user.slot} Settings</h3>
                 
                 <div id="status-${user.slot}"></div>
-                        
-                        <div class="form-group">
-                          <label>User Name:</label>
-                  <input type="text" id="name-${user.slot}" value="${user.name || ''}" placeholder="Enter name">
-                        </div>
-                        
-                          <div class="form-group">
-                            <label>Code Type:</label>
-                  <select id="type-${user.slot}" onchange="card.changeType(${user.slot}, this.value)">
+                
+                <div class="form-group">
+                  <label>User Name:</label>
+                  <input 
+                    type="text" 
+                    id="name-${user.slot}" 
+                    value="${getFieldValue('name', user.name || '')}" 
+                    placeholder="Enter name"
+                    onfocus="card._handleFocus('${user.slot}-name')"
+                    onblur="card._handleBlur('${user.slot}-name')"
+                  >
+                </div>
+                
+                <div class="form-group">
+                  <label>Code Type:</label>
+                  <select 
+                    id="type-${user.slot}" 
+                    onchange="card.changeType(${user.slot}, this.value)"
+                    onfocus="card._handleFocus('${user.slot}-type')"
+                    onblur="card._handleBlur('${user.slot}-type')"
+                  >
                     <option value="pin" ${!isFob ? 'selected' : ''}>PIN Code</option>
                     <option value="fob" ${isFob ? 'selected' : ''}>FOB/RFID Card</option>
                   </select>
-                          </div>
-                        
-                ${!isFob ? `
-                        <div class="form-group">
-                  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
-                    <div>
-                      <label>📝 Cached Status (editable):</label>
-                      <select id="cached-status-${user.slot}" onchange="card.changeStatus(${user.slot}, this.value)" style="width: 100%;">
-                        ${(() => {
-                          // Determine cached status: use lock_status if set, otherwise derive from enabled
-                          let cachedStatus = user.lock_status;
-                          if (cachedStatus === null || cachedStatus === undefined) {
-                            cachedStatus = user.enabled ? 1 : 2; // Default to Enabled or Disabled based on enabled flag
-                          }
-                          
-                          // Determine which options to show based on whether slot has data
-                          // Check lock_code (from lock), cached code, and name
-                          const hasLockPin = user.lock_code && user.lock_code.trim() !== '' && user.lock_code.trim() !== 'No PIN on lock';
-                          const hasCachedPin = user.code && user.code.trim() !== '';
-                          const hasName = user.name && user.name.trim() !== '' && user.name.trim() !== `User ${user.slot}`;
-                          const hasData = hasLockPin || hasCachedPin || hasName;
-                          
-                          // If no data exists, only show Available
-                          // If data exists, only show Enabled/Disabled
-                          if (!hasData) {
-                            return `
-                              <option value="0" ${cachedStatus === 0 ? 'selected' : ''}>Available</option>
-                            `;
-                          } else {
-                            return `
-                              <option value="1" ${cachedStatus === 1 ? 'selected' : ''}>Enabled</option>
-                              <option value="2" ${cachedStatus === 2 ? 'selected' : ''}>Disabled</option>
-                            `;
-                          }
-                        })()}
-                          </select>
-                      <p style="color: var(--secondary-text-color); font-size: 0.75em; margin: 4px 0 0 0;">Status stored locally</p>
-                        </div>
-                    <div>
-                      <label>🔒 Lock Status (from lock):</label>
-                      <select id="lock-status-${user.slot}" disabled style="width: 100%; background: var(--card-background-color); border: 1px solid var(--divider-color); color: var(--secondary-text-color);">
-                        ${(() => {
-                          // Use lock_status_from_lock if available, otherwise fall back to lock_status
-                          const lockStatus = user.lock_status_from_lock !== null && user.lock_status_from_lock !== undefined 
-                            ? user.lock_status_from_lock 
-                            : user.lock_status;
-                          return `
-                            <option value="0" ${lockStatus === 0 ? 'selected' : ''}>Available</option>
-                            <option value="1" ${lockStatus === 1 ? 'selected' : ''}>Enabled</option>
-                            <option value="2" ${lockStatus === 2 ? 'selected' : ''}>Disabled</option>
-                          `;
-                        })()}
-                      </select>
-                      <p style="color: var(--secondary-text-color); font-size: 0.75em; margin: 4px 0 0 0;">Status from physical lock</p>
-                    </div>
-                  </div>
-                  ${(() => {
-                    // Compare cached status with lock status
-                    let cachedStatus = user.lock_status;
-                    if (cachedStatus === null || cachedStatus === undefined) {
-                      cachedStatus = user.enabled ? 1 : 2;
-                    }
-                    // Use lock_status_from_lock if available, otherwise fall back to lock_status
-                    const lockStatus = user.lock_status_from_lock !== null && user.lock_status_from_lock !== undefined 
-                      ? user.lock_status_from_lock 
-                      : user.lock_status;
-                    
-                    if (lockStatus !== null && lockStatus !== undefined && cachedStatus !== lockStatus) {
-                      return `
-                        <div style="margin-top: 8px; padding: 8px; background: #ff980015; border-left: 4px solid #ff9800; border-radius: 4px;">
-                          <span style="color: #ff9800; font-size: 0.85em;">⚠️ Status doesn't match - Click "Push" to sync</span>
-                        </div>
-                      `;
-                    } else if (lockStatus !== null && lockStatus !== undefined && cachedStatus === lockStatus) {
-                      return `
-                        <div style="margin-top: 8px; padding: 8px; background: #4caf5015; border-left: 4px solid #4caf50; border-radius: 4px;">
-                          <span style="color: #4caf50; font-size: 0.85em;">✅ Status matches - Synced</span>
-                        </div>
-                      `;
-                    }
-                    return '';
-                  })()}
                 </div>
-                        ` : ''}
-                        
+                
+                ${!isFob ? `
+                  <div class="form-group">
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                      <div>
+                        <label>📝 Cached Status (editable):</label>
+                        <select 
+                          id="cached-status-${user.slot}" 
+                          onchange="card.changeStatus(${user.slot}, this.value)" 
+                          style="width: 100%;"
+                          onfocus="card._handleFocus('${user.slot}-cached-status')"
+                          onblur="card._handleBlur('${user.slot}-cached-status')"
+                        >
+                          ${!hasData ? `
+                            <option value="0" ${cachedStatus === 0 ? 'selected' : ''}>Available</option>
+                          ` : `
+                            <option value="1" ${cachedStatus === 1 ? 'selected' : ''}>Enabled</option>
+                            <option value="2" ${cachedStatus === 2 ? 'selected' : ''}>Disabled</option>
+                          `}
+                        </select>
+                        <p style="color: var(--secondary-text-color); font-size: 0.75em; margin: 4px 0 0 0;">Status stored locally</p>
+                      </div>
+                      <div>
+                        <label>🔒 Lock Status (from lock):</label>
+                        <select 
+                          id="lock-status-${user.slot}" 
+                          disabled 
+                          style="width: 100%; background: var(--card-background-color); border: 1px solid var(--divider-color); color: var(--secondary-text-color);"
+                        >
+                          <option value="0" ${(user.lock_status_from_lock ?? user.lock_status) === 0 ? 'selected' : ''}>Available</option>
+                          <option value="1" ${(user.lock_status_from_lock ?? user.lock_status) === 1 ? 'selected' : ''}>Enabled</option>
+                          <option value="2" ${(user.lock_status_from_lock ?? user.lock_status) === 2 ? 'selected' : ''}>Disabled</option>
+                        </select>
+                        <p style="color: var(--secondary-text-color); font-size: 0.75em; margin: 4px 0 0 0;">Status from physical lock</p>
+                      </div>
+                    </div>
+                    ${(() => {
+                      const lockStatus = user.lock_status_from_lock ?? user.lock_status;
+                      if (lockStatus !== null && lockStatus !== undefined && cachedStatus !== lockStatus) {
+                        return `
+                          <div style="margin-top: 8px; padding: 8px; background: #ff980015; border-left: 4px solid #ff9800; border-radius: 4px;">
+                            <span style="color: #ff9800; font-size: 0.85em;">⚠️ Status doesn't match - Click "Push" to sync</span>
+                          </div>
+                        `;
+                      } else if (lockStatus !== null && lockStatus !== undefined && cachedStatus === lockStatus) {
+                        return `
+                          <div style="margin-top: 8px; padding: 8px; background: #4caf5015; border-left: 4px solid #4caf50; border-radius: 4px;">
+                            <span style="color: #4caf50; font-size: 0.85em;">✅ Status matches - Synced</span>
+                          </div>
+                        `;
+                      }
+                      return '';
+                    })()}
+                  </div>
+                ` : ''}
+                
                 <div id="code-field-${user.slot}" class="${isFob ? 'hidden' : ''}">
                   <div class="form-group">
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
                       <div>
                         <label>📝 Cached PIN (editable):</label>
-                        <input type="text" id="code-${user.slot}" value="${user.code || ''}" placeholder="Enter PIN code" maxlength="10" pattern="[0-9]*" style="width: 100%;">
+                        <input 
+                          type="text" 
+                          id="code-${user.slot}" 
+                          value="${getFieldValue('code', user.code || '')}" 
+                          placeholder="Enter PIN code" 
+                          maxlength="10" 
+                          pattern="[0-9]*" 
+                          style="width: 100%;"
+                          onfocus="card._handleFocus('${user.slot}-code')"
+                          onblur="card._handleBlur('${user.slot}-code')"
+                        >
                         <p style="color: var(--secondary-text-color); font-size: 0.75em; margin: 4px 0 0 0;">PIN stored locally</p>
                       </div>
                       <div>
                         <label>🔒 Lock PIN (from lock):</label>
-                        <input type="text" id="lock-code-${user.slot}" value="${user.lock_code || ''}" placeholder="No PIN on lock" maxlength="10" pattern="[0-9]*" readonly style="width: 100%; background: var(--card-background-color); border: 1px solid var(--divider-color); color: var(--secondary-text-color);">
+                        <input 
+                          type="text" 
+                          id="lock-code-${user.slot}" 
+                          value="${user.lock_code || ''}" 
+                          placeholder="No PIN on lock" 
+                          maxlength="10" 
+                          pattern="[0-9]*" 
+                          readonly 
+                          style="width: 100%; background: var(--card-background-color); border: 1px solid var(--divider-color); color: var(--secondary-text-color);"
+                        >
                         <p style="color: var(--secondary-text-color); font-size: 0.75em; margin: 4px 0 0 0;">PIN from physical lock</p>
                       </div>
                     </div>
@@ -617,11 +583,16 @@ class YaleLockManagerCard extends HTMLElement {
                 </div>
                 
                 <hr>
-                          
-                          <div class="form-group">
+                
+                <div class="form-group">
                   <label class="toggle-label">
                     <label class="toggle-switch">
-                      <input type="checkbox" id="schedule-toggle-${user.slot}" onchange="card.toggleSchedule(${user.slot}, this.checked)" ${user.schedule?.start || user.schedule?.end ? 'checked' : ''}>
+                      <input 
+                        type="checkbox" 
+                        id="schedule-toggle-${user.slot}" 
+                        onchange="card.toggleSchedule(${user.slot}, this.checked)" 
+                        ${user.schedule?.start || user.schedule?.end ? 'checked' : ''}
+                      >
                       <span class="slider"></span>
                     </label>
                     <span>⏰ Time-Based Schedule</span>
@@ -634,50 +605,75 @@ class YaleLockManagerCard extends HTMLElement {
                     <div style="display: flex; gap: 8px; flex-wrap: wrap;">
                       <div style="flex: 1; min-width: 200px;">
                         <label style="font-size: 0.85em;">Start:</label>
-                        <input type="datetime-local" id="start-${user.slot}" value="${user.schedule?.start ? user.schedule.start.substring(0, 16) : ''}">
-                              </div>
+                        <input 
+                          type="datetime-local" 
+                          id="start-${user.slot}" 
+                          value="${user.schedule?.start ? user.schedule.start.substring(0, 16) : ''}"
+                          onfocus="card._handleFocus('${user.slot}-start')"
+                          onblur="card._handleBlur('${user.slot}-start')"
+                        >
+                      </div>
                       <div style="flex: 1; min-width: 200px;">
                         <label style="font-size: 0.85em;">End:</label>
-                        <input type="datetime-local" id="end-${user.slot}" value="${user.schedule?.end ? user.schedule.end.substring(0, 16) : ''}">
-                              </div>
-                            </div>
-                  </div>
-                          </div>
-                          
-                ${!isFob ? `
-                          <div class="form-group">
-                  <label class="toggle-label">
-                    <label class="toggle-switch">
-                      <input type="checkbox" id="limit-toggle-${user.slot}" onchange="card.toggleLimit(${user.slot}, this.checked)" ${user.usage_limit ? 'checked' : ''}>
-                      <span class="slider"></span>
-                    </label>
-                    <span>🔢 Usage Limit</span>
-                  </label>
-                  <p style="color: var(--secondary-text-color); font-size: 0.85em; margin: 4px 0 8px 20px;">
-                    Limit how many times this code can be used.
-                  </p>
-                  
-                  <div id="limit-fields-${user.slot}" class="${user.usage_limit ? '' : 'hidden'}">
-                    <div style="display: flex; gap: 12px;">
-                      <div style="flex: 1;">
-                        <label style="font-size: 0.85em;">Current:</label>
-                        <input type="number" value="${user.usage_count || 0}" readonly style="background: var(--disabled-color, #f0f0f0);">
-                      </div>
-                      <div style="flex: 1;">
-                        <label style="font-size: 0.85em;">Max:</label>
-                        <input type="number" id="limit-${user.slot}" value="${user.usage_limit || ''}" placeholder="e.g., 5" min="1">
+                        <input 
+                          type="datetime-local" 
+                          id="end-${user.slot}" 
+                          value="${user.schedule?.end ? user.schedule.end.substring(0, 16) : ''}"
+                          onfocus="card._handleFocus('${user.slot}-end')"
+                          onblur="card._handleBlur('${user.slot}-end')"
+                        >
                       </div>
                     </div>
-                    ${user.usage_limit && user.usage_count >= user.usage_limit ? `
-                      <p style="color: var(--error-color); margin-top: 8px;">🚫 Limit reached!</p>
-                    ` : user.usage_count > 0 ? `
-                      <p style="color: var(--warning-color); margin-top: 8px;">⚠️ ${user.usage_count} / ${user.usage_limit || '∞'} uses</p>
-                    ` : ''}
-                    ${user.usage_count > 0 ? `
-                      <button class="secondary" style="margin-top: 8px; width: 100%;" onclick="card.resetCount(${user.slot})">Reset Counter</button>
-                    ` : ''}
                   </div>
                 </div>
+                
+                ${!isFob ? `
+                  <div class="form-group">
+                    <label class="toggle-label">
+                      <label class="toggle-switch">
+                        <input 
+                          type="checkbox" 
+                          id="limit-toggle-${user.slot}" 
+                          onchange="card.toggleLimit(${user.slot}, this.checked)" 
+                          ${user.usage_limit ? 'checked' : ''}
+                        >
+                        <span class="slider"></span>
+                      </label>
+                      <span>🔢 Usage Limit</span>
+                    </label>
+                    <p style="color: var(--secondary-text-color); font-size: 0.85em; margin: 4px 0 8px 20px;">
+                      Limit how many times this code can be used.
+                    </p>
+                    
+                    <div id="limit-fields-${user.slot}" class="${user.usage_limit ? '' : 'hidden'}">
+                      <div style="display: flex; gap: 12px;">
+                        <div style="flex: 1;">
+                          <label style="font-size: 0.85em;">Current:</label>
+                          <input type="number" value="${user.usage_count || 0}" readonly style="background: var(--disabled-color, #f0f0f0);">
+                        </div>
+                        <div style="flex: 1;">
+                          <label style="font-size: 0.85em;">Max:</label>
+                          <input 
+                            type="number" 
+                            id="limit-${user.slot}" 
+                            value="${user.usage_limit || ''}" 
+                            placeholder="e.g., 5" 
+                            min="1"
+                            onfocus="card._handleFocus('${user.slot}-limit')"
+                            onblur="card._handleBlur('${user.slot}-limit')"
+                          >
+                        </div>
+                      </div>
+                      ${user.usage_limit && user.usage_count >= user.usage_limit ? `
+                        <p style="color: var(--error-color); margin-top: 8px;">🚫 Limit reached!</p>
+                      ` : user.usage_count > 0 ? `
+                        <p style="color: var(--warning-color); margin-top: 8px;">⚠️ ${user.usage_count} / ${user.usage_limit || '∞'} uses</p>
+                      ` : ''}
+                      ${user.usage_count > 0 ? `
+                        <button class="secondary" style="margin-top: 8px; width: 100%;" onclick="card.resetCount(${user.slot})">Reset Counter</button>
+                      ` : ''}
+                    </div>
+                  </div>
                 ` : ''}
                 
                 <hr>
@@ -690,18 +686,18 @@ class YaleLockManagerCard extends HTMLElement {
                   ` : ''}
                 </div>
                 ${!isFob ? `
-                <div class="button-group" style="margin-top: 12px;">
-                  <button 
-                    onclick="card.pushCode(${user.slot})"
-                    style="${!user.synced_to_lock ? 'background: #ff9800; color: white; font-weight: bold;' : ''}"
-                  >${user.synced_to_lock ? 'Push' : 'Push Required'}</button>
-                          </div>
-                        ` : ''}
-                      </div>
-                    </td>
-                  </tr>
+                  <div class="button-group" style="margin-top: 12px;">
+                    <button 
+                      onclick="card.pushCode(${user.slot})"
+                      style="${!user.synced_to_lock ? 'background: #ff9800; color: white; font-weight: bold;' : ''}"
+                    >${user.synced_to_lock ? 'Push' : 'Push Required'}</button>
+                  </div>
                 ` : ''}
-              `;
+              </div>
+            </td>
+          </tr>
+        ` : ''}
+      `;
     }).join('');
 
     return `
@@ -732,7 +728,6 @@ class YaleLockManagerCard extends HTMLElement {
               <th>Type</th>
               <th>Status</th>
               <th>Synced</th>
-              <th>Action</th>
             </tr>
           </thead>
           <tbody>
@@ -762,13 +757,25 @@ class YaleLockManagerCard extends HTMLElement {
     `;
   }
 
+  // ========== FOCUS TRACKING ==========
+
+  _handleFocus(fieldKey) {
+    this._focusedFields.add(fieldKey);
+  }
+
+  _handleBlur(fieldKey) {
+    // Small delay to allow save operations to complete
+    setTimeout(() => {
+      this._focusedFields.delete(fieldKey);
+    }, 100);
+  }
+
   // ========== EVENT HANDLING ==========
 
   attachEventListeners() {
-    // Make card globally accessible for onclick handlers
     window.card = this;
     
-    // Add event listeners to update status dropdown when name/PIN changes
+    // Update status dropdown when name/PIN changes
     if (this._expandedSlot) {
       const slot = this._expandedSlot;
       const nameField = this.shadowRoot.getElementById(`name-${slot}`);
@@ -784,7 +791,6 @@ class YaleLockManagerCard extends HTMLElement {
   }
   
   updateStatusOptions(slot) {
-    // Update status dropdown options based on whether there's data
     const nameField = this.shadowRoot.getElementById(`name-${slot}`);
     const codeField = this.shadowRoot.getElementById(`code-${slot}`);
     const lockCodeField = this.shadowRoot.getElementById(`lock-code-${slot}`);
@@ -798,19 +804,15 @@ class YaleLockManagerCard extends HTMLElement {
     const hasData = hasName || hasCode || hasLockCode;
     
     const currentValue = statusSelect.value;
-    
-    // Clear existing options
     statusSelect.innerHTML = '';
     
     if (!hasData) {
-      // No data - only show Available
       const option = document.createElement('option');
       option.value = '0';
       option.textContent = 'Available';
       option.selected = currentValue === '0';
       statusSelect.appendChild(option);
     } else {
-      // Has data - only show Enabled/Disabled
       const enabledOption = document.createElement('option');
       enabledOption.value = '1';
       enabledOption.textContent = 'Enabled';
@@ -823,11 +825,8 @@ class YaleLockManagerCard extends HTMLElement {
       disabledOption.selected = currentValue === '2';
       statusSelect.appendChild(disabledOption);
       
-      // If current value is Available but we have data, default to Enabled
-      // But don't trigger change event - just update UI silently
       if (currentValue === '0') {
         statusSelect.value = '1';
-        // Don't trigger change event - user will save when they click "Save User"
       }
     }
   }
@@ -836,9 +835,9 @@ class YaleLockManagerCard extends HTMLElement {
     const wasExpanded = this._expandedSlot === slot;
     this._expandedSlot = wasExpanded ? null : slot;
     
-    // Clear status message when collapsing slot
     if (wasExpanded) {
       this.clearStatus(slot);
+      this._focusedFields.clear(); // Clear focus tracking when collapsing
     }
     
     this.render();
@@ -847,38 +846,27 @@ class YaleLockManagerCard extends HTMLElement {
   changeType(slot, newType) {
     const codeField = this.shadowRoot.getElementById(`code-field-${slot}`);
     const fobNotice = this.shadowRoot.getElementById(`fob-notice-${slot}`);
-    const pinFeatures = this.shadowRoot.getElementById(`pin-features-${slot}`);
     
     if (newType === 'fob') {
       if (codeField) codeField.classList.add('hidden');
       if (fobNotice) fobNotice.classList.remove('hidden');
-      if (pinFeatures) pinFeatures.classList.add('hidden');
     } else {
       if (codeField) codeField.classList.remove('hidden');
       if (fobNotice) fobNotice.classList.add('hidden');
-      if (pinFeatures) pinFeatures.classList.remove('hidden');
     }
   }
 
   toggleSchedule(slot, checked) {
     const fields = this.shadowRoot.getElementById(`schedule-fields-${slot}`);
     if (fields) {
-      if (checked) {
-        fields.classList.remove('hidden');
-      } else {
-        fields.classList.add('hidden');
-      }
+      fields.classList.toggle('hidden', !checked);
     }
   }
 
   toggleLimit(slot, checked) {
     const fields = this.shadowRoot.getElementById(`limit-fields-${slot}`);
     if (fields) {
-      if (checked) {
-        fields.classList.remove('hidden');
-      } else {
-        fields.classList.add('hidden');
-      }
+      fields.classList.toggle('hidden', !checked);
     }
   }
 
@@ -896,109 +884,31 @@ class YaleLockManagerCard extends HTMLElement {
 
   async refresh() {
     try {
-      // Show progress message
       this.showStatus(0, '⏳ Refreshing codes from lock... This may take a moment.', 'info');
       this.render();
-      
-      // Save current form values before refresh
-      const savedValues = this._saveFormValues();
       
       await this._hass.callService('yale_lock_manager', 'pull_codes_from_lock', {
         entity_id: this._config.entity
       });
       
-      // Restore form values after refresh
-      this._restoreFormValues(savedValues);
-      
       this.showStatus(0, '✅ Refreshed from lock successfully!', 'success');
-      // Force a render after refresh to show updated data
       setTimeout(() => this.render(), 500);
     } catch (error) {
       this.showStatus(0, `❌ Refresh failed: ${error.message}`, 'error');
       this.render();
     }
   }
-  
-  _saveFormValues() {
-    // Save current form field values before re-render
-    const saved = {};
-    if (!this._expandedSlot || !this.shadowRoot) return saved;
-    
-    const slot = this._expandedSlot;
-    const fields = {
-      name: `name-${slot}`,
-      code: `code-${slot}`,
-      type: `type-${slot}`,
-      scheduleStart: `start-${slot}`,
-      scheduleEnd: `end-${slot}`,
-      usageLimit: `limit-${slot}`,
-      scheduleToggle: `schedule-toggle-${slot}`,
-      limitToggle: `limit-toggle-${slot}`
-    };
-    
-    for (const [key, id] of Object.entries(fields)) {
-      const element = this.shadowRoot.getElementById(id);
-      if (element) {
-        if (element.type === 'checkbox') {
-          saved[key] = element.checked;
-        } else {
-          saved[key] = element.value;
-        }
-      }
-    }
-    
-    return { slot, values: saved };
-  }
-  
-  _restoreFormValues(saved) {
-    // Restore form field values after re-render
-    if (!saved || !saved.slot || !this.shadowRoot) return;
-    
-    const slot = saved.slot;
-    const values = saved.values || {};
-    
-    // Wait a tick for DOM to be ready
-    setTimeout(() => {
-      const fields = {
-        name: `name-${slot}`,
-        code: `code-${slot}`,
-        type: `type-${slot}`,
-        cachedStatus: `cached-status-${slot}`,
-        scheduleStart: `start-${slot}`,
-        scheduleEnd: `end-${slot}`,
-        usageLimit: `limit-${slot}`,
-        scheduleToggle: `schedule-toggle-${slot}`,
-        limitToggle: `limit-toggle-${slot}`
-      };
-      
-      for (const [key, id] of Object.entries(fields)) {
-        const element = this.shadowRoot.getElementById(id);
-        if (element && values[key] !== undefined) {
-          if (element.type === 'checkbox') {
-            element.checked = values[key];
-            // Trigger change event to show/hide fields
-            element.dispatchEvent(new Event('change'));
-          } else {
-            element.value = values[key];
-          }
-        }
-      }
-    }, 0);
-  }
 
   async changeStatus(slot, statusValue) {
     const status = parseInt(statusValue, 10);
-    const statusNames = { 0: 'Available', 1: 'Enabled', 2: 'Disabled' };
     
     try {
-      // Call service to update backend
       await this._hass.callService('yale_lock_manager', 'set_user_status', {
         entity_id: this._config.entity,
         slot: parseInt(slot, 10),
         status: status
       });
       
-      // Refresh to show updated sync status
       setTimeout(() => this.render(), 300);
     } catch (error) {
       this.showStatus(slot, `Failed to set status: ${error.message}`, 'error');
@@ -1013,70 +923,68 @@ class YaleLockManagerCard extends HTMLElement {
       return;
     }
 
-    // Clear any existing status messages before showing push confirmation
     this.clearStatus(slot);
     
     this.showStatus(slot, `Push "${user.name}" to the lock now?`, 'confirm', async () => {
       try {
-        // Show progress message
         this.showStatus(slot, '⏳ Pushing code to lock...', 'info');
-        this.render();
+        this.renderStatusMessage(slot);
         
         await this._hass.callService('yale_lock_manager', 'push_code_to_lock', {
           entity_id: this._config.entity,
           slot: parseInt(slot, 10)
         });
         
-        // Show verification message
         this.showStatus(slot, '⏳ Verifying code was set...', 'info');
-        this.render();
+        this.renderStatusMessage(slot);
         
-        // After pushing, check sync status to verify it worked and update lock_code
         try {
           await this._hass.callService('yale_lock_manager', 'check_sync_status', {
             entity_id: this._config.entity,
             slot: parseInt(slot, 10)
           });
         } catch (syncError) {
-          _LOGGER.warn('Failed to check sync status after push: %s', syncError);
+          console.warn('Failed to check sync status after push:', syncError);
         }
         
-        // Show success message (will persist until slot is collapsed)
         this.showStatus(slot, '✅ Code pushed successfully!', 'success');
-        setTimeout(() => this.render(), 1000);
+        setTimeout(() => {
+          this._pendingSave = false;
+          this.render();
+        }, 1000);
       } catch (error) {
         this.showStatus(slot, `❌ Push failed: ${error.message}`, 'error');
+        this._pendingSave = false;
         this.render();
       }
     });
   }
 
   async saveUser(slot) {
+    // Clear focus tracking - we're saving, so entity state will update fields
+    this._focusedFields.clear();
+    this._pendingSave = true;
+    
     const name = this.shadowRoot.getElementById(`name-${slot}`).value.trim();
     const codeType = this.shadowRoot.getElementById(`type-${slot}`).value;
     const code = codeType === 'pin' ? (this.shadowRoot.getElementById(`code-${slot}`)?.value.trim() || '') : '';
+    const cachedStatus = parseInt(this.shadowRoot.getElementById(`cached-status-${slot}`)?.value || '0', 10);
 
-    // Validation - always required
+    // Validation
     if (!name) {
       this.showStatus(slot, 'Please enter a user name', 'error');
+      this._pendingSave = false;
       return;
     }
 
     if (codeType === 'pin' && (!code || code.length < 4)) {
       this.showStatus(slot, 'PIN must be at least 4 digits', 'error');
+      this._pendingSave = false;
       return;
     }
 
     try {
-      // Set flag to skip form restoration during save - we want entity state to update fields
-      this._skipFormRestore = true;
-      
-      // Show progress message (update status without full render to avoid form restore)
       this.showStatus(slot, '⏳ Saving user data...', 'info');
-      this.renderStatusMessage(slot);
-      
-      // Set user code
-      this.showStatus(slot, '⏳ Querying lock for current PIN...', 'info');
       this.renderStatusMessage(slot);
       
       await this._hass.callService('yale_lock_manager', 'set_user_code', {
@@ -1085,59 +993,47 @@ class YaleLockManagerCard extends HTMLElement {
         name: name,
         code: code,
         code_type: codeType,
-        override_protection: false
+        override_protection: false,
+        status: cachedStatus
       });
 
-      // Save schedule for both PINs and FOBs
+      // Save schedule
       const scheduleToggle = this.shadowRoot.getElementById(`schedule-toggle-${slot}`);
       const startInput = this.shadowRoot.getElementById(`start-${slot}`);
       const endInput = this.shadowRoot.getElementById(`end-${slot}`);
       
-      // Determine schedule values
-      // If toggle is unchecked, always clear (send null)
-      // If toggle is checked but fields are empty, also clear (send null)
       let start = null;
       let end = null;
       
       if (scheduleToggle?.checked) {
-        // Toggle is on - check if dates are provided
         const startVal = startInput?.value?.trim() || '';
         const endVal = endInput?.value?.trim() || '';
         
-        // Only set dates if both fields have values
-        // If either is empty, clear both (null)
         if (startVal && endVal) {
           start = startVal;
           end = endVal;
-        } else {
-          // At least one field is empty - clear the schedule
-          start = null;
-          end = null;
         }
-      } else {
-        // Toggle is off - always clear schedule
-        start = null;
-        end = null;
       }
       
-      // Validate dates if provided
       if (start && end) {
         const now = new Date();
         if (new Date(start) < now) {
           this.showStatus(slot, 'Start date must be in the future', 'error');
+          this._pendingSave = false;
           return;
         }
         if (new Date(end) < now) {
           this.showStatus(slot, 'End date must be in the future', 'error');
+          this._pendingSave = false;
           return;
         }
         if (new Date(end) <= new Date(start)) {
           this.showStatus(slot, 'End date must be after start date', 'error');
+          this._pendingSave = false;
           return;
         }
       }
 
-      // Always send schedule service call (null clears it) - for both PINs and FOBs
       await this._hass.callService('yale_lock_manager', 'set_user_schedule', {
         entity_id: this._config.entity,
         slot: parseInt(slot, 10),
@@ -1145,14 +1041,13 @@ class YaleLockManagerCard extends HTMLElement {
         end_datetime: end
       });
 
-      // For PINs only, save usage limit if enabled
+      // Save usage limit (PINs only)
       if (codeType === 'pin') {
         const limitToggle = this.shadowRoot.getElementById(`limit-toggle-${slot}`);
         const limitInput = this.shadowRoot.getElementById(`limit-${slot}`);
         
         const limit = (limitToggle?.checked && limitInput?.value) ? parseInt(limitInput.value, 10) : null;
         
-        // Send usage limit (null clears it)
         await this._hass.callService('yale_lock_manager', 'set_usage_limit', {
           entity_id: this._config.entity,
           slot: parseInt(slot, 10),
@@ -1160,8 +1055,7 @@ class YaleLockManagerCard extends HTMLElement {
         });
       }
 
-      // After saving, check sync status by querying the lock (only for PINs)
-      // FOBs are added directly to the lock, so no sync check needed
+      // Check sync status (PINs only)
       if (codeType === 'pin') {
         try {
           this.showStatus(slot, '⏳ Checking sync status...', 'info');
@@ -1172,26 +1066,21 @@ class YaleLockManagerCard extends HTMLElement {
             slot: parseInt(slot, 10)
           });
         } catch (syncError) {
-          _LOGGER.warn('Failed to check sync status: %s', syncError);
-          // Don't fail the save operation if sync check fails
+          console.warn('Failed to check sync status:', syncError);
         }
       }
 
-      // Show success message (will persist until slot is collapsed or Push is clicked)
       this.showStatus(slot, '✅ User saved successfully!', 'success');
       
-      // Wait for entity state to update, then render once with updated data
-      // The entity state will have the new cached values, and since _skipFormRestore is true,
-      // we won't restore old form values
+      // Wait for entity state to update, then render once
       setTimeout(() => {
-        // Full render - entity state should now have updated values
-        // _skipFormRestore is still true, so form values won't be restored
+        this._pendingSave = false;
         this.render();
-        // Reset flag after render completes
-        this._skipFormRestore = false;
       }, 1500);
       
     } catch (error) {
+      this._pendingSave = false;
+      
       if (error.message && error.message.includes('occupied by an unknown code')) {
         this.showStatus(slot, 'Slot contains an unknown code. Overwrite it?', 'confirm', async () => {
           try {
@@ -1201,17 +1090,17 @@ class YaleLockManagerCard extends HTMLElement {
               name: name,
               code: code,
               code_type: codeType,
-              override_protection: true
+              override_protection: true,
+              status: cachedStatus
             });
             
-            // After saving with override, check sync status
             try {
               await this._hass.callService('yale_lock_manager', 'check_sync_status', {
                 entity_id: this._config.entity,
                 slot: parseInt(slot, 10)
               });
             } catch (syncError) {
-              _LOGGER.warn('Failed to check sync status: %s', syncError);
+              console.warn('Failed to check sync status:', syncError);
             }
             
             setTimeout(() => this.render(), 500);
@@ -1221,6 +1110,7 @@ class YaleLockManagerCard extends HTMLElement {
         });
       } else {
         this.showStatus(slot, `Failed: ${error.message}`, 'error');
+        this.render();
       }
     }
   }
@@ -1249,6 +1139,7 @@ class YaleLockManagerCard extends HTMLElement {
           slot: parseInt(slot, 10)
         });
         this.showStatus(slot, 'Counter reset', 'success');
+        setTimeout(() => this.render(), 500);
       } catch (error) {
         this.showStatus(slot, `Reset failed: ${error.message}`, 'error');
       }
