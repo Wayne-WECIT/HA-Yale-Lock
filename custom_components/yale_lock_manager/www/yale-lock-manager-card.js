@@ -91,13 +91,8 @@ class YaleLockManagerCard extends HTMLElement {
     this._statusMessages[slot] = { message, type, confirmAction };
     this.renderStatusMessage(slot);
     
-    // Auto-clear success messages
-    if (type === 'success') {
-      setTimeout(() => {
-        delete this._statusMessages[slot];
-        this.renderStatusMessage(slot);
-      }, 3000);
-    }
+    // Don't auto-clear messages - they persist until slot is collapsed or user interacts
+    // Messages will stay visible for user feedback
   }
 
   clearStatus(slot) {
@@ -482,13 +477,6 @@ class YaleLockManagerCard extends HTMLElement {
             ">${statusText}</span>
                   </td>
           <td>${user.synced_to_lock ? '✓' : '⚠️'}</td>
-          <td>
-            ${!isFob ? `
-            <button 
-              onclick="event.stopPropagation(); card.pushCode(${user.slot})"
-              style="${!user.synced_to_lock ? 'background: #ff9800; color: white; font-weight: bold;' : ''}"
-            >${user.synced_to_lock ? 'Push' : 'Push Required'}</button>
-            ` : '<span style="color: var(--secondary-text-color); font-size: 0.85em;">N/A</span>'}
                   </td>
                 </tr>
                 ${isExpanded ? `
@@ -698,6 +686,14 @@ class YaleLockManagerCard extends HTMLElement {
                     <button class="secondary" onclick="card.clearSlot(${user.slot})">Clear Slot</button>
                   ` : ''}
                 </div>
+                ${!isFob ? `
+                <div class="button-group" style="margin-top: 12px;">
+                  <button 
+                    onclick="card.pushCode(${user.slot})"
+                    style="${!user.synced_to_lock ? 'background: #ff9800; color: white; font-weight: bold;' : ''}"
+                  >${user.synced_to_lock ? 'Push' : 'Push Required'}</button>
+                </div>
+                ` : ''}
                       </div>
                     </td>
                   </tr>
@@ -834,7 +830,14 @@ class YaleLockManagerCard extends HTMLElement {
   }
 
   toggleExpand(slot) {
-    this._expandedSlot = this._expandedSlot === slot ? null : slot;
+    const wasExpanded = this._expandedSlot === slot;
+    this._expandedSlot = wasExpanded ? null : slot;
+    
+    // Clear status message when collapsing slot
+    if (wasExpanded) {
+      this.clearStatus(slot);
+    }
+    
     this.render();
   }
 
@@ -1032,7 +1035,7 @@ class YaleLockManagerCard extends HTMLElement {
           _LOGGER.warn('Failed to check sync status after push: %s', syncError);
         }
         
-        // Show success message
+        // Show success message (will persist until slot is collapsed)
         this.showStatus(slot, '✅ Code pushed successfully!', 'success');
         setTimeout(() => this.render(), 1000);
       } catch (error) {
@@ -1164,7 +1167,7 @@ class YaleLockManagerCard extends HTMLElement {
         }
       }
 
-      // Show success message
+      // Show success message (will persist until slot is collapsed or Push is clicked)
       this.showStatus(slot, '✅ User saved successfully!', 'success');
       
       // Render will be triggered by the refresh from check_sync_status
