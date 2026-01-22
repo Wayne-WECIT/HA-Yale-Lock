@@ -27,7 +27,40 @@ class YaleLockManagerPanel extends HTMLElement {
     if (!this._config?.entity) {
       this._findLockEntity();
     } else if (hass?.states[this._config.entity]) {
-      this.render();
+      // CRITICAL: Don't re-render if a slot is expanded (preserves user input)
+      if (this._expandedSlot === null) {
+        this.render();
+      } else {
+        // Slot is expanded - only update non-editable parts
+        this._updateNonEditableParts();
+      }
+    }
+  }
+  
+  _updateNonEditableParts() {
+    // Update only non-editable parts when slot is expanded
+    if (!this._hass || !this._config?.entity) return;
+    
+    const stateObj = this._hass.states[this._config.entity];
+    if (!stateObj) return;
+    
+    const users = this.getUserData();
+    
+    // Update lock fields (read-only) in expanded slot
+    if (this._expandedSlot) {
+      const user = users.find(u => u.slot === this._expandedSlot);
+      if (user) {
+        const lockCodeField = this.querySelector(`#lock-code-${this._expandedSlot}`);
+        const lockStatusField = this.querySelector(`#lock-status-${this._expandedSlot}`);
+        
+        if (lockCodeField) {
+          lockCodeField.value = user.lock_code || '';
+        }
+        if (lockStatusField) {
+          const lockStatus = user.lock_status_from_lock ?? user.lock_status;
+          lockStatusField.value = lockStatus !== null && lockStatus !== undefined ? lockStatus.toString() : '0';
+        }
+      }
     }
   }
 

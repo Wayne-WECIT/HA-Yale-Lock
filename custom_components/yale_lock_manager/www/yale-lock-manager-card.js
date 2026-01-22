@@ -30,9 +30,115 @@ class YaleLockManagerCard extends HTMLElement {
   }
 
   set hass(hass) {
+    const oldHass = this._hass;
     this._hass = hass;
-    // Always render - form fields read from _formValues, not entity state
-    this.render();
+    
+    // CRITICAL: Don't re-render if a slot is expanded (preserves user input)
+    // Only update if entity state actually changed and no slot is expanded
+    if (this._expandedSlot === null) {
+      // No slot expanded - safe to render
+      this.render();
+    } else {
+      // Slot is expanded - only update non-editable parts (status messages, lock fields)
+      this._updateNonEditableParts();
+    }
+  }
+  
+  _updateNonEditableParts() {
+    // Update only non-editable parts when slot is expanded
+    // This preserves form field values while updating lock status, sync status, etc.
+    if (!this._hass || !this._config) return;
+    
+    const stateObj = this._hass.states[this._config.entity];
+    if (!stateObj) return;
+    
+    const users = this.getUserData();
+    
+    // Update sync status indicators in table
+    users.forEach(user => {
+      const syncCell = this.shadowRoot?.querySelector(`#sync-${user.slot}`);
+      if (syncCell) {
+        syncCell.textContent = user.synced_to_lock ? '✓' : '⚠️';
+      }
+      
+      // Update status badge
+      const statusCell = this.shadowRoot?.querySelector(`#status-badge-${user.slot}`);
+      if (statusCell) {
+        const getStatusText = (status, lockEnabled, enabled) => {
+          if (status !== null && status !== undefined) {
+            if (status === 0) return 'Available';
+            if (status === 1) return 'Enabled';
+            if (status === 2) return 'Disabled';
+          }
+          if (lockEnabled !== null && lockEnabled !== undefined) {
+            return lockEnabled ? 'Enabled' : 'Disabled';
+          }
+          if (enabled !== null && enabled !== undefined) {
+            return enabled ? 'Enabled' : 'Disabled';
+          }
+          return 'Unknown';
+        };
+        
+        const getStatusColor = (status, lockEnabled, enabled) => {
+          if (status !== null && status !== undefined) {
+            if (status === 0) return '#9e9e9e';
+            if (status === 1) return '#4caf50';
+            if (status === 2) return '#f44336';
+          }
+          if (lockEnabled !== null && lockEnabled !== undefined || enabled !== null && enabled !== undefined) {
+            const isEnabled = lockEnabled !== null && lockEnabled !== undefined ? lockEnabled : enabled;
+            return isEnabled ? '#4caf50' : '#f44336';
+          }
+          return '#9e9e9e';
+        };
+        
+        const statusText = getStatusText(user.lock_status, user.lock_enabled, user.enabled);
+        const statusColor = getStatusColor(user.lock_status, user.lock_enabled, user.enabled);
+        
+        statusCell.innerHTML = `
+          <span style="
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            background: ${statusColor}20;
+            color: ${statusColor};
+            font-weight: 500;
+            font-size: 0.85em;
+          ">${statusText}</span>
+        `;
+      }
+      
+      // Update lock fields (read-only) in expanded slot
+      if (this._expandedSlot === user.slot) {
+        const lockCodeField = this.shadowRoot?.querySelector(`#lock-code-${user.slot}`);
+        const lockStatusField = this.shadowRoot?.querySelector(`#lock-status-${user.slot}`);
+        
+        if (lockCodeField) {
+          lockCodeField.value = user.lock_code || '';
+        }
+        if (lockStatusField) {
+          const lockStatus = user.lock_status_from_lock ?? user.lock_status;
+          lockStatusField.value = lockStatus !== null && lockStatus !== undefined ? lockStatus.toString() : '0';
+        }
+      }
+    });
+    
+    // Update header info (battery, door status, etc.)
+    const batteryLevel = stateObj.attributes.battery_level || 0;
+    const doorStatus = stateObj.attributes.door_status || 'unknown';
+    const boltStatus = stateObj.attributes.bolt_status || 'unknown';
+    const totalUsers = stateObj.attributes.total_users || 0;
+    const enabledUsers = stateObj.attributes.enabled_users || 0;
+    
+    const batteryInfo = this.shadowRoot?.querySelector('.status-line');
+    if (batteryInfo) {
+      batteryInfo.textContent = `🔋 ${batteryLevel}% Battery • Bolt: ${boltStatus} • Door: ${doorStatus}`;
+    }
+    
+    const userCount = this.shadowRoot?.querySelector('.user-count');
+    if (userCount) {
+      userCount.textContent = `👥 ${enabledUsers} / ${totalUsers} active users`;
+    }
   }
 
   _getFormValue(slot, field, defaultValue) {
@@ -462,7 +568,7 @@ class YaleLockManagerCard extends HTMLElement {
           <td>${user.name || `User ${user.slot}`}</td>
           <td>${isFob ? '🏷️' : '🔑'}</td>
           <td>
-            <span style="
+            <span id="status-badge-${user.slot}" style="
               display: inline-block;
               padding: 4px 8px;
               border-radius: 4px;
@@ -734,7 +840,7 @@ class YaleLockManagerCard extends HTMLElement {
         </div>
         
         <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-          <span>👥 ${enabledUsers} / ${totalUsers} active users</span>
+          <span class="user-count">👥 ${enabledUsers} / ${totalUsers} active users</span>
         </div>
 
         <table>
