@@ -20,6 +20,338 @@ Use `lock.smart_door_lock_manager` for the Lovelace card!
 
 ---
 
+## [1.8.2.31] - 2026-01-22
+
+### ⚡ Performance - Immediate Save Without Lock Query
+
+**User feedback**: "the status and pin should not be stored until save/update is clicked. the save should be immediate as there is not need to call the lock for a sync check as you have the current lock pin stored."
+
+### The Issue
+
+1. **Unnecessary lock queries**: Save operation was querying the lock for current PIN/status even though we already had it stored
+2. **Slow save operations**: Lock queries added delay to save operations
+3. **Status/PIN not persisted until save**: User expected changes to only be saved when clicking "Save/Update User"
+
+### The Solution
+
+**Immediate Save Without Lock Query**:
+- Removed lock query from `async_set_user_code()` - save is now immediate
+- Compare new cached PIN/status with stored `lock_code`/`lock_status_from_lock` values
+- Update `synced_to_lock` based on comparison (no need to query lock)
+- Show "Push required" message if cached values differ from lock values
+
+**After Push - Pull from Lock**:
+- After pushing code to lock, pull slot data from lock using `_get_user_code_data()`
+- Update `lock_code` and `lock_status_from_lock` with pulled values
+- Recalculate sync status after pull
+- UI refreshes to show updated lock fields
+
+### Changed
+
+- **Backend (`coordinator.py`)**:
+  - Removed lock query from `async_set_user_code()` - uses existing `lock_code`/`lock_status_from_lock` from storage
+  - Modified sync calculation to compare cached values with stored lock values
+  - Modified `async_push_code_to_lock()` to recalculate sync status after pulling lock data
+
+- **Frontend (`yale-lock-manager-card.js`)**:
+  - Removed `check_sync_status` call from `saveUser()` - save is immediate
+  - Added comparison logic after save to check if push is needed
+  - Show "Push required" warning if sync is needed
+  - After push, wait for entity state update then refresh UI
+
+### What's Fixed
+
+- ✅ Save operations are now immediate (no lock query delay)
+- ✅ Status and PIN are only stored when "Save/Update User" is clicked
+- ✅ Sync status is calculated by comparing with stored lock values (no query needed)
+- ✅ After push, lock fields are updated with pulled data and sync is recalculated
+- ✅ Better user feedback - shows "Push required" immediately after save if needed
+
+---
+
+## [1.8.2.30] - 2026-01-22
+
+### 🔄 Complete Rebuild - Simple, Logical Approach
+
+**User feedback**: "your rebuild of the JS is worse than the one it replaced!!!!!!!!!!!!!!!!!!!!!!!!!!"
+
+### The Issue
+
+The previous rebuild with focus tracking was overly complex and still had issues with form fields reverting.
+
+### The Solution
+
+**Complete rebuild with simple, logical rules**:
+
+1. **When slot is expanded/being edited** → NO refreshes of editable fields
+   - `_editingSlots` Set tracks which slots are being edited
+   - When `set hass()` is called, if slot is in `_editingSlots`, only message area updates
+
+2. **When save is clicked** → NO refresh of editable fields, only update message area
+   - Slot stays in `_editingSlots` during save
+   - Only `renderStatusMessage()` is called to show progress
+   - Editable fields remain untouched
+
+3. **After confirmed save** → refresh editable fields from entity state
+   - Remove slot from `_editingSlots`
+   - Add slot to `_savedSlots`
+   - After entity state updates, `_refreshEditableFields()` updates editable fields
+   - Compare cached vs lock fields and update sync status
+
+4. **After push** → verify push, update lock fields
+   - Verify push succeeded via `check_sync_status`
+   - Update lock PIN/status fields from entity state
+   - Update sync status accordingly
+
+### Changed
+
+- **Frontend (`yale-lock-manager-card.js`)**:
+  - Complete rewrite with simple state management
+  - Removed: focus tracking, pending save flags, complex form preservation
+  - Added: `_editingSlots` and `_savedSlots` Sets for simple state management
+  - Message area updates independently via `renderStatusMessage()`
+  - Editable fields only refresh after confirmed save or push
+
+### What's Fixed
+
+- ✅ Simple, logical flow that's easy to understand and maintain
+- ✅ Editable fields don't refresh during editing
+- ✅ Editable fields refresh after save with updated entity state
+- ✅ Message area updates independently without touching editable fields
+
+---
+
+## [1.8.2.29] - 2026-01-22
+
+### 🐛 Bug Fix - Cached PIN Reverting After Save
+
+**User feedback**: "i change the pin clicked update user once it confimed all save it revertect back to the original cached pin again"
+
+### The Issue
+
+Cached PIN was reverting to old value after save because focus was cleared too early, before entity state updated.
+
+### The Solution
+
+**Save Form Values Before Clearing Focus**:
+- Save current form values before clearing focus
+- After save completes, explicitly update form fields with saved values
+- Clear focus only after form fields are updated
+- Then render to show updated entity state
+
+### Changed
+
+- **Frontend (`yale-lock-manager-card.js`)**:
+  - Modified `saveUser()` to save form values before clearing focus
+  - Explicitly update form fields with saved values after save completes
+  - Clear focus only after form fields are updated
+
+### What's Fixed
+
+- ✅ Cached PIN now persists after save
+- ✅ All cached fields (name, PIN, status, type) now persist after save
+
+---
+
+## [1.8.2.28] - 2026-01-22
+
+### 🐛 Bug Fix - Status Parameter and Refresh on Status Change
+
+**User feedback**: "Failed to perform the action yale_lock_manager/set_user_code. extra keys not allowed @ data['status']" and "when trying to change enabled to disabled it refreshed the slot data"
+
+### The Issue
+
+1. **Status parameter error**: Frontend was sending `status` parameter but backend schema didn't accept it
+2. **Refresh on status change**: Changing status dropdown was triggering full refresh, clearing form fields
+
+### The Solution
+
+**Added Status Parameter to Service Schema**:
+- Added `status` as optional parameter to `SET_USER_CODE_SCHEMA`
+- Updated `handle_set_user_code()` to extract and pass status
+- Updated `async_set_user_code()` in coordinator to accept and use status parameter
+
+**Fixed Refresh on Status Change**:
+- Removed `setTimeout(() => this.render(), 300)` from `changeStatus()`
+- Status changes now show brief success message without triggering full render
+- Entity state updates naturally, and `set hass()` handles rendering only if no fields have focus
+
+### Changed
+
+- **Backend (`services.py`, `coordinator.py`)**:
+  - Added `status` parameter to `SET_USER_CODE_SCHEMA`
+  - Updated `async_set_user_code()` to accept `status` parameter
+  - Status is used when provided, otherwise preserves existing or defaults to Available
+
+- **Frontend (`yale-lock-manager-card.js`)**:
+  - Modified `changeStatus()` to not trigger full render
+  - Status changes show brief success message without clearing form fields
+
+### What's Fixed
+
+- ✅ Status parameter is now accepted by service schema
+- ✅ Status dropdown changes no longer refresh/clear form fields
+- ✅ Status changes update via entity state naturally
+
+---
+
+## [1.8.2.27] - 2026-01-22
+
+### 🔄 Complete Rebuild - Entity State as Single Source of Truth
+
+**User feedback**: "it is still doing the same thing. do you need to rebuild the code for the card? has it been become to complicate das we keep addign thisng?"
+
+### The Issue
+
+Form preservation logic had become too complex with accumulated workarounds, making it hard to debug and maintain.
+
+### The Solution
+
+**Complete rebuild with clean architecture**:
+- Entity state is single source of truth for form fields
+- Simple focus-based form preservation (only when user is actively editing)
+- Removed complex form restoration logic
+- Clean render cycle with `_pendingSave` flag
+
+### Changed
+
+- **Frontend (`yale-lock-manager-card.js`)**:
+  - Complete rewrite with simplified architecture
+  - Removed: `_skipFormRestore`, `_isFormBeingEdited()`, complex form restoration
+  - Added: Simple focus tracking via `onfocus`/`onblur` handlers
+  - Form fields read from entity state by default
+  - Only preserve values when field has focus
+
+### What's Fixed
+
+- ✅ Cleaner, simpler codebase that's easier to maintain
+- ✅ Form fields reflect entity state by default
+- ✅ Form preservation only when user is actively editing
+
+---
+
+## [1.8.2.26] - 2026-01-22
+
+### 🐛 Bug Fix - Simplify Form Preservation During Save
+
+**User feedback**: "it is still doing the same thing. do you need to rebuild the code for the card?"
+
+### The Issue
+
+Cached fields were still reverting to old values after save despite previous fixes.
+
+### The Solution
+
+**Simplified Form Preservation**:
+- Set `_skipFormRestore = true` at the beginning of `saveUser()`
+- Removed intermediate `render()` calls during save process
+- Use only `renderStatusMessage()` for immediate feedback
+- Single `render()` call at end of `saveUser()` after entity state updates
+
+### Changed
+
+- **Frontend (`yale-lock-manager-card.js`)**:
+  - Modified `saveUser()` to set `_skipFormRestore = true` at start
+  - Removed intermediate `render()` calls during save
+  - Single `render()` call at end after entity state updates
+
+### What's Fixed
+
+- ✅ Simplified rendering flow during save operations
+- ✅ Form fields should now reflect new values after save
+
+---
+
+## [1.8.2.25] - 2026-01-22
+
+### 🐛 Bug Fix - Apply Form Preservation to All Cached Fields
+
+**User feedback**: "have you done this for the other cached fields too?"
+
+### The Issue
+
+Form preservation fix was only applied to cached PIN, not other cached fields (name, type, status).
+
+### The Solution
+
+**Extended Form Preservation to All Cached Fields**:
+- Extended `_skipFormRestore` logic to update all cached fields from `updatedUser` object
+- Updates `name`, `code`, `type`, and `cachedStatus` after successful save
+
+### Changed
+
+- **Frontend (`yale-lock-manager-card.js`)**:
+  - Extended form preservation to update all cached fields after save
+  - Ensures all fields reflect new values after save
+
+### What's Fixed
+
+- ✅ All cached fields (name, PIN, type, status) now persist after save
+
+---
+
+## [1.8.2.24] - 2026-01-22
+
+### 🐛 Bug Fix - Cached PIN Reverting After Save
+
+**User feedback**: "the pin showed as - 23432446 again!!!!!!!" (after updating to 23432448 and clicking update user)
+
+### The Issue
+
+Cached PIN was reverting to old value after save because form restoration was overwriting the newly saved value.
+
+### The Solution
+
+**Skip Form Restoration After Save**:
+- Introduced `_skipFormRestore` flag
+- After successful `saveUser()`, set flag to `true` to prevent form restoration
+- Explicitly update `codeField.value` with `updatedUser.code` after save
+
+### Changed
+
+- **Frontend (`yale-lock-manager-card.js`)**:
+  - Added `_skipFormRestore` flag
+  - Modified `saveUser()` to set flag after successful save
+  - Modified `render()` to skip form restoration when flag is set
+  - Explicitly update cached PIN field with new value after save
+
+### What's Fixed
+
+- ✅ Cached PIN now persists after save instead of reverting to old value
+
+---
+
+## [1.8.2.23] - 2026-01-22
+
+### 🐛 Bug Fix - Cached PIN Reverting After Save
+
+**User feedback**: "the pin showed as - 23432446 again!!!!!!!" (after updating to 23432448 and clicking update user)
+
+### The Issue
+
+Cached PIN was reverting to old value after save because form restoration was overwriting the newly saved value.
+
+### The Solution
+
+**Skip Form Restoration After Save**:
+- Introduced `_skipFormRestore` flag
+- After successful `saveUser()`, set flag to `true` to prevent form restoration
+- Explicitly update `codeField.value` with `updatedUser.code` after save
+
+### Changed
+
+- **Frontend (`yale-lock-manager-card.js`)**:
+  - Added `_skipFormRestore` flag
+  - Modified `saveUser()` to set flag after successful save
+  - Modified `render()` to skip form restoration when flag is set
+  - Explicitly update cached PIN field with new value after save
+
+### What's Fixed
+
+- ✅ Cached PIN now persists after save instead of reverting to old value
+
+---
+
 ## [1.8.2.22] - 2026-01-22
 
 ### 🎨 UI/UX - Move Push Button to Settings & Persistent Status Messages
