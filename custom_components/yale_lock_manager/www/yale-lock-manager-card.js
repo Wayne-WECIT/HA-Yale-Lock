@@ -917,14 +917,19 @@ class YaleLockManagerCard extends HTMLElement {
     const name = this.shadowRoot.getElementById(`name-${slot}`).value.trim();
     const codeType = this.shadowRoot.getElementById(`type-${slot}`).value;
     const code = codeType === 'pin' ? (this.shadowRoot.getElementById(`code-${slot}`)?.value.trim() || '') : '';
+    
+    // Get current cached status from dropdown
+    const cachedStatusSelect = this.shadowRoot.getElementById(`cached-status-${slot}`);
+    const cachedStatus = cachedStatusSelect ? parseInt(cachedStatusSelect.value, 10) : null;
+    const isDisabled = cachedStatus === 2; // USER_STATUS_DISABLED = 2
 
-    // Validation
-    if (!name) {
+    // Validation - skip name/PIN validation if status is Disabled
+    if (!isDisabled && !name) {
       this.showStatus(slot, 'Please enter a user name', 'error');
       return;
     }
 
-    if (codeType === 'pin' && (!code || code.length < 4)) {
+    if (!isDisabled && codeType === 'pin' && (!code || code.length < 4)) {
       this.showStatus(slot, 'PIN must be at least 4 digits', 'error');
       return;
     }

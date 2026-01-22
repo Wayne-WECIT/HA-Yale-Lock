@@ -654,15 +654,23 @@ class YaleLockCoordinator(DataUpdateCoordinator):
         if slot < 1 or slot > MAX_USER_SLOTS:
             raise ValueError(f"Slot must be between 1 and {MAX_USER_SLOTS}")
 
+        # Get cached status to determine if validation is needed
+        existing_user = self._user_data["users"].get(str(slot))
+        cached_status = existing_user.get("lock_status", USER_STATUS_AVAILABLE) if existing_user else USER_STATUS_AVAILABLE
+        is_disabled = cached_status == USER_STATUS_DISABLED
+        
         # For FOBs, code can be empty or short
         if code_type == CODE_TYPE_FOB:
             # FOBs don't need a PIN code, use placeholder
             if not code or len(code) < 4:
                 code = "00000000"  # 8-digit placeholder for FOBs
         else:
-            # For PINs, validate code length
-            if not code or len(code) < 4:
+            # For PINs, validate code length (unless status is Disabled)
+            if not is_disabled and (not code or len(code) < 4):
                 raise ValueError("PIN code must be at least 4 digits")
+            # If disabled, allow empty code
+            if is_disabled and (not code or len(code) < 4):
+                code = ""  # Empty code for disabled slots
 
         # Check if slot exists in local storage
         existing_user = self._user_data["users"].get(str(slot))
