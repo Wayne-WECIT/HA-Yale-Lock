@@ -255,41 +255,60 @@ class YaleLockCoordinator(DataUpdateCoordinator):
 
             # Get lock state
             lock_state = self.hass.states.get(self.lock_entity_id)
+            _LOGGER.debug("Lock entity %s state: %s", self.lock_entity_id, lock_state)
+            
             if lock_state:
                 data["lock_state"] = lock_state.state
                 data["lock_attributes"] = dict(lock_state.attributes)
+                
+                _LOGGER.debug("Lock attributes: %s", lock_state.attributes)
                 
                 # Try to get door/bolt/battery from lock attributes first
                 data["door_status"] = lock_state.attributes.get("door_status")
                 data["bolt_status"] = lock_state.attributes.get("bolt_status")
                 data["battery_level"] = lock_state.attributes.get("battery_level")
+                
+                _LOGGER.debug("From lock attributes - door: %s, bolt: %s, battery: %s",
+                             data.get("door_status"), data.get("bolt_status"), data.get("battery_level"))
 
             # If not in attributes, try to find related Z-Wave entities
+            base_name = self.lock_entity_id.split('.')[1]
+            _LOGGER.debug("Looking for entities with base name: %s", base_name)
+            
             # Find battery sensor
-            battery_entity = f"sensor.{self.lock_entity_id.split('.')[1]}_battery"
+            battery_entity = f"sensor.{base_name}_battery"
             battery_state = self.hass.states.get(battery_entity)
+            _LOGGER.debug("Battery entity %s: %s", battery_entity, battery_state)
+            
             if battery_state and battery_state.state not in ("unknown", "unavailable"):
                 try:
                     data["battery_level"] = int(float(battery_state.state))
-                except (ValueError, TypeError):
-                    pass
+                    _LOGGER.debug("Got battery from sensor: %s", data["battery_level"])
+                except (ValueError, TypeError) as err:
+                    _LOGGER.debug("Could not parse battery value: %s", err)
 
             # Find door binary sensor
-            door_entity = f"binary_sensor.{self.lock_entity_id.split('.')[1]}_door"
+            door_entity = f"binary_sensor.{base_name}_door"
             door_state = self.hass.states.get(door_entity)
+            _LOGGER.debug("Door entity %s: %s", door_entity, door_state)
+            
             if door_state and door_state.state not in ("unknown", "unavailable"):
                 data["door_status"] = "open" if door_state.state == "on" else "closed"
+                _LOGGER.debug("Got door status from binary_sensor: %s", data["door_status"])
 
             # Find bolt binary sensor  
-            bolt_entity = f"binary_sensor.{self.lock_entity_id.split('.')[1]}_bolt"
+            bolt_entity = f"binary_sensor.{base_name}_bolt"
             bolt_state = self.hass.states.get(bolt_entity)
+            _LOGGER.debug("Bolt entity %s: %s", bolt_entity, bolt_state)
+            
             if bolt_state and bolt_state.state not in ("unknown", "unavailable"):
                 data["bolt_status"] = "locked" if bolt_state.state == "on" else "unlocked"
+                _LOGGER.debug("Got bolt status from binary_sensor: %s", data["bolt_status"])
 
             # Get user codes status (we'll query them periodically)
             data["user_codes"] = await self._get_all_user_codes()
 
-            _LOGGER.debug("Coordinator data updated: %s", data)
+            _LOGGER.info("Coordinator data updated: %s", data)
             return data
 
         except Exception as err:

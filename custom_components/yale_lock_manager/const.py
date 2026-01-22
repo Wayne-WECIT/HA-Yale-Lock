@@ -2,7 +2,7 @@
 from typing import Final
 
 DOMAIN: Final = "yale_lock_manager"
-VERSION: Final = "1.0.1.3"
+VERSION: Final = "1.0.1.4"
 
 # Configuration
 CONF_LOCK_NODE_ID: Final = "lock_node_id"
