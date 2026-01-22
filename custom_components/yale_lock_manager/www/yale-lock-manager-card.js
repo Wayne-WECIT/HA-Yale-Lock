@@ -943,40 +943,19 @@ class YaleLockManagerCard extends HTMLElement {
           slot: parseInt(slot, 10)
         });
         
-        this.showStatus(slot, '⏳ Verifying code was set...', 'info');
+        this.showStatus(slot, '⏳ Pulling data from lock...', 'info');
         this.renderStatusMessage(slot);
         
-        // Step 5: Verify push succeeded by checking status and PIN
-        try {
-          await this._hass.callService('yale_lock_manager', 'check_sync_status', {
-            entity_id: this._config.entity,
-            slot: parseInt(slot, 10)
-          });
-        } catch (syncError) {
-          console.warn('Failed to check sync status after push:', syncError);
-        }
-        
-        // Update lock fields and sync status
+        // After push, pull slot data from lock to update lock fields
+        // The push function already does this, but we need to wait for entity state to update
         this.showStatus(slot, '✅ Code pushed successfully!', 'success');
         
-        // Refresh editable fields from entity state (which now has updated lock data)
+        // Wait for entity state to update with pulled lock data, then refresh UI
         setTimeout(() => {
-          this._refreshEditableFields(slot);
-          // Also update lock PIN/status fields
-          const user = this.getUserData().find(u => u.slot === slot);
-          if (user) {
-            const lockCodeField = this.shadowRoot.getElementById(`lock-code-${slot}`);
-            const lockStatusField = this.shadowRoot.getElementById(`lock-status-${slot}`);
-            if (lockCodeField) lockCodeField.value = user.lock_code || '';
-            if (lockStatusField) {
-              const lockStatus = user.lock_status_from_lock ?? user.lock_status;
-              if (lockStatus !== null && lockStatus !== undefined) {
-                lockStatusField.value = lockStatus.toString();
-              }
-            }
-          }
+          this._editingSlots.delete(slot);
+          this._savedSlots.add(slot);
           this.render();
-        }, 1000);
+        }, 1500);
       } catch (error) {
         this.showStatus(slot, `❌ Push failed: ${error.message}`, 'error');
         this.renderStatusMessage(slot);
@@ -1079,22 +1058,24 @@ class YaleLockManagerCard extends HTMLElement {
         });
       }
 
-      // Rule 3: After confirmed save, refresh editable fields and check sync
-      this.showStatus(slot, '⏳ Checking sync status...', 'info');
-      this.renderStatusMessage(slot);
-      
-      if (codeType === 'pin') {
-        try {
-          await this._hass.callService('yale_lock_manager', 'check_sync_status', {
-            entity_id: this._config.entity,
-            slot: parseInt(slot, 10)
-          });
-        } catch (syncError) {
-          console.warn('Failed to check sync status:', syncError);
+      // Rule 3: After confirmed save - immediate, no lock query
+      // Compare new cached values with stored lock values (from entity state)
+      const user = this.getUserData().find(u => u.slot === slot);
+      if (user) {
+        const codesMatch = codeType === 'pin' ? (code === (user.lock_code || '')) : true;
+        const statusMatch = user.lock_status_from_lock !== null && user.lock_status_from_lock !== undefined
+          ? (cachedStatus === user.lock_status_from_lock)
+          : false;
+        const isSynced = codesMatch && statusMatch;
+        
+        if (!isSynced && codeType === 'pin') {
+          this.showStatus(slot, '✅ User saved! ⚠️ Push required to sync with lock.', 'warning');
+        } else {
+          this.showStatus(slot, '✅ User saved successfully!', 'success');
         }
+      } else {
+        this.showStatus(slot, '✅ User saved successfully!', 'success');
       }
-
-      this.showStatus(slot, '✅ User saved successfully!', 'success');
       
       // Rule 3: After confirmed save, refresh editable fields from entity state
       // Compare with lock fields, update sync status
@@ -1122,13 +1103,20 @@ class YaleLockManagerCard extends HTMLElement {
               status: cachedStatus
             });
             
-            try {
-              await this._hass.callService('yale_lock_manager', 'check_sync_status', {
-                entity_id: this._config.entity,
-                slot: parseInt(slot, 10)
-              });
-            } catch (syncError) {
-              console.warn('Failed to check sync status:', syncError);
+            // After override save, compare with lock values
+            const user = this.getUserData().find(u => u.slot === slot);
+            if (user) {
+              const codesMatch = codeType === 'pin' ? (code === (user.lock_code || '')) : true;
+              const statusMatch = user.lock_status_from_lock !== null && user.lock_status_from_lock !== undefined
+                ? (cachedStatus === user.lock_status_from_lock)
+                : false;
+              const isSynced = codesMatch && statusMatch;
+              
+              if (!isSynced && codeType === 'pin') {
+                this.showStatus(slot, '✅ User saved! ⚠️ Push required to sync with lock.', 'warning');
+              } else {
+                this.showStatus(slot, '✅ User saved successfully!', 'success');
+              }
             }
             
             this._editingSlots.delete(slot);

@@ -679,65 +679,32 @@ class YaleLockCoordinator(DataUpdateCoordinator):
         if not override_protection and not await self._is_slot_safe_to_write(slot):
             raise ValueError(f"Slot {slot} is occupied by an unknown code. Use override_protection=True to overwrite.")
 
-        # Query lock to get current lock_code and lock_status for comparison
-        # This ensures we have the latest data from the lock
-        lock_code_data = None
-        if code_type == CODE_TYPE_PIN:
-            _LOGGER.info("Querying lock for user code data for slot %s...", slot)
-            lock_code_data = await self._get_user_code_data(slot)
-            if lock_code_data:
-                lock_code_from_lock = lock_code_data.get("userCode", "")
-                if lock_code_from_lock:
-                    lock_code_from_lock = str(lock_code_from_lock)
-                else:
-                    lock_code_from_lock = ""
-                lock_status_from_lock = lock_code_data.get("userIdStatus")
-                _LOGGER.debug("Slot %s status from lock: %s", slot, lock_status_from_lock)
-                _LOGGER.debug("Slot %s code from lock: %s", slot, "***" if lock_code_from_lock else "None")
-            else:
-                lock_code_from_lock = ""
-                lock_status_from_lock = None
-                _LOGGER.warning("Could not get lock data for slot %s, using existing values", slot)
-
-        # Preserve existing schedule/usage data if updating (existing_user already retrieved above)
+        # IMMEDIATE SAVE: Don't query lock - use existing lock_code/lock_status_from_lock from storage
+        # Preserve existing schedule/usage data if updating
         if existing_user:
             schedule = existing_user.get("schedule", {"start": None, "end": None})
             usage_limit = existing_user.get("usage_limit")
             usage_count = existing_user.get("usage_count", 0)
-            # Use lock_code from query if available, otherwise preserve existing
-            if code_type == CODE_TYPE_PIN and lock_code_data:
-                lock_code = lock_code_from_lock
-            else:
-                lock_code = existing_user.get("lock_code", "")
-            lock_enabled = existing_user.get("lock_enabled", False)  # Preserve lock_enabled
+            # Preserve existing lock_code and lock_status_from_lock (don't query lock)
+            lock_code = existing_user.get("lock_code", "")
+            lock_status_from_lock = existing_user.get("lock_status_from_lock")
+            lock_enabled = existing_user.get("lock_enabled", False)
             # Use provided status if available, otherwise preserve existing cached status
             lock_status = status if status is not None else existing_user.get("lock_status", USER_STATUS_AVAILABLE)
-            # Use lock_status from query if available, otherwise preserve existing
-            if code_type == CODE_TYPE_PIN and lock_code_data:
-                lock_status_from_lock = lock_status_from_lock
-            else:
-                lock_status_from_lock = existing_user.get("lock_status_from_lock")
         else:
             schedule = {"start": None, "end": None}
             usage_limit = None
             usage_count = 0
-            # For new users, use lock_code from query if available
-            if code_type == CODE_TYPE_PIN and lock_code_data:
-                lock_code = lock_code_from_lock
-            else:
-                lock_code = ""
+            # New user - no lock data yet
+            lock_code = ""
+            lock_status_from_lock = None
             lock_enabled = False
             # Use provided status if available, otherwise default to Available
             lock_status = status if status is not None else USER_STATUS_AVAILABLE
-            if code_type == CODE_TYPE_PIN and lock_code_data:
-                lock_status_from_lock = lock_status_from_lock
-            else:
-                lock_status_from_lock = None  # No lock status for new users
 
-        # Calculate sync status: compare cached code with lock code (for PINs)
-        # and cached status with lock status
+        # Calculate sync status: compare NEW cached code/status with EXISTING lock code/status
         if code_type == CODE_TYPE_PIN:
-            codes_match = (code == lock_code)
+            codes_match = (code == lock_code) if lock_code else False
             # Compare cached status with lock status
             if lock_status_from_lock is not None:
                 status_match = (lock_status == lock_status_from_lock)
