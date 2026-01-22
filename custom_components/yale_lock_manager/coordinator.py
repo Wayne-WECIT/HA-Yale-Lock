@@ -510,131 +510,51 @@ class YaleLockCoordinator(DataUpdateCoordinator):
         return {}
 
     async def _get_user_code_data(self, slot: int) -> dict[str, Any] | None:
-        """Get user code data (status and code) directly from the lock."""
+        """Get user code data (status and code) from the lock using service call."""
         try:
             _LOGGER.debug("Querying lock for user code data for slot %s...", slot)
             
-            # Get Z-Wave JS client and node
-            node_id = int(self.node_id)
+            # Use service call approach (most reliable)
+            # The invoke_cc_api service triggers the query and the response is logged
+            # We then try to read from the node's cached values
+            await self.hass.services.async_call(
+                ZWAVE_JS_DOMAIN,
+                "invoke_cc_api",
+                {
+                    "entity_id": self.lock_entity_id,
+                    "command_class": CC_USER_CODE,
+                    "method_name": "get",
+                    "parameters": [slot],
+                },
+                blocking=True,
+            )
             
-            if ZWAVE_JS_DOMAIN not in self.hass.data:
-                _LOGGER.warning("Z-Wave JS domain not found in hass.data")
-                return None
+            # Wait for the response to be processed and cached
+            await asyncio.sleep(1.5)
             
-            # Find the Z-Wave JS client
-            client = None
-            for entry_id, entry_data in self.hass.data[ZWAVE_JS_DOMAIN].items():
-                if not isinstance(entry_data, dict):
-                    continue
-                client = entry_data.get("client")
-                if client and hasattr(client, "driver"):
-                    break
+            # Try to read from node's cached values using _get_zwave_value
+            # This uses the same lookup logic that works for other values
+            status = await self._get_zwave_value(CC_USER_CODE, "userIdStatus", slot)
+            code = await self._get_zwave_value(CC_USER_CODE, "userCode", slot)
             
-            if not client:
-                _LOGGER.warning("Z-Wave JS client not found")
-                return None
+            # If still not found, try alternative property names
+            if status is None:
+                status = await self._get_zwave_value(CC_USER_CODE, "userId", slot)
+            if code is None:
+                code = await self._get_zwave_value(CC_USER_CODE, "code", slot)
             
-            driver = client.driver
-            if not hasattr(driver, "controller"):
-                _LOGGER.warning("Z-Wave JS driver has no controller")
-                return None
+            # Build result dict if we got any data
+            if status is not None or code is not None:
+                result = {}
+                if status is not None:
+                    result["userIdStatus"] = status
+                if code is not None:
+                    result["userCode"] = code
+                _LOGGER.debug("Retrieved data for slot %s: status=%s, code=%s", slot, status, "***" if code else None)
+                return result
             
-            node = driver.controller.nodes.get(node_id)
-            if not node:
-                _LOGGER.warning("Node %s not found", node_id)
-                return None
-            
-            # Get the endpoint (usually 0 for locks)
-            endpoint = node.endpoints.get(0)
-            if not endpoint:
-                _LOGGER.warning("Endpoint 0 not found for node %s", node_id)
-                return None
-            
-            # Get the User Code command class
-            user_code_cc = endpoint.command_classes.get(CC_USER_CODE)
-            if not user_code_cc:
-                _LOGGER.warning("User Code CC not found for node %s", node_id)
-                return None
-            
-            # Try to call the get method directly on the command class
-            # Z-Wave JS command classes may expose the API methods directly
-            try:
-                # Try calling the API method directly
-                if hasattr(user_code_cc, "endpoint") and hasattr(user_code_cc.endpoint, "call_command"):
-                    # Use the endpoint's call_command method
-                    result = await user_code_cc.endpoint.call_command(user_code_cc, "get", slot)
-                elif hasattr(user_code_cc, "async_get"):
-                    result = await user_code_cc.async_get(slot)
-                elif hasattr(user_code_cc, "get"):
-                    # Might be a coroutine or regular method
-                    method = getattr(user_code_cc, "get")
-                    if asyncio.iscoroutinefunction(method):
-                        result = await method(slot)
-                    else:
-                        result = method(slot)
-                else:
-                    # No direct method, use service call and parse from response
-                    _LOGGER.debug("No direct get method, using service call approach")
-                    result = None
-            except Exception as cc_err:
-                _LOGGER.debug("Direct command class call failed: %s, trying service call", cc_err)
-                result = None
-            
-            # If direct call didn't work, use service call
-            if result is None:
-                # Use service call - the response is logged but we need to capture it
-                # The response should be in the node's values after the call
-                await self.hass.services.async_call(
-                    ZWAVE_JS_DOMAIN,
-                    "invoke_cc_api",
-                    {
-                        "entity_id": self.lock_entity_id,
-                        "command_class": CC_USER_CODE,
-                        "method_name": "get",
-                        "parameters": [slot],
-                    },
-                    blocking=True,
-                )
-                # Wait for the response to be processed
-                await asyncio.sleep(1.5)
-                
-                # The response should now be in the node's values
-                # Debug: log all CC 99 values to see what's available
-                _LOGGER.debug("Checking node values for slot %s after service call...", slot)
-                all_cc99_values = []
-                for val_id, val in node.values.items():
-                    if val.command_class == CC_USER_CODE:
-                        prop = getattr(val, 'property_', None) or getattr(val, 'property_name', None) or getattr(val, 'property', None)
-                        prop_key = getattr(val, 'property_key', None)
-                        all_cc99_values.append({
-                            'value_id': val_id,
-                            'property': prop,
-                            'property_key': prop_key,
-                            'value': val.value
-                        })
-                if all_cc99_values:
-                    _LOGGER.debug("All CC 99 values after query: %s", all_cc99_values)
-                
-                # Try reading with different property name variations
-                status = await self._get_zwave_value(CC_USER_CODE, "userIdStatus", slot)
-                code = await self._get_zwave_value(CC_USER_CODE, "userCode", slot)
-                
-                # If still not found, try alternative property names
-                if status is None:
-                    status = await self._get_zwave_value(CC_USER_CODE, "userId", slot)
-                if code is None:
-                    code = await self._get_zwave_value(CC_USER_CODE, "code", slot)
-                
-                if status is not None or code is not None:
-                    result = {}
-                    if status is not None:
-                        result["userIdStatus"] = status
-                    if code is not None:
-                        result["userCode"] = code
-                    return result if result else None
-                
-                _LOGGER.warning("Could not retrieve data for slot %s after service call", slot)
-                return None
+            _LOGGER.debug("No data found for slot %s after service call", slot)
+            return None
             
             if result and isinstance(result, dict):
                 _LOGGER.debug("Slot %s data from lock: %s", slot, result)

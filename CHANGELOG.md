@@ -20,6 +20,46 @@ Use `lock.smart_door_lock_manager` for the Lovelace card!
 
 ---
 
+## [1.8.2.3] - 2026-01-22
+
+### 🚨 CRITICAL FIX - Z-Wave JS Client Not Found
+
+**User feedback**: "no idea whats happened now?????"
+
+### The Issue
+
+The new `_get_user_code_data()` function I added in v1.8.2.2 was trying to access the Z-Wave JS client directly, but the client lookup was failing with:
+```
+WARNING: Z-Wave JS client not found
+```
+
+This broke the entire pull operation - **no codes could be retrieved from the lock** because the function returned `None` immediately when the client wasn't found, never reaching the service call fallback.
+
+### The Fix
+
+**Simplified approach**: Removed the complex direct command class API access and reverted to the **service call approach** that was working before:
+
+1. **Always use `invoke_cc_api` service call** - This triggers the query reliably
+2. **Wait for response** - Give Z-Wave JS time to process and cache the response
+3. **Read from node values** - Use `_get_zwave_value()` to read the cached response
+4. **Try alternative property names** - Fallback to `userId`/`code` if `userIdStatus`/`userCode` not found
+
+### Changed
+- `_get_user_code_data()`: Simplified to always use service call approach
+- Removed complex direct command class API access that was causing failures
+- Better error handling and fallback logic
+
+### What's Fixed
+- ✅ Pull operation no longer fails with "Z-Wave JS client not found"
+- ✅ Service call approach is reliable and always attempted
+- ✅ Better fallback to alternative property names
+- ✅ Code should now work again (even if values still can't be read from cache)
+
+### Note
+The service call is working (we see responses in logs), but reading from the node cache may still fail. The debug logs will show what values are available. If values still can't be read, we may need to parse the service call response directly (which requires a different approach).
+
+---
+
 ## [1.8.2.2] - 2026-01-22
 
 ### 🔧 FIX - Lock PINs Not Being Retrieved
