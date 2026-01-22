@@ -50,6 +50,11 @@ class YaleLockManagerCard extends HTMLElement {
     }
     this._formValues[slot][field] = value;
   }
+  
+  // Make _setFormValue accessible from inline handlers
+  setFormValue(slot, field, value) {
+    this._setFormValue(slot, field, value);
+  }
 
   _syncFormValuesFromEntity(slot) {
     // Sync form values from entity state (only when slot is first expanded)
@@ -477,7 +482,7 @@ class YaleLockManagerCard extends HTMLElement {
                     id="name-${user.slot}" 
                     value="${formName}" 
                     placeholder="Enter name"
-                    oninput="card._setFormValue(${user.slot}, 'name', this.value)"
+                    oninput="card.setFormValue(${user.slot}, 'name', this.value)"
                   >
                         </div>
                         
@@ -485,7 +490,7 @@ class YaleLockManagerCard extends HTMLElement {
                             <label>Code Type:</label>
                   <select 
                     id="type-${user.slot}" 
-                    onchange="card.changeType(${user.slot}, this.value); card._setFormValue(${user.slot}, 'type', this.value)"
+                    onchange="card.changeType(${user.slot}, this.value); card.setFormValue(${user.slot}, 'type', this.value)"
                   >
                     <option value="pin" ${formType === 'pin' ? 'selected' : ''}>PIN Code</option>
                     <option value="fob" ${formType === 'fob' ? 'selected' : ''}>FOB/RFID Card</option>
@@ -558,7 +563,7 @@ class YaleLockManagerCard extends HTMLElement {
                           maxlength="10" 
                           pattern="[0-9]*" 
                           style="width: 100%;"
-                          oninput="card._setFormValue(${user.slot}, 'code', this.value)"
+                          oninput="card.setFormValue(${user.slot}, 'code', this.value)"
                         >
                         <p style="color: var(--secondary-text-color); font-size: 0.75em; margin: 4px 0 0 0;">PIN stored locally</p>
                       </div>
