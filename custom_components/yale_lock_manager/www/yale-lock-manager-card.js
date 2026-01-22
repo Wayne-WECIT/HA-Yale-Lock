@@ -37,9 +37,11 @@ class YaleLockManagerCard extends HTMLElement {
 
   _getFormValue(slot, field, defaultValue) {
     // Get form value from _formValues, or use entity state as fallback
+    // CRITICAL: Always prefer _formValues over entity state for editable fields
     if (this._formValues[slot] && this._formValues[slot][field] !== undefined) {
       return this._formValues[slot][field];
     }
+    // Only fall back to entity state if _formValues doesn't exist for this slot
     return defaultValue;
   }
 
@@ -56,8 +58,13 @@ class YaleLockManagerCard extends HTMLElement {
     this._setFormValue(slot, field, value);
   }
 
-  _syncFormValuesFromEntity(slot) {
-    // Sync form values from entity state (only when slot is first expanded)
+  _syncFormValuesFromEntity(slot, force = false) {
+    // Sync form values from entity state (only when slot is first expanded, or if force=true)
+    // If _formValues[slot] already exists and force=false, don't overwrite (preserve user's edits)
+    if (!force && this._formValues[slot]) {
+      return; // Don't overwrite existing form values
+    }
+    
     const user = this.getUserData().find(u => u.slot === slot);
     if (user) {
       this._formValues[slot] = {
@@ -835,8 +842,8 @@ class YaleLockManagerCard extends HTMLElement {
     if (wasExpanded) {
       this.clearStatus(slot);
     } else {
-      // When slot is first expanded, sync form values from entity state
-      this._syncFormValuesFromEntity(slot);
+      // When slot is first expanded, sync form values from entity state (force=true to initialize)
+      this._syncFormValuesFromEntity(slot, true);
     }
     
     this.render();
@@ -891,10 +898,8 @@ class YaleLockManagerCard extends HTMLElement {
       });
       
       this.showStatus(0, '✅ Refreshed from lock successfully!', 'success');
-      // Sync form values from entity state for expanded slot
-      if (this._expandedSlot) {
-        this._syncFormValuesFromEntity(this._expandedSlot);
-      }
+      // Don't sync form values on refresh - preserve user's edits
+      // Only update lock fields (read-only), not editable cached fields
       setTimeout(() => this.render(), 500);
     } catch (error) {
       this.showStatus(0, `❌ Refresh failed: ${error.message}`, 'error');
@@ -1077,6 +1082,14 @@ class YaleLockManagerCard extends HTMLElement {
       }
       
       // Form values are already updated in _formValues, so fields will show correct values
+      // CRITICAL: Re-confirm form values are stored before render (defensive)
+      // This ensures even if entity state updates trigger render() before this timeout,
+      // the form values are preserved
+      this._setFormValue(slot, 'name', name);
+      this._setFormValue(slot, 'code', code);
+      this._setFormValue(slot, 'type', codeType);
+      this._setFormValue(slot, 'cachedStatus', cachedStatus);
+      
       // Just wait for entity state to update for lock fields, then render
       setTimeout(() => {
         this.render();
