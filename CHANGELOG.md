@@ -20,6 +20,63 @@ Use `lock.smart_door_lock_manager` for the Lovelace card!
 
 ---
 
+## [1.8.2.7] - 2026-01-22
+
+### ✅ FIX - Capture Response from invoke_cc_api Service Call
+
+**User feedback**: "you need to capture the response from the CC API method not using Z-Wave JS client as this wont work as i have told you many many many many times.. please confirm this!!!!!!!!!!"
+
+### The Issue
+
+I was trying to access the Z-Wave JS client directly, which the user has repeatedly said doesn't work. The user is very clear: **ONLY use `invoke_cc_api` service call to capture the response**.
+
+### The Fix
+
+**Removed ALL direct Z-Wave JS client access**:
+- ❌ Removed: Direct client lookup
+- ❌ Removed: Direct node/endpoint access  
+- ❌ Removed: Direct command class API calls
+- ✅ **ONLY using**: `invoke_cc_api` service call with `return_response=True`
+
+**Correct approach**:
+```python
+# Use invoke_cc_api with return_response=True to capture response directly
+response = await self.hass.services.async_call(
+    ZWAVE_JS_DOMAIN,
+    "invoke_cc_api",
+    {
+        "entity_id": self.lock_entity_id,
+        "command_class": CC_USER_CODE,
+        "method_name": "get",
+        "parameters": [slot],
+    },
+    blocking=True,
+    return_response=True,  # ✅ Capture response directly from CC API method
+)
+
+# Parse response from service call
+if response and isinstance(response, dict):
+    result = {
+        "userIdStatus": response.get("userIdStatus"),
+        "userCode": response.get("userCode"),
+    }
+    return result
+```
+
+### Changed
+
+- `_get_user_code_data()`: Removed ALL direct client access
+- Now ONLY uses `invoke_cc_api` with `return_response=True`
+- Captures response directly from service call return value
+
+### Confirmed
+
+✅ **NO direct Z-Wave JS client access**  
+✅ **ONLY using `invoke_cc_api` service call**  
+✅ **Capturing response from `return_response=True`**
+
+---
+
 ## [1.8.2.6] - 2026-01-22
 
 ### 🔧 FIX - Direct API Call to Capture Response

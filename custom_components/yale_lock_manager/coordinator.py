@@ -510,19 +510,17 @@ class YaleLockCoordinator(DataUpdateCoordinator):
         return {}
 
     async def _get_user_code_data(self, slot: int) -> dict[str, Any] | None:
-        """Get user code data (status and code) from the lock.
+        """Get user code data (status and code) from the lock using invoke_cc_api.
         
-        The invoke_cc_api service logs the response but returns None.
-        We need to access the Z-Wave JS client directly to call the command class API
-        and capture the response. This is what invoke_cc_api does internally, but
-        we need to do it ourselves to get the response.
+        MUST use invoke_cc_api service call with return_response=True to capture
+        the response directly from the CC API method call. DO NOT access Z-Wave JS client directly.
         """
         try:
             _LOGGER.debug("Querying lock for user code data for slot %s...", slot)
             
-            # First try: Use invoke_cc_api service call (as requested)
-            # This triggers the query but doesn't return the response
-            await self.hass.services.async_call(
+            # Use invoke_cc_api with return_response=True to capture the response
+            # This is the ONLY way to get the response - directly from the service call
+            response = await self.hass.services.async_call(
                 ZWAVE_JS_DOMAIN,
                 "invoke_cc_api",
                 {
@@ -532,87 +530,25 @@ class YaleLockCoordinator(DataUpdateCoordinator):
                     "parameters": [slot],
                 },
                 blocking=True,
+                return_response=True,  # Capture response directly from CC API method
             )
             
-            # The service call returns None, but the response is logged
-            # We need to access the Z-Wave JS client to call the API directly
-            # and capture the response
+            _LOGGER.debug("Service call returned for slot %s: %s (type: %s)", slot, response, type(response))
             
-            # Get Z-Wave JS client and node
-            node_id = int(self.node_id)
-            
-            # Find the Z-Wave JS client
-            client = None
-            for entry_id, entry_data in self.hass.data[ZWAVE_JS_DOMAIN].items():
-                if not isinstance(entry_data, dict):
-                    continue
-                client = entry_data.get("client")
-                if client and hasattr(client, "driver"):
-                    break
-            
-            if not client or not hasattr(client, "driver"):
-                _LOGGER.warning("Z-Wave JS client not found")
-                return None
-            
-            # Get the node
-            node = client.driver.controller.nodes.get(node_id)
-            if not node:
-                _LOGGER.warning("Node %s not found", node_id)
-                return None
-            
-            # Get the endpoint (usually 0)
-            endpoint = node.endpoints.get(0)
-            if not endpoint:
-                _LOGGER.warning("Endpoint 0 not found for node %s", node_id)
-                return None
-            
-            # Get the User Code command class
-            user_code_cc = endpoint.command_classes.get(CC_USER_CODE)
-            if not user_code_cc:
-                _LOGGER.warning("User Code CC not found for node %s", node_id)
-                return None
-            
-            # Call the API directly to get the response
-            # This is what invoke_cc_api does, but we capture the response
-            try:
-                response = await user_code_cc.async_get(slot)
-                _LOGGER.debug("Got response from direct API call for slot %s: %s", slot, response)
-                
-                if response and isinstance(response, dict):
-                    result = {}
-                    if "userIdStatus" in response:
-                        result["userIdStatus"] = response["userIdStatus"]
-                    if "userCode" in response:
-                        result["userCode"] = response["userCode"]
-                    
-                    if result:
-                        _LOGGER.info("✓ Captured response for slot %s: status=%s, code=%s", 
-                                   slot, result.get("userIdStatus"), "***" if result.get("userCode") else None)
-                        return result
-            except Exception as api_err:
-                _LOGGER.warning("Direct API call failed for slot %s: %s", slot, api_err)
-            
-            # Fallback: Try reading from cache after waiting
-            await asyncio.sleep(1.0)
-            status = await self._get_zwave_value(CC_USER_CODE, "userIdStatus", slot)
-            code = await self._get_zwave_value(CC_USER_CODE, "userCode", slot)
-            
-            if status is None:
-                status = await self._get_zwave_value(CC_USER_CODE, "userId", slot)
-            if code is None:
-                code = await self._get_zwave_value(CC_USER_CODE, "code", slot)
-            
-            if status is not None or code is not None:
+            # Parse the response from the service call
+            if response and isinstance(response, dict):
                 result = {}
-                if status is not None:
-                    result["userIdStatus"] = status
-                if code is not None:
-                    result["userCode"] = code
-                _LOGGER.debug("Retrieved data from cache for slot %s: status=%s, code=%s", 
-                            slot, status, "***" if code else None)
-                return result
+                if "userIdStatus" in response:
+                    result["userIdStatus"] = response["userIdStatus"]
+                if "userCode" in response:
+                    result["userCode"] = response["userCode"]
+                
+                if result:
+                    _LOGGER.info("✓ Captured response from invoke_cc_api for slot %s: status=%s, code=%s", 
+                               slot, result.get("userIdStatus"), "***" if result.get("userCode") else None)
+                    return result
             
-            _LOGGER.warning("Could not get user code data for slot %s", slot)
+            _LOGGER.warning("No response data captured for slot %s from invoke_cc_api", slot)
             return None
             
         except Exception as err:
