@@ -1174,16 +1174,20 @@ class YaleLockManagerCard extends HTMLElement {
       this.showStatus(slot, '✅ User saved successfully!', 'success');
       
       // After saving, we need to ensure the form field shows the NEW cached code
-      // The entity state will have the new code, but we need to restore it to the form
-      // Wait for entity state to update, then restore form values
+      // Save the new code value before render so it gets preserved
+      const savedCode = code; // The new code that was just saved
+      
+      // Render will be triggered by the refresh from check_sync_status
+      // But add a small delay to ensure data is updated, then restore the NEW code
       setTimeout(() => {
         // Get the updated user data from entity state
         const updatedUser = this.getUserData().find(u => u.slot === slot);
         if (updatedUser && this.shadowRoot) {
-          // Update the form field with the new cached code
+          // Force update the form field with the new cached code that was just saved
           const codeField = this.shadowRoot.getElementById(`code-${slot}`);
-          if (codeField && updatedUser.code) {
-            codeField.value = updatedUser.code;
+          if (codeField) {
+            // Use the saved code (what user just entered) or the updated entity code
+            codeField.value = savedCode || updatedUser.code || '';
           }
         }
         this.render();
