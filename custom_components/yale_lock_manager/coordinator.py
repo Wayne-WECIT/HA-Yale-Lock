@@ -684,12 +684,14 @@ class YaleLockCoordinator(DataUpdateCoordinator):
             usage_count = existing_user.get("usage_count", 0)
             lock_code = existing_user.get("lock_code", "")  # Preserve lock_code
             lock_enabled = existing_user.get("lock_enabled", False)  # Preserve lock_enabled
+            lock_status = existing_user.get("lock_status", USER_STATUS_AVAILABLE)  # Preserve lock_status
         else:
             schedule = {"start": None, "end": None}
             usage_limit = None
             usage_count = 0
             lock_code = ""  # No lock_code for new users
             lock_enabled = False
+            lock_status = USER_STATUS_AVAILABLE  # New users start as Available
 
         # Calculate sync status: compare cached code with lock code (for PINs)
         if code_type == CODE_TYPE_PIN:
@@ -697,15 +699,15 @@ class YaleLockCoordinator(DataUpdateCoordinator):
         else:
             # For FOBs, sync is based on enabled status (will be updated on pull)
             synced_to_lock = False
-
-        # Store user data
+        
         self._user_data["users"][str(slot)] = {
             "name": name,
             "code_type": code_type,
             "code": code,  # Cached code (editable)
             "lock_code": lock_code,  # PIN from lock (read-only, updated on pull/push)
             "enabled": True,
-            "lock_enabled": lock_enabled,  # Enabled status from lock
+            "lock_status": lock_status,  # Store full status (0=Available, 1=Enabled, 2=Disabled)
+            "lock_enabled": lock_enabled,  # Enabled status from lock (for compatibility)
             "schedule": schedule if code_type == CODE_TYPE_PIN else {"start": None, "end": None},
             "usage_limit": usage_limit if code_type == CODE_TYPE_PIN else None,
             "usage_count": usage_count if code_type == CODE_TYPE_PIN else 0,
@@ -897,7 +899,8 @@ class YaleLockCoordinator(DataUpdateCoordinator):
                 _LOGGER.info("✓ Verified: Code successfully written to slot %s", slot)
                 user_data["synced_to_lock"] = True
                 user_data["lock_code"] = verification_code if verification_code else ""  # Update lock_code
-                user_data["lock_enabled"] = verification_status == USER_STATUS_ENABLED  # Update lock_enabled
+                user_data["lock_status"] = verification_status  # Update full status (0/1/2)
+                user_data["lock_enabled"] = verification_status == USER_STATUS_ENABLED  # Update lock_enabled (for compatibility)
             
             await self.async_save_user_data()
             await self.async_request_refresh()
@@ -950,7 +953,8 @@ class YaleLockCoordinator(DataUpdateCoordinator):
                 # Update existing - store lock_code and check sync status
                 user_data = self._user_data["users"][slot_str]
                 user_data["lock_code"] = code if code else ""  # Store PIN from lock
-                user_data["lock_enabled"] = status == USER_STATUS_ENABLED  # Store enabled status from lock
+                user_data["lock_status"] = status  # Store full status (0=Available, 1=Enabled, 2=Disabled)
+                user_data["lock_enabled"] = status == USER_STATUS_ENABLED  # Store enabled status from lock (for compatibility)
                 
                 # Check if cached code matches lock code (for PINs only)
                 if user_data.get("code_type") == CODE_TYPE_PIN:
@@ -982,7 +986,8 @@ class YaleLockCoordinator(DataUpdateCoordinator):
                     "code": code if code else "",  # Cached code (same as lock for new codes)
                     "lock_code": code if code else "",  # PIN from lock
                     "enabled": status == USER_STATUS_ENABLED,
-                    "lock_enabled": status == USER_STATUS_ENABLED,  # Enabled status from lock
+                    "lock_status": status,  # Store full status (0=Available, 1=Enabled, 2=Disabled)
+                    "lock_enabled": status == USER_STATUS_ENABLED,  # Enabled status from lock (for compatibility)
                     "schedule": {"start": None, "end": None},
                     "usage_limit": None,
                     "usage_count": 0,

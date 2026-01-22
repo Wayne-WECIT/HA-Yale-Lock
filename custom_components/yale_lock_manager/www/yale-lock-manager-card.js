@@ -120,7 +120,8 @@ class YaleLockManagerCard extends HTMLElement {
         lock_code: '',  // PIN from lock (read-only)
         code_type: 'pin', 
         enabled: false,
-        lock_enabled: false,  // Enabled status from lock
+        lock_status: null,  // Status from lock (0=Available, 1=Enabled, 2=Disabled)
+        lock_enabled: false,  // Enabled status from lock (for compatibility)
         synced_to_lock: false,
         schedule: { start: null, end: null },
         usage_limit: null,
@@ -360,11 +361,34 @@ class YaleLockManagerCard extends HTMLElement {
       const isExpanded = this._expandedSlot === user.slot;
       const isFob = user.code_type === 'fob';
       
+      // Get status text from lock_status value
+      const getStatusText = (status) => {
+        if (status === null || status === undefined) return 'Unknown';
+        if (status === 0) return 'Available';
+        if (status === 1) return 'Enabled';
+        if (status === 2) return 'Disabled';
+        return 'Unknown';
+      };
+      
+      const statusText = getStatusText(user.lock_status);
+      const statusColor = user.lock_status === 0 ? '#9e9e9e' : user.lock_status === 1 ? '#4caf50' : '#f44336';
+      
       return `
         <tr class="clickable" onclick="card.toggleExpand(${user.slot})">
           <td><strong>${user.slot}</strong></td>
           <td>${user.name || `User ${user.slot}`}</td>
           <td>${isFob ? '🏷️' : '🔑'}</td>
+          <td>
+            <span style="
+              display: inline-block;
+              padding: 4px 8px;
+              border-radius: 4px;
+              background: ${statusColor}20;
+              color: ${statusColor};
+              font-weight: 500;
+              font-size: 0.85em;
+            ">${statusText}</span>
+          </td>
           <td>
             <label class="toggle-switch" onclick="event.stopPropagation()">
               <input type="checkbox" onchange="card.toggleUser(${user.slot}, this.checked)" ${user.enabled ? 'checked' : ''}>
@@ -378,7 +402,7 @@ class YaleLockManagerCard extends HTMLElement {
         </tr>
         ${isExpanded ? `
           <tr class="expanded-row">
-            <td colspan="6">
+            <td colspan="7">
               <div class="expanded-content">
                 <h3>Slot ${user.slot} Settings</h3>
                 
@@ -533,6 +557,7 @@ class YaleLockManagerCard extends HTMLElement {
               <th>Slot</th>
               <th>Name</th>
               <th>Type</th>
+              <th>Status</th>
               <th>Enabled</th>
               <th>Synced</th>
               <th>Action</th>

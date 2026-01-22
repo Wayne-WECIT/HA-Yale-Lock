@@ -20,6 +20,55 @@ Use `lock.smart_door_lock_manager` for the Lovelace card!
 
 ---
 
+## [1.8.2.13] - 2026-01-22
+
+### ✨ NEW - Status Column in User Table
+
+**User request**: Display the slot status (Available/Enabled/Disabled) as a column in the user table.
+
+### The Implementation
+
+1. **Store Full Status Value**: Now storing `lock_status` (0/1/2) in addition to `lock_enabled` (boolean):
+   - `0` = Available
+   - `1` = Enabled  
+   - `2` = Disabled
+
+2. **Added Status Column**: New "Status" column in the user table that displays:
+   - "Available" (gray) for status 0
+   - "Enabled" (green) for status 1
+   - "Disabled" (red) for status 2
+
+3. **Status Display**: Status is shown as a colored badge with the status text.
+
+### Changed
+
+- **`coordinator.py`**:
+  - `async_pull_codes_from_lock()`: Now stores `lock_status` (0/1/2) when pulling codes from lock
+  - `async_push_code_to_lock()`: Updates `lock_status` after verification
+  - `async_set_user_code()`: Preserves `lock_status` when updating existing users
+
+- **`yale-lock-manager-card.js`**:
+  - Added "Status" column to table header (between "Type" and "Enabled")
+  - Added status cell to table rows with colored badge
+  - Updated `getUserData()` to include `lock_status` in user data
+  - Updated expanded row colspan from 6 to 7
+
+### What's New
+
+- ✅ **Status column** displays slot status from the lock
+- ✅ **Color-coded badges**: Gray (Available), Green (Enabled), Red (Disabled)
+- ✅ **Full status tracking**: Stores complete status value (0/1/2), not just boolean
+
+### How It Works
+
+The status is captured from the lock when:
+- Pulling codes from lock (`async_pull_codes_from_lock`)
+- Verifying code after push (`async_push_code_to_lock`)
+
+The status value (0/1/2) is stored in `lock_status` and displayed in the new "Status" column.
+
+---
+
 ## [1.8.2.12] - 2026-01-22
 
 ### 🔧 FIX - Log Capture for invoke_cc_api Response
