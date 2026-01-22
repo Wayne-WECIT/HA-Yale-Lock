@@ -26,7 +26,7 @@ class YaleLockManagerCard extends HTMLElement {
     // Only re-render if no form is currently being edited
     // This prevents form fields from being cleared while user is typing
     if (!this._isFormBeingEdited()) {
-      this.render();
+    this.render();
     } else {
       // Just update the data reference, don't re-render
       // This allows status messages to work without clearing forms
@@ -167,7 +167,7 @@ class YaleLockManagerCard extends HTMLElement {
   }
 
   // ========== DATA HELPERS ==========
-  
+
   getUserData() {
     const stateObj = this._hass.states[this._config.entity];
     const users = stateObj?.attributes?.users || {};
@@ -175,10 +175,10 @@ class YaleLockManagerCard extends HTMLElement {
     
     for (let slot = 1; slot <= 20; slot++) {
       const user = users[slot.toString()] || { 
-        name: '', 
+        name: '',
         code: '', 
         lock_code: '',  // PIN from lock (read-only)
-        code_type: 'pin', 
+        code_type: 'pin',
         enabled: false,
         lock_status: null,  // Status from lock (0=Available, 1=Enabled, 2=Disabled)
         lock_enabled: false,  // Enabled status from lock (for compatibility)
@@ -194,7 +194,7 @@ class YaleLockManagerCard extends HTMLElement {
   }
 
   // ========== RENDERING ==========
-  
+
   render() {
     if (!this._hass || !this._config) return;
 
@@ -242,25 +242,25 @@ class YaleLockManagerCard extends HTMLElement {
       
       .error {
         color: var(--error-color);
-        padding: 16px;
+          padding: 16px;
         background: var(--error-color-background, rgba(255, 0, 0, 0.1));
         border-radius: 4px;
-      }
+        }
       
-      .header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 16px;
+        .header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: 16px;
         padding-bottom: 12px;
         border-bottom: 2px solid var(--divider-color);
-      }
+        }
       
       .lock-status {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-      }
+          display: flex;
+          align-items: center;
+          gap: 12px;
+        }
       
       .status-icon { font-size: 32px; }
       .status-info { display: flex; flex-direction: column; gap: 4px; }
@@ -269,12 +269,12 @@ class YaleLockManagerCard extends HTMLElement {
       .controls { display: flex; gap: 8px; }
       
       button, .btn-confirm, .btn-cancel, .btn-close {
-        background: var(--primary-color);
+          background: var(--primary-color);
         color: var(--text-primary-color);
         border: none;
         padding: 8px 16px;
-        border-radius: 4px;
-        cursor: pointer;
+          border-radius: 4px;
+          cursor: pointer;
         font-size: 0.9em;
         transition: opacity 0.2s;
       }
@@ -290,16 +290,16 @@ class YaleLockManagerCard extends HTMLElement {
       .btn-cancel, .btn-close { background: var(--secondary-background-color); padding: 6px 12px; }
       
       table {
-        width: 100%;
-        border-collapse: collapse;
+          width: 100%;
+          border-collapse: collapse;
         margin-top: 16px;
-      }
+        }
       
       th, td {
-        text-align: left;
+          text-align: left;
         padding: 12px 8px;
-        border-bottom: 1px solid var(--divider-color);
-      }
+          border-bottom: 1px solid var(--divider-color);
+        }
       
       th {
         background: var(--table-header-background-color, var(--secondary-background-color));
@@ -335,57 +335,57 @@ class YaleLockManagerCard extends HTMLElement {
       .form-group input, .form-group select {
         width: 100%;
         padding: 8px;
-        border: 1px solid var(--divider-color);
-        border-radius: 4px;
-        background: var(--card-background-color);
-        color: var(--primary-text-color);
-        box-sizing: border-box;
-      }
+          border: 1px solid var(--divider-color);
+          border-radius: 4px;
+          background: var(--card-background-color);
+          color: var(--primary-text-color);
+          box-sizing: border-box;
+        }
       
-      .toggle-switch {
-        position: relative;
+        .toggle-switch {
+          position: relative;
         display: inline-block;
         width: 44px;
         height: 24px;
-      }
+        }
       
-      .toggle-switch input {
-        opacity: 0;
-        width: 0;
-        height: 0;
-      }
+        .toggle-switch input {
+          opacity: 0;
+          width: 0;
+          height: 0;
+        }
       
-      .slider {
-        position: absolute;
-        cursor: pointer;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
+        .slider {
+          position: absolute;
+          cursor: pointer;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
         background-color: var(--disabled-color, #ccc);
         transition: 0.3s;
         border-radius: 24px;
       }
       
-      .slider:before {
-        position: absolute;
-        content: "";
+        .slider:before {
+          position: absolute;
+          content: "";
         height: 18px;
         width: 18px;
-        left: 3px;
-        bottom: 3px;
-        background-color: white;
+          left: 3px;
+          bottom: 3px;
+          background-color: white;
         transition: 0.3s;
-        border-radius: 50%;
-      }
+          border-radius: 50%;
+        }
       
-      input:checked + .slider {
-        background-color: var(--primary-color);
-      }
+        input:checked + .slider {
+          background-color: var(--primary-color);
+        }
       
-      input:checked + .slider:before {
-        transform: translateX(20px);
-      }
+        input:checked + .slider:before {
+          transform: translateX(20px);
+        }
       
       .toggle-label {
         display: flex;
@@ -398,7 +398,7 @@ class YaleLockManagerCard extends HTMLElement {
       .hidden { display: none !important; }
       
       .fob-notice {
-        background: var(--table-row-alternative-background-color);
+          background: var(--table-row-alternative-background-color);
         border-radius: 8px;
         padding: 12px;
         margin: 12px 0;
@@ -464,8 +464,8 @@ class YaleLockManagerCard extends HTMLElement {
       
       const statusText = getStatusText(user.lock_status, user.lock_enabled, user.enabled);
       const statusColor = getStatusColor(user.lock_status, user.lock_enabled, user.enabled);
-      
-      return `
+              
+              return `
         <tr class="clickable" onclick="card.toggleExpand(${user.slot})">
           <td><strong>${user.slot}</strong></td>
           <td>${user.name || `User ${user.slot}`}</td>
@@ -480,37 +480,38 @@ class YaleLockManagerCard extends HTMLElement {
               font-weight: 500;
               font-size: 0.85em;
             ">${statusText}</span>
-          </td>
+                  </td>
           <td>${user.synced_to_lock ? '✓' : '⚠️'}</td>
           <td>
             <button 
               onclick="event.stopPropagation(); card.pushCode(${user.slot})"
               style="${!user.synced_to_lock ? 'background: #ff9800; color: white; font-weight: bold;' : ''}"
             >${user.synced_to_lock ? 'Push' : 'Push Required'}</button>
-          </td>
-        </tr>
-        ${isExpanded ? `
-          <tr class="expanded-row">
-            <td colspan="6">
+                  </td>
+                </tr>
+                ${isExpanded ? `
+                  <tr class="expanded-row">
+                    <td colspan="6">
               <div class="expanded-content">
                 <h3>Slot ${user.slot} Settings</h3>
                 
                 <div id="status-${user.slot}"></div>
-                
-                <div class="form-group">
-                  <label>User Name:</label>
+                        
+                        <div class="form-group">
+                          <label>User Name:</label>
                   <input type="text" id="name-${user.slot}" value="${user.name || ''}" placeholder="Enter name">
-                </div>
-                
-                <div class="form-group">
-                  <label>Code Type:</label>
+                        </div>
+                        
+                          <div class="form-group">
+                            <label>Code Type:</label>
                   <select id="type-${user.slot}" onchange="card.changeType(${user.slot}, this.value)">
                     <option value="pin" ${!isFob ? 'selected' : ''}>PIN Code</option>
                     <option value="fob" ${isFob ? 'selected' : ''}>FOB/RFID Card</option>
                   </select>
-                </div>
-                
-                <div class="form-group">
+                          </div>
+                        
+                ${!isFob ? `
+                        <div class="form-group">
                   <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
                     <div>
                       <label>📝 Cached Status (editable):</label>
@@ -542,9 +543,9 @@ class YaleLockManagerCard extends HTMLElement {
                             `;
                           }
                         })()}
-                      </select>
+                          </select>
                       <p style="color: var(--secondary-text-color); font-size: 0.75em; margin: 4px 0 0 0;">Status stored locally</p>
-                    </div>
+                        </div>
                     <div>
                       <label>🔒 Lock Status (from lock):</label>
                       <select id="lock-status-${user.slot}" disabled style="width: 100%; background: var(--card-background-color); border: 1px solid var(--divider-color); color: var(--secondary-text-color);">
@@ -590,7 +591,8 @@ class YaleLockManagerCard extends HTMLElement {
                     return '';
                   })()}
                 </div>
-                
+                        ` : ''}
+                        
                 <div id="code-field-${user.slot}" class="${isFob ? 'hidden' : ''}">
                   <div class="form-group">
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
@@ -621,69 +623,69 @@ class YaleLockManagerCard extends HTMLElement {
                   🏷️ FOB/RFID cards don't require a PIN. The card ID is read automatically when presented to the lock.
                 </div>
                 
-                <div id="pin-features-${user.slot}" class="${isFob ? 'hidden' : ''}">
-                  <hr>
-                  
-                  <div class="form-group">
-                    <label class="toggle-label">
-                      <label class="toggle-switch">
-                        <input type="checkbox" id="schedule-toggle-${user.slot}" onchange="card.toggleSchedule(${user.slot}, this.checked)" ${user.schedule?.start || user.schedule?.end ? 'checked' : ''}>
-                        <span class="slider"></span>
-                      </label>
-                      <span>⏰ Time-Based Schedule</span>
+                <hr>
+                
+                <div class="form-group">
+                  <label class="toggle-label">
+                    <label class="toggle-switch">
+                      <input type="checkbox" id="schedule-toggle-${user.slot}" onchange="card.toggleSchedule(${user.slot}, this.checked)" ${user.schedule?.start || user.schedule?.end ? 'checked' : ''}>
+                      <span class="slider"></span>
                     </label>
-                    <p style="color: var(--secondary-text-color); font-size: 0.85em; margin: 4px 0 8px 20px;">
-                      Limit when this code works. Leave disabled for 24/7 access.
-                    </p>
-                    
-                    <div id="schedule-fields-${user.slot}" class="${user.schedule?.start || user.schedule?.end ? '' : 'hidden'}">
-                      <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-                        <div style="flex: 1; min-width: 200px;">
-                          <label style="font-size: 0.85em;">Start:</label>
-                          <input type="datetime-local" id="start-${user.slot}" value="${user.schedule?.start ? user.schedule.start.substring(0, 16) : ''}">
-                        </div>
-                        <div style="flex: 1; min-width: 200px;">
-                          <label style="font-size: 0.85em;">End:</label>
-                          <input type="datetime-local" id="end-${user.slot}" value="${user.schedule?.end ? user.schedule.end.substring(0, 16) : ''}">
-                        </div>
-                      </div>
-                    </div>
-                  </div>
+                    <span>⏰ Time-Based Schedule</span>
+                  </label>
+                  <p style="color: var(--secondary-text-color); font-size: 0.85em; margin: 4px 0 8px 20px;">
+                    Limit when this code works. Leave disabled for 24/7 access.
+                  </p>
                   
-                  <div class="form-group">
-                    <label class="toggle-label">
-                      <label class="toggle-switch">
-                        <input type="checkbox" id="limit-toggle-${user.slot}" onchange="card.toggleLimit(${user.slot}, this.checked)" ${user.usage_limit ? 'checked' : ''}>
-                        <span class="slider"></span>
-                      </label>
-                      <span>🔢 Usage Limit</span>
-                    </label>
-                    <p style="color: var(--secondary-text-color); font-size: 0.85em; margin: 4px 0 8px 20px;">
-                      Limit how many times this code can be used.
-                    </p>
-                    
-                    <div id="limit-fields-${user.slot}" class="${user.usage_limit ? '' : 'hidden'}">
-                      <div style="display: flex; gap: 12px;">
-                        <div style="flex: 1;">
-                          <label style="font-size: 0.85em;">Current:</label>
-                          <input type="number" value="${user.usage_count || 0}" readonly style="background: var(--disabled-color, #f0f0f0);">
-                        </div>
-                        <div style="flex: 1;">
-                          <label style="font-size: 0.85em;">Max:</label>
-                          <input type="number" id="limit-${user.slot}" value="${user.usage_limit || ''}" placeholder="e.g., 5" min="1">
-                        </div>
+                  <div id="schedule-fields-${user.slot}" class="${user.schedule?.start || user.schedule?.end ? '' : 'hidden'}">
+                    <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                      <div style="flex: 1; min-width: 200px;">
+                        <label style="font-size: 0.85em;">Start:</label>
+                        <input type="datetime-local" id="start-${user.slot}" value="${user.schedule?.start ? user.schedule.start.substring(0, 16) : ''}">
                       </div>
-                      ${user.usage_limit && user.usage_count >= user.usage_limit ? `
-                        <p style="color: var(--error-color); margin-top: 8px;">🚫 Limit reached!</p>
-                      ` : user.usage_count > 0 ? `
-                        <p style="color: var(--warning-color); margin-top: 8px;">⚠️ ${user.usage_count} / ${user.usage_limit || '∞'} uses</p>
-                      ` : ''}
-                      ${user.usage_count > 0 ? `
-                        <button class="secondary" style="margin-top: 8px; width: 100%;" onclick="card.resetCount(${user.slot})">Reset Counter</button>
-                      ` : ''}
+                      <div style="flex: 1; min-width: 200px;">
+                        <label style="font-size: 0.85em;">End:</label>
+                        <input type="datetime-local" id="end-${user.slot}" value="${user.schedule?.end ? user.schedule.end.substring(0, 16) : ''}">
+                      </div>
                     </div>
                   </div>
                 </div>
+                
+                ${!isFob ? `
+                <div class="form-group">
+                  <label class="toggle-label">
+                    <label class="toggle-switch">
+                      <input type="checkbox" id="limit-toggle-${user.slot}" onchange="card.toggleLimit(${user.slot}, this.checked)" ${user.usage_limit ? 'checked' : ''}>
+                      <span class="slider"></span>
+                    </label>
+                    <span>🔢 Usage Limit</span>
+                  </label>
+                  <p style="color: var(--secondary-text-color); font-size: 0.85em; margin: 4px 0 8px 20px;">
+                    Limit how many times this code can be used.
+                  </p>
+                  
+                  <div id="limit-fields-${user.slot}" class="${user.usage_limit ? '' : 'hidden'}">
+                    <div style="display: flex; gap: 12px;">
+                      <div style="flex: 1;">
+                        <label style="font-size: 0.85em;">Current:</label>
+                        <input type="number" value="${user.usage_count || 0}" readonly style="background: var(--disabled-color, #f0f0f0);">
+                      </div>
+                      <div style="flex: 1;">
+                        <label style="font-size: 0.85em;">Max:</label>
+                        <input type="number" id="limit-${user.slot}" value="${user.usage_limit || ''}" placeholder="e.g., 5" min="1">
+                      </div>
+                    </div>
+                    ${user.usage_limit && user.usage_count >= user.usage_limit ? `
+                      <p style="color: var(--error-color); margin-top: 8px;">🚫 Limit reached!</p>
+                    ` : user.usage_count > 0 ? `
+                      <p style="color: var(--warning-color); margin-top: 8px;">⚠️ ${user.usage_count} / ${user.usage_limit || '∞'} uses</p>
+                    ` : ''}
+                    ${user.usage_count > 0 ? `
+                      <button class="secondary" style="margin-top: 8px; width: 100%;" onclick="card.resetCount(${user.slot})">Reset Counter</button>
+                    ` : ''}
+                  </div>
+                </div>
+                ` : ''}
                 
                 <hr>
                 <div class="button-group">
@@ -694,11 +696,11 @@ class YaleLockManagerCard extends HTMLElement {
                     <button class="secondary" onclick="card.clearSlot(${user.slot})">Clear Slot</button>
                   ` : ''}
                 </div>
-              </div>
-            </td>
-          </tr>
-        ` : ''}
-      `;
+                      </div>
+                    </td>
+                  </tr>
+                ` : ''}
+              `;
     }).join('');
 
     return `
@@ -760,7 +762,7 @@ class YaleLockManagerCard extends HTMLElement {
   }
 
   // ========== EVENT HANDLING ==========
-  
+
   attachEventListeners() {
     // Make card globally accessible for onclick handlers
     window.card = this;
