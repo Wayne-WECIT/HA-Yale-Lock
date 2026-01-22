@@ -654,6 +654,9 @@ class YaleLockCoordinator(DataUpdateCoordinator):
         if slot < 1 or slot > MAX_USER_SLOTS:
             raise ValueError(f"Slot must be between 1 and {MAX_USER_SLOTS}")
 
+        # Get existing user data if slot exists
+        existing_user = self._user_data["users"].get(str(slot))
+
         # For FOBs, code can be empty or short
         if code_type == CODE_TYPE_FOB:
             # FOBs don't need a PIN code, use placeholder
