@@ -890,6 +890,10 @@ class YaleLockManagerCard extends HTMLElement {
 
   async refresh() {
     try {
+      // Show progress message
+      this.showStatus(0, '⏳ Refreshing codes from lock... This may take a moment.', 'info');
+      this.render();
+      
       // Save current form values before refresh
       const savedValues = this._saveFormValues();
       
@@ -900,11 +904,12 @@ class YaleLockManagerCard extends HTMLElement {
       // Restore form values after refresh
       this._restoreFormValues(savedValues);
       
-      this.showStatus(0, 'Refreshed from lock', 'success');
+      this.showStatus(0, '✅ Refreshed from lock successfully!', 'success');
       // Force a render after refresh to show updated data
-      this.render();
+      setTimeout(() => this.render(), 500);
     } catch (error) {
-      this.showStatus(0, `Refresh failed: ${error.message}`, 'error');
+      this.showStatus(0, `❌ Refresh failed: ${error.message}`, 'error');
+      this.render();
     }
   }
   
@@ -1004,12 +1009,20 @@ class YaleLockManagerCard extends HTMLElement {
 
     this.showStatus(slot, `Push "${user.name}" to the lock now?`, 'confirm', async () => {
       try {
+        // Show progress message
+        this.showStatus(slot, '⏳ Pushing code to lock...', 'info');
+        this.render();
+        
         await this._hass.callService('yale_lock_manager', 'push_code_to_lock', {
           entity_id: this._config.entity,
           slot: parseInt(slot, 10)
         });
         
-        // After pushing, check sync status to verify it worked
+        // Show verification message
+        this.showStatus(slot, '⏳ Verifying code was set...', 'info');
+        this.render();
+        
+        // After pushing, check sync status to verify it worked and update lock_code
         try {
           await this._hass.callService('yale_lock_manager', 'check_sync_status', {
             entity_id: this._config.entity,
@@ -1019,9 +1032,12 @@ class YaleLockManagerCard extends HTMLElement {
           _LOGGER.warn('Failed to check sync status after push: %s', syncError);
         }
         
-        setTimeout(() => this.render(), 500);
+        // Show success message
+        this.showStatus(slot, '✅ Code pushed successfully!', 'success');
+        setTimeout(() => this.render(), 1000);
       } catch (error) {
-        this.showStatus(slot, `Push failed: ${error.message}`, 'error');
+        this.showStatus(slot, `❌ Push failed: ${error.message}`, 'error');
+        this.render();
       }
     });
   }
@@ -1043,7 +1059,13 @@ class YaleLockManagerCard extends HTMLElement {
     }
 
     try {
+      // Show progress message
+      this.showStatus(slot, '⏳ Saving user data...', 'info');
+      this.render();
       // Set user code
+      this.showStatus(slot, '⏳ Querying lock for current PIN...', 'info');
+      this.render();
+      
       await this._hass.callService('yale_lock_manager', 'set_user_code', {
         entity_id: this._config.entity,
         slot: parseInt(slot, 10),
@@ -1129,6 +1151,9 @@ class YaleLockManagerCard extends HTMLElement {
       // FOBs are added directly to the lock, so no sync check needed
       if (codeType === 'pin') {
         try {
+          this.showStatus(slot, '⏳ Checking sync status...', 'info');
+          this.render();
+          
           await this._hass.callService('yale_lock_manager', 'check_sync_status', {
             entity_id: this._config.entity,
             slot: parseInt(slot, 10)
@@ -1139,9 +1164,12 @@ class YaleLockManagerCard extends HTMLElement {
         }
       }
 
+      // Show success message
+      this.showStatus(slot, '✅ User saved successfully!', 'success');
+      
       // Render will be triggered by the refresh from check_sync_status
       // But add a small delay to ensure data is updated
-      setTimeout(() => this.render(), 500);
+      setTimeout(() => this.render(), 1000);
       
     } catch (error) {
       if (error.message && error.message.includes('occupied by an unknown code')) {
