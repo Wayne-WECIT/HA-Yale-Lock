@@ -20,6 +20,112 @@ Use `lock.smart_door_lock_manager` for the Lovelace card!
 
 ---
 
+## [1.5.1.0] - 2026-01-22
+
+### Fixed
+- **CRITICAL FIX**: Added `entity_id` parameter to all service schemas
+  - Services were rejecting calls with "extra keys not allowed" error
+  - All schemas now accept optional `entity_id` parameter
+  - Makes services future-proof for multi-lock support
+  - Fixes card functionality completely
+
+## [1.5.0.0] - 2026-01-22
+
+### Added
+- **📊 Usage Count Display**
+  - Current usage count shown in read-only input box
+  - Maximum uses shown in editable input box
+  - Side-by-side display for easy comparison
+  - Visual indicator when limit is reached (🚫 red error)
+  - Warning indicator for partial usage (⚠️ orange)
+- **🔄 Reset Usage Counter Button**
+  - New "Reset Counter" button (appears when usage_count > 0)
+  - Resets usage count back to 0
+  - Automatically re-enables code if it was disabled due to limit
+  - Confirmation dialog before reset
+- **🔧 New Service**: `reset_usage_count`
+  - Resets usage counter for a specific slot
+  - Auto-enables user if they were disabled by limit
+  - Available via UI and service call
+
+### Improved
+- Better visual feedback for usage limits:
+  - Read-only field prevents accidental changes to current count
+  - Clear separation between current and maximum
+  - Color-coded status messages
+- Usage count logic fully implemented:
+  - Counter increments on each access
+  - Code auto-disables when count >= limit
+  - Reset button only shows when needed
+
+## [1.4.0.0] - 2026-01-22
+
+### Added
+- **🎚️ Toggle Controls** for schedule and usage limit
+  - Clean toggle switches to enable/disable features
+  - Fields automatically show/hide based on toggle state
+  - Cleaner, less cluttered UI
+- **✅ Date Validation** in services and UI
+  - Start/End dates must be in the future
+  - End date must be after start date
+  - Client-side and server-side validation
+  - User-friendly error messages
+
+### Improved
+- **Logic Clarification**:
+  - No schedule set = code works 24/7 indefinitely
+  - No usage limit = unlimited uses
+  - Can configure schedule and limit together or separately
+  - Code auto-disables when date expires OR usage limit reached
+- Better UX for optional features (toggles instead of always-visible fields)
+- Updated field descriptions to explain default behavior
+
+### Fixed
+- Validation in `set_user_schedule` service now checks dates are valid
+
+## [1.3.3.0] - 2026-01-22
+
+### Fixed
+- **UI FIX**: Schedule and usage limit fields now always visible
+  - Previously hidden until after setting user code
+  - Now shown immediately when expanding empty slots
+  - Can set name, code, schedule, and limit all at once
+- Added helpful descriptions for schedule and usage limit fields
+- Improved button labels (shows "Update" vs "Set" based on state)
+- Added usage count warning indicator
+
+### Improved
+- Schedule fields now labeled "Start Date/Time" and "End Date/Time" for clarity
+- Usage limit shows example placeholder text
+- Better visual feedback for usage count
+
+## [1.3.2.0] - 2026-01-22
+
+### Fixed
+- **CRITICAL FIX**: Corrected all service names in Lovelace card
+  - `set_usercode` → `set_user_code`
+  - `push_usercode` → `push_code_to_lock`
+  - `clear_usercode` → `clear_user_code`
+  - `enable_usercode` → `enable_user` / `disable_user`
+  - `refresh_codes` → `pull_codes_from_lock`
+  - `set_schedule` → `set_user_schedule`
+- Fixed service parameter names:
+  - `start_time`/`end_time` → `start_datetime`/`end_datetime`
+  - `limit` → `max_uses`
+  - `enabled` parameter removed (use separate enable/disable services)
+- Card now properly communicates with backend services
+
+## [1.3.1.0] - 2026-01-22
+
+### Fixed
+- **MAJOR FIX**: Completely rewrote Lovelace card with proper event handling
+  - Removed broken `@click` template literal syntax
+  - Implemented vanilla JavaScript event listeners
+  - Fixed unresponsive buttons and toggle switches
+  - Removed security vulnerability (`eval()` usage)
+- Card now properly responsive and clickable
+- All buttons, toggles, and input fields now work correctly
+
 ## [1.3.0.0] - 2026-01-22
 
 ### NEW FEATURE - Configuration Parameters
@@ -376,113 +482,6 @@ After updating, you may need to:
 - Codes stored locally with option for encryption (future)
 
 ## [Unreleased]
-
-### Planned Features
-
-## [1.5.1.0] - 2026-01-22
-
-### Fixed
-- **CRITICAL FIX**: Added `entity_id` parameter to all service schemas
-  - Services were rejecting calls with "extra keys not allowed" error
-  - All schemas now accept optional `entity_id` parameter
-  - Makes services future-proof for multi-lock support
-  - Fixes card functionality completely
-
-## [1.5.0.0] - 2026-01-22
-
-### Added
-- **📊 Usage Count Display**
-  - Current usage count shown in read-only input box
-  - Maximum uses shown in editable input box
-  - Side-by-side display for easy comparison
-  - Visual indicator when limit is reached (🚫 red error)
-  - Warning indicator for partial usage (⚠️ orange)
-- **🔄 Reset Usage Counter Button**
-  - New "Reset Counter" button (appears when usage_count > 0)
-  - Resets usage count back to 0
-  - Automatically re-enables code if it was disabled due to limit
-  - Confirmation dialog before reset
-- **🔧 New Service**: `reset_usage_count`
-  - Resets usage counter for a specific slot
-  - Auto-enables user if they were disabled by limit
-  - Available via UI and service call
-
-### Improved
-- Better visual feedback for usage limits:
-  - Read-only field prevents accidental changes to current count
-  - Clear separation between current and maximum
-  - Color-coded status messages
-- Usage count logic fully implemented:
-  - Counter increments on each access
-  - Code auto-disables when count >= limit
-  - Reset button only shows when needed
-
-## [1.4.0.0] - 2026-01-22
-
-### Added
-- **🎚️ Toggle Controls** for schedule and usage limit
-  - Clean toggle switches to enable/disable features
-  - Fields automatically show/hide based on toggle state
-  - Cleaner, less cluttered UI
-- **✅ Date Validation** in services and UI
-  - Start/End dates must be in the future
-  - End date must be after start date
-  - Client-side and server-side validation
-  - User-friendly error messages
-
-### Improved
-- **Logic Clarification**:
-  - No schedule set = code works 24/7 indefinitely
-  - No usage limit = unlimited uses
-  - Can configure schedule and limit together or separately
-  - Code auto-disables when date expires OR usage limit reached
-- Better UX for optional features (toggles instead of always-visible fields)
-- Updated field descriptions to explain default behavior
-
-### Fixed
-- Validation in `set_user_schedule` service now checks dates are valid
-
-## [1.3.3.0] - 2026-01-22
-
-### Fixed
-- **UI FIX**: Schedule and usage limit fields now always visible
-  - Previously hidden until after setting user code
-  - Now shown immediately when expanding empty slots
-  - Can set name, code, schedule, and limit all at once
-- Added helpful descriptions for schedule and usage limit fields
-- Improved button labels (shows "Update" vs "Set" based on state)
-- Added usage count warning indicator
-
-### Improved
-- Schedule fields now labeled "Start Date/Time" and "End Date/Time" for clarity
-- Usage limit shows example placeholder text
-- Better visual feedback for usage count
-
-## [1.3.2.0] - 2026-01-22
-
-### Fixed
-- **CRITICAL FIX**: Corrected all service names in Lovelace card
-  - `set_usercode` → `set_user_code`
-  - `push_usercode` → `push_code_to_lock`
-  - `clear_usercode` → `clear_user_code`
-  - `enable_usercode` → `enable_user` / `disable_user`
-  - `refresh_codes` → `pull_codes_from_lock`
-  - `set_schedule` → `set_user_schedule`
-- Fixed service parameter names:
-  - `start_time`/`end_time` → `start_datetime`/`end_datetime`
-  - `limit` → `max_uses`
-  - `enabled` parameter removed (use separate enable/disable services)
-- Card now properly communicates with backend services
-
-## [1.3.1.0] - 2026-01-22
-
-### Fixed
-- **MAJOR FIX**: Completely rewrote Lovelace card with proper event handling
-  - Removed broken `@click` template literal syntax that didn't work in vanilla JavaScript
-  - Implemented proper event listeners with `data-action` and `data-slot` attributes
-  - Fixed unresponsive buttons, toggle switches, and input fields
-  - Removed security vulnerability from `eval()` usage
-  - Card is now fully functional and responsive
 
 ### Planned Features
 - Multi-lock support (currently limited to one lock)
