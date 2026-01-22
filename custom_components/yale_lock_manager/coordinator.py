@@ -918,9 +918,19 @@ class YaleLockCoordinator(DataUpdateCoordinator):
         if not user_data:
             raise ValueError(f"User slot {slot} not found")
 
+        code_type = user_data.get("code_type", CODE_TYPE_PIN)
+        
+        # FOBs are added directly to the lock, so we don't push them
+        if code_type == CODE_TYPE_FOB:
+            _LOGGER.info("FOB/RFID cards are added directly to the lock - no push needed for slot %s", slot)
+            # Just update sync status to True since FOBs don't need syncing
+            user_data["synced_to_lock"] = True
+            await self.async_save_user_data()
+            await self.async_request_refresh()
+            return
+
         code = user_data["code"]
         enabled = user_data["enabled"]
-        code_type = user_data.get("code_type", CODE_TYPE_PIN)
 
         # Determine status based on enabled flag and schedule
         if enabled and self._is_code_valid(slot):
