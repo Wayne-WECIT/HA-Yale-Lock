@@ -111,11 +111,11 @@ class YaleLockManagerCard extends HTMLElement {
     };
 
     const icons = {
-      success: '✅',
-      error: '❌',
-      warning: '⚠️',
-      info: 'ℹ️',
-      confirm: '❓'
+      success: 'Γ£à',
+      error: 'Γ¥î',
+      warning: 'ΓÜá∩╕Å',
+      info: 'Γä╣∩╕Å',
+      confirm: 'Γ¥ô'
     };
 
     container.innerHTML = `
@@ -135,7 +135,7 @@ class YaleLockManagerCard extends HTMLElement {
           <button class="btn-confirm" data-slot="${slot}">Yes</button>
           <button class="btn-cancel" data-slot="${slot}">No</button>
         ` : status.type !== 'success' ? `
-          <button class="btn-close" data-slot="${slot}">✕</button>
+          <button class="btn-close" data-slot="${slot}">Γ£ò</button>
         ` : ''}
       </div>
     `;
@@ -193,7 +193,7 @@ class YaleLockManagerCard extends HTMLElement {
       this.shadowRoot.innerHTML = `
         <style>${this.getStyles()}</style>
         <ha-card>
-          <div class="error">⚠️ Entity "${entityId}" not found</div>
+          <div class="error">ΓÜá∩╕Å Entity "${entityId}" not found</div>
         </ha-card>
       `;
       return;
@@ -460,7 +460,7 @@ class YaleLockManagerCard extends HTMLElement {
         <tr class="clickable" onclick="card.toggleExpand(${user.slot})">
           <td><strong>${user.slot}</strong></td>
           <td>${user.name || `User ${user.slot}`}</td>
-          <td>${isFob ? '🏷️' : '🔑'}</td>
+          <td>${isFob ? '≡ƒÅ╖∩╕Å' : '≡ƒöæ'}</td>
           <td>
             <span style="
               display: inline-block;
@@ -472,7 +472,7 @@ class YaleLockManagerCard extends HTMLElement {
               font-size: 0.85em;
             ">${statusText}</span>
                   </td>
-          <td>${user.synced_to_lock ? '✓' : '⚠️'}</td>
+          <td>${user.synced_to_lock ? 'Γ£ô' : 'ΓÜá∩╕Å'}</td>
                 </tr>
                 ${isExpanded ? `
                   <tr class="expanded-row">
@@ -508,7 +508,7 @@ class YaleLockManagerCard extends HTMLElement {
                         <div class="form-group">
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
                       <div>
-                        <label>📝 Cached Status (editable):</label>
+                        <label>≡ƒô¥ Cached Status (editable):</label>
                         <select 
                           id="cached-status-${user.slot}" 
                           onchange="card.changeStatus(${user.slot}, this.value)" 
@@ -524,7 +524,7 @@ class YaleLockManagerCard extends HTMLElement {
                         <p style="color: var(--secondary-text-color); font-size: 0.75em; margin: 4px 0 0 0;">Status stored locally</p>
                         </div>
                       <div>
-                        <label>🔒 Lock Status (from lock):</label>
+                        <label>≡ƒöÆ Lock Status (from lock):</label>
                         <select 
                           id="lock-status-${user.slot}" 
                           disabled 
@@ -542,13 +542,13 @@ class YaleLockManagerCard extends HTMLElement {
                       if (lockStatus !== null && lockStatus !== undefined && formCachedStatus !== lockStatus) {
                         return `
                           <div style="margin-top: 8px; padding: 8px; background: #ff980015; border-left: 4px solid #ff9800; border-radius: 4px;">
-                            <span style="color: #ff9800; font-size: 0.85em;">⚠️ Status doesn't match - Click "Push" to sync</span>
+                            <span style="color: #ff9800; font-size: 0.85em;">ΓÜá∩╕Å Status doesn't match - Click "Push" to sync</span>
                           </div>
                         `;
                       } else if (lockStatus !== null && lockStatus !== undefined && formCachedStatus === lockStatus) {
                         return `
                           <div style="margin-top: 8px; padding: 8px; background: #4caf5015; border-left: 4px solid #4caf50; border-radius: 4px;">
-                            <span style="color: #4caf50; font-size: 0.85em;">✅ Status matches - Synced</span>
+                            <span style="color: #4caf50; font-size: 0.85em;">Γ£à Status matches - Synced</span>
                           </div>
                         `;
                       }
@@ -561,7 +561,7 @@ class YaleLockManagerCard extends HTMLElement {
                   <div class="form-group">
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
                       <div>
-                        <label>📝 Cached PIN (editable):</label>
+                        <label>≡ƒô¥ Cached PIN (editable):</label>
                         <input 
                           type="text" 
                           id="code-${user.slot}" 
@@ -575,7 +575,7 @@ class YaleLockManagerCard extends HTMLElement {
                         <p style="color: var(--secondary-text-color); font-size: 0.75em; margin: 4px 0 0 0;">PIN stored locally</p>
                       </div>
                       <div>
-                        <label>🔒 Lock PIN (from lock):</label>
+                        <label>≡ƒöÆ Lock PIN (from lock):</label>
                         <input 
                           type="text" 
                           id="lock-code-${user.slot}" 
@@ -591,18 +591,18 @@ class YaleLockManagerCard extends HTMLElement {
                     </div>
                     ${formCode && user.lock_code && formCode !== user.lock_code ? `
                       <div style="margin-top: 8px; padding: 8px; background: #ff980015; border-left: 4px solid #ff9800; border-radius: 4px;">
-                        <span style="color: #ff9800; font-size: 0.85em;">⚠️ PINs don't match - Click "Push" to sync</span>
+                        <span style="color: #ff9800; font-size: 0.85em;">ΓÜá∩╕Å PINs don't match - Click "Push" to sync</span>
                       </div>
                     ` : formCode && user.lock_code && formCode === user.lock_code ? `
                       <div style="margin-top: 8px; padding: 8px; background: #4caf5015; border-left: 4px solid #4caf50; border-radius: 4px;">
-                        <span style="color: #4caf50; font-size: 0.85em;">✅ PINs match - Synced</span>
+                        <span style="color: #4caf50; font-size: 0.85em;">Γ£à PINs match - Synced</span>
                       </div>
                         ` : ''}
                   </div>
                 </div>
                         
                 <div id="fob-notice-${user.slot}" class="fob-notice ${!isFob ? 'hidden' : ''}">
-                  🏷️ FOB/RFID cards don't require a PIN. The card ID is read automatically when presented to the lock.
+                  ≡ƒÅ╖∩╕Å FOB/RFID cards don't require a PIN. The card ID is read automatically when presented to the lock.
                 </div>
                           
                 <hr>
@@ -618,7 +618,7 @@ class YaleLockManagerCard extends HTMLElement {
                       >
                       <span class="slider"></span>
                     </label>
-                    <span>⏰ Time-Based Schedule</span>
+                    <span>ΓÅ░ Time-Based Schedule</span>
                   </label>
                   <p style="color: var(--secondary-text-color); font-size: 0.85em; margin: 4px 0 8px 20px;">
                     Limit when this code works. Leave disabled for 24/7 access.
@@ -658,7 +658,7 @@ class YaleLockManagerCard extends HTMLElement {
                         >
                         <span class="slider"></span>
                       </label>
-                      <span>🔢 Usage Limit</span>
+                      <span>≡ƒöó Usage Limit</span>
                     </label>
                     <p style="color: var(--secondary-text-color); font-size: 0.85em; margin: 4px 0 8px 20px;">
                       Limit how many times this code can be used.
@@ -682,9 +682,9 @@ class YaleLockManagerCard extends HTMLElement {
                         </div>
                       </div>
                       ${user.usage_limit && user.usage_count >= user.usage_limit ? `
-                        <p style="color: var(--error-color); margin-top: 8px;">🚫 Limit reached!</p>
+                        <p style="color: var(--error-color); margin-top: 8px;">≡ƒÜ½ Limit reached!</p>
                       ` : user.usage_count > 0 ? `
-                        <p style="color: var(--warning-color); margin-top: 8px;">⚠️ ${user.usage_count} / ${user.usage_limit || '∞'} uses</p>
+                        <p style="color: var(--warning-color); margin-top: 8px;">ΓÜá∩╕Å ${user.usage_count} / ${user.usage_limit || 'Γê₧'} uses</p>
                       ` : ''}
                       ${user.usage_count > 0 ? `
                         <button class="secondary" style="margin-top: 8px; width: 100%;" onclick="card.resetCount(${user.slot})">Reset Counter</button>
@@ -721,10 +721,10 @@ class YaleLockManagerCard extends HTMLElement {
       <ha-card>
         <div class="header">
           <div class="lock-status">
-            <div class="status-icon">${isLocked ? '🔒' : '🔓'}</div>
+            <div class="status-icon">${isLocked ? '≡ƒöÆ' : '≡ƒöô'}</div>
             <div class="status-info">
-              <div class="status-line">🔋 ${batteryLevel}% Battery</div>
-              <div class="status-line">• Bolt: ${boltStatus} • Door: ${doorStatus}</div>
+              <div class="status-line">≡ƒöï ${batteryLevel}% Battery</div>
+              <div class="status-line">ΓÇó Bolt: ${boltStatus} ΓÇó Door: ${doorStatus}</div>
             </div>
           </div>
           <div class="controls">
@@ -734,7 +734,7 @@ class YaleLockManagerCard extends HTMLElement {
         </div>
         
         <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-          <span>👥 ${enabledUsers} / ${totalUsers} active users</span>
+          <span>≡ƒæÑ ${enabledUsers} / ${totalUsers} active users</span>
         </div>
 
         <table>
@@ -756,7 +756,7 @@ class YaleLockManagerCard extends HTMLElement {
         <div id="clear-cache-section" style="text-align: center; padding: 16px 0;">
           ${this._showClearCacheConfirm ? `
             <div style="background: var(--warning-color-background, rgba(255, 152, 0, 0.1)); border: 1px solid var(--warning-color, #ff9800); border-radius: 4px; padding: 12px; margin-bottom: 12px;">
-              <p style="margin: 0 0 12px 0; color: var(--warning-color, #ff9800); font-weight: 500;">⚠️ Are you sure you want to clear all local cache?</p>
+              <p style="margin: 0 0 12px 0; color: var(--warning-color, #ff9800); font-weight: 500;">ΓÜá∩╕Å Are you sure you want to clear all local cache?</p>
               <div style="display: flex; gap: 8px; justify-content: center;">
                 <button onclick="card.confirmClearCache()" style="background: var(--error-color, #f44336); color: white;">Yes, Clear Cache</button>
                 <button class="secondary" onclick="card.cancelClearCache()">Cancel</button>
@@ -764,7 +764,7 @@ class YaleLockManagerCard extends HTMLElement {
             </div>
           ` : ''}
           <button class="secondary" onclick="card.showClearCacheConfirm()" style="background: var(--error-color-background, rgba(244, 67, 54, 0.1)); color: var(--error-color, #f44336); border: 1px solid var(--error-color, #f44336);">
-            🗑️ Clear Local Cache
+            ≡ƒùæ∩╕Å Clear Local Cache
           </button>
           <p style="color: var(--secondary-text-color); font-size: 0.85em; margin-top: 8px;">
             This will remove all locally stored user data. Use "Refresh from lock" to reload from the physical lock.
@@ -890,19 +890,19 @@ class YaleLockManagerCard extends HTMLElement {
 
   async refresh() {
     try {
-      this.showStatus(0, '⏳ Refreshing codes from lock... This may take a moment.', 'info');
+      this.showStatus(0, 'ΓÅ│ Refreshing codes from lock... This may take a moment.', 'info');
       this._updateMessagesOnly();
       
       await this._hass.callService('yale_lock_manager', 'pull_codes_from_lock', {
         entity_id: this._config.entity
       });
       
-      this.showStatus(0, '✅ Refreshed from lock successfully!', 'success');
+      this.showStatus(0, 'Γ£à Refreshed from lock successfully!', 'success');
       // Don't sync form values on refresh - preserve user's edits
       // Only update lock fields (read-only), not editable cached fields
       setTimeout(() => this.render(), 500);
     } catch (error) {
-      this.showStatus(0, `❌ Refresh failed: ${error.message}`, 'error');
+      this.showStatus(0, `Γ¥î Refresh failed: ${error.message}`, 'error');
       this._updateMessagesOnly();
     }
   }
@@ -941,7 +941,7 @@ class YaleLockManagerCard extends HTMLElement {
     
     this.showStatus(slot, `Push "${user.name}" to the lock now?`, 'confirm', async () => {
       try {
-        this.showStatus(slot, '⏳ Pushing code to lock...', 'info');
+        this.showStatus(slot, 'ΓÅ│ Pushing code to lock...', 'info');
         this.renderStatusMessage(slot);
         
         await this._hass.callService('yale_lock_manager', 'push_code_to_lock', {
@@ -949,12 +949,12 @@ class YaleLockManagerCard extends HTMLElement {
           slot: parseInt(slot, 10)
         });
         
-        this.showStatus(slot, '⏳ Pulling data from lock...', 'info');
+        this.showStatus(slot, 'ΓÅ│ Pulling data from lock...', 'info');
         this.renderStatusMessage(slot);
         
         // After push, pull slot data from lock to update lock fields
         // The push function already does this, but we need to wait for entity state to update
-        this.showStatus(slot, '✅ Code pushed successfully!', 'success');
+        this.showStatus(slot, 'Γ£à Code pushed successfully!', 'success');
         
         // Wait for entity state to update with pulled lock data, then refresh UI
         // Form values stay the same, only lock fields update
@@ -962,7 +962,7 @@ class YaleLockManagerCard extends HTMLElement {
           this.render();
         }, 1500);
       } catch (error) {
-        this.showStatus(slot, `❌ Push failed: ${error.message}`, 'error');
+        this.showStatus(slot, `Γ¥î Push failed: ${error.message}`, 'error');
         this.renderStatusMessage(slot);
       }
     });
@@ -994,7 +994,7 @@ class YaleLockManagerCard extends HTMLElement {
 
     try {
       // Rule 2: Only update message area, not fields
-      this.showStatus(slot, '⏳ Saving user data...', 'info');
+      this.showStatus(slot, 'ΓÅ│ Saving user data...', 'info');
       this.renderStatusMessage(slot);
       
       await this._hass.callService('yale_lock_manager', 'set_user_code', {
@@ -1073,12 +1073,12 @@ class YaleLockManagerCard extends HTMLElement {
         const isSynced = codesMatch && statusMatch;
         
         if (!isSynced && codeType === 'pin') {
-          this.showStatus(slot, '✅ User saved! ⚠️ Push required to sync with lock.', 'warning');
+          this.showStatus(slot, 'Γ£à User saved! ΓÜá∩╕Å Push required to sync with lock.', 'warning');
         } else {
-          this.showStatus(slot, '✅ User saved successfully!', 'success');
+          this.showStatus(slot, 'Γ£à User saved successfully!', 'success');
         }
       } else {
-        this.showStatus(slot, '✅ User saved successfully!', 'success');
+        this.showStatus(slot, 'Γ£à User saved successfully!', 'success');
       }
       
       // Form values are already updated in _formValues, so fields will show correct values
@@ -1119,9 +1119,9 @@ class YaleLockManagerCard extends HTMLElement {
               const isSynced = codesMatch && statusMatch;
               
               if (!isSynced && codeType === 'pin') {
-                this.showStatus(slot, '✅ User saved! ⚠️ Push required to sync with lock.', 'warning');
+                this.showStatus(slot, 'Γ£à User saved! ΓÜá∩╕Å Push required to sync with lock.', 'warning');
               } else {
-                this.showStatus(slot, '✅ User saved successfully!', 'success');
+                this.showStatus(slot, 'Γ£à User saved successfully!', 'success');
               }
             }
             
