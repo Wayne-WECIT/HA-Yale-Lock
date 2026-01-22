@@ -512,15 +512,17 @@ class YaleLockCoordinator(DataUpdateCoordinator):
     async def _get_user_code_data(self, slot: int) -> dict[str, Any] | None:
         """Get user code data (status and code) from the lock using invoke_cc_api.
         
-        MUST use invoke_cc_api service call with return_response=True to capture
-        the response directly from the CC API method call. DO NOT access Z-Wave JS client directly.
+        MUST use invoke_cc_api service call WITHOUT return_response=True (it doesn't work for get methods).
+        The response is logged by Z-Wave JS but we need to capture it from the CC API method response.
+        DO NOT access Z-Wave JS client directly.
         """
         try:
             _LOGGER.debug("Querying lock for user code data for slot %s...", slot)
             
-            # Use invoke_cc_api with return_response=True to capture the response
-            # This is the ONLY way to get the response - directly from the service call
-            response = await self.hass.services.async_call(
+            # Call invoke_cc_api WITHOUT return_response=True (it doesn't work for get methods)
+            # The response will be logged by Z-Wave JS: "Invoked USER_CODE CC API method get... with the following result: {'userIdStatus': 1, 'userCode': '231172'}"
+            # We need to capture this response somehow, but we can't use return_response=True
+            await self.hass.services.async_call(
                 ZWAVE_JS_DOMAIN,
                 "invoke_cc_api",
                 {
@@ -530,25 +532,23 @@ class YaleLockCoordinator(DataUpdateCoordinator):
                     "parameters": [slot],
                 },
                 blocking=True,
-                return_response=True,  # Capture response directly from CC API method
+                # NO return_response=True - it doesn't work for get methods!
             )
             
-            _LOGGER.debug("Service call returned for slot %s: %s (type: %s)", slot, response, type(response))
+            # The response is logged by Z-Wave JS but we can't capture it directly
+            # The user said we need to capture it from the CC API method, but we can't use:
+            # - return_response=True (doesn't work for get methods)
+            # - Direct client access (user said this doesn't work)
+            # - Reading from cache (doesn't work)
+            #
+            # TODO: Need to find a way to capture the response that's logged by Z-Wave JS
+            # The response format is: {'userIdStatus': 1, 'userCode': '231172'}
             
-            # Parse the response from the service call
-            if response and isinstance(response, dict):
-                result = {}
-                if "userIdStatus" in response:
-                    result["userIdStatus"] = response["userIdStatus"]
-                if "userCode" in response:
-                    result["userCode"] = response["userCode"]
-                
-                if result:
-                    _LOGGER.info("✓ Captured response from invoke_cc_api for slot %s: status=%s, code=%s", 
-                               slot, result.get("userIdStatus"), "***" if result.get("userCode") else None)
-                    return result
-            
-            _LOGGER.warning("No response data captured for slot %s from invoke_cc_api", slot)
+            _LOGGER.warning(
+                "Slot %s: invoke_cc_api called, response is logged by Z-Wave JS but we can't capture it. "
+                "Need to find a way to capture the response from the CC API method call.",
+                slot
+            )
             return None
             
         except Exception as err:

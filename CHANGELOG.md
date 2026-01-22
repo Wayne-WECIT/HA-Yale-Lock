@@ -20,6 +20,44 @@ Use `lock.smart_door_lock_manager` for the Lovelace card!
 
 ---
 
+## [1.8.2.8] - 2026-01-22
+
+### ❌ REMOVED return_response=True (Doesn't Work)
+
+**User feedback**: "why have you turned return_response=True back on again when we know from earlier it doent work???!!!!!!!!!!"
+
+### The Issue
+
+I mistakenly added `return_response=True` back, but we already know it doesn't work for `get` methods:
+```
+ServiceValidationError: An action which does not return responses can't be called with return_response=True
+```
+
+### The Fix
+
+**Removed `return_response=True`** - it doesn't work for `get` methods.
+
+### Current Status
+
+- ✅ Using `invoke_cc_api` WITHOUT `return_response=True`
+- ✅ Response is logged by Z-Wave JS: `Invoked USER_CODE CC API method get... with the following result: {'userIdStatus': 1, 'userCode': '231172'}`
+- ❌ **CAN'T capture the response** because:
+  - `return_response=True` doesn't work for `get` methods
+  - Direct client access doesn't work (user confirmed)
+  - Reading from cache doesn't work
+
+### Question for User
+
+**How should we capture the response from the CC API method call?**
+
+The response is logged by Z-Wave JS but we need a way to capture it. Options:
+1. Listen for a Z-Wave JS event?
+2. Parse the logged response somehow?
+3. Use a different service call method?
+4. Something else?
+
+---
+
 ## [1.8.2.7] - 2026-01-22
 
 ### ✅ FIX - Capture Response from invoke_cc_api Service Call
