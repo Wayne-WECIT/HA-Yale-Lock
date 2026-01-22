@@ -33,6 +33,7 @@ from .const import (
     SERVICE_SET_USAGE_LIMIT,
     SERVICE_SET_USER_CODE,
     SERVICE_SET_USER_SCHEDULE,
+    SERVICE_CHECK_SYNC_STATUS,
 )
 from .coordinator import YaleLockCoordinator
 
@@ -84,6 +85,13 @@ PUSH_CODE_TO_LOCK_SCHEMA = vol.Schema(
 PULL_CODES_FROM_LOCK_SCHEMA = vol.Schema(
     {
         vol.Optional("entity_id"): cv.entity_id,
+    }
+)
+
+CHECK_SYNC_STATUS_SCHEMA = vol.Schema(
+    {
+        vol.Optional("entity_id"): cv.entity_id,
+        vol.Required(ATTR_SLOT): vol.All(vol.Coerce(int), vol.Range(min=1, max=MAX_USER_SLOTS)),
     }
 )
 
@@ -294,6 +302,13 @@ async def async_setup_services(hass: HomeAssistant) -> None:
         SERVICE_PULL_CODES_FROM_LOCK,
         handle_pull_codes_from_lock,
         schema=PULL_CODES_FROM_LOCK_SCHEMA,
+    )
+
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_CHECK_SYNC_STATUS,
+        handle_check_sync_status,
+        schema=CHECK_SYNC_STATUS_SCHEMA,
     )
 
     hass.services.async_register(

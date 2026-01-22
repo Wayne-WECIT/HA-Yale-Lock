@@ -486,9 +486,12 @@ class YaleLockManagerCard extends HTMLElement {
               <span class="slider"></span>
             </label>
           </td>
-          <td>${user.synced_to_lock ? '✓' : '✗'}</td>
+          <td>${user.synced_to_lock ? '✓' : '⚠️'}</td>
           <td>
-            <button onclick="event.stopPropagation(); card.pushCode(${user.slot})">Push</button>
+            <button 
+              onclick="event.stopPropagation(); card.pushCode(${user.slot})"
+              style="${!user.synced_to_lock ? 'background: #ff9800; color: white; font-weight: bold;' : ''}"
+            >${user.synced_to_lock ? 'Push' : 'Push Required'}</button>
           </td>
         </tr>
         ${isExpanded ? `
@@ -837,7 +840,18 @@ class YaleLockManagerCard extends HTMLElement {
           entity_id: this._config.entity,
           slot: parseInt(slot, 10)
         });
-        this.showStatus(slot, 'Code pushed to lock', 'success');
+        
+        // After pushing, check sync status to verify it worked
+        try {
+          await this._hass.callService('yale_lock_manager', 'check_sync_status', {
+            entity_id: this._config.entity,
+            slot: parseInt(slot, 10)
+          });
+        } catch (syncError) {
+          _LOGGER.warn('Failed to check sync status after push: %s', syncError);
+        }
+        
+        setTimeout(() => this.render(), 500);
       } catch (error) {
         this.showStatus(slot, `Push failed: ${error.message}`, 'error');
       }
@@ -943,7 +957,20 @@ class YaleLockManagerCard extends HTMLElement {
         });
       }
 
-      this.showStatus(slot, 'User saved successfully', 'success');
+      // After saving, check sync status by querying the lock
+      try {
+        await this._hass.callService('yale_lock_manager', 'check_sync_status', {
+          entity_id: this._config.entity,
+          slot: parseInt(slot, 10)
+        });
+      } catch (syncError) {
+        _LOGGER.warn('Failed to check sync status: %s', syncError);
+        // Don't fail the save operation if sync check fails
+      }
+
+      // Render will be triggered by the refresh from check_sync_status
+      // But add a small delay to ensure data is updated
+      setTimeout(() => this.render(), 500);
       
     } catch (error) {
       if (error.message && error.message.includes('occupied by an unknown code')) {
@@ -957,7 +984,18 @@ class YaleLockManagerCard extends HTMLElement {
               code_type: codeType,
               override_protection: true
             });
-            this.showStatus(slot, 'User saved (unknown code overwritten)', 'success');
+            
+            // After saving with override, check sync status
+            try {
+              await this._hass.callService('yale_lock_manager', 'check_sync_status', {
+                entity_id: this._config.entity,
+                slot: parseInt(slot, 10)
+              });
+            } catch (syncError) {
+              _LOGGER.warn('Failed to check sync status: %s', syncError);
+            }
+            
+            setTimeout(() => this.render(), 500);
           } catch (retryError) {
             this.showStatus(slot, `Failed: ${retryError.message}`, 'error');
           }

@@ -2,7 +2,7 @@
 from typing import Final
 
 DOMAIN: Final = "yale_lock_manager"
-VERSION: Final = "1.8.2.15"
+VERSION: Final = "1.8.2.16"
 
 # Z-Wave JS Domain
 ZWAVE_JS_DOMAIN: Final = "zwave_js"
@@ -77,6 +77,7 @@ SERVICE_SET_USAGE_LIMIT: Final = "set_usage_limit"
 SERVICE_RESET_USAGE_COUNT: Final = "reset_usage_count"
 SERVICE_PUSH_CODE_TO_LOCK: Final = "push_code_to_lock"
 SERVICE_PULL_CODES_FROM_LOCK: Final = "pull_codes_from_lock"
+SERVICE_CHECK_SYNC_STATUS: Final = "check_sync_status"
 SERVICE_ENABLE_USER: Final = "enable_user"
 SERVICE_DISABLE_USER: Final = "disable_user"
 

@@ -20,6 +20,56 @@ Use `lock.smart_door_lock_manager` for the Lovelace card!
 
 ---
 
+## [1.8.2.16] - 2026-01-22
+
+### ✨ NEW - Sync Status Checking & Visual Indicators
+
+**User feedback**: "when someone click Save User does it auto update the lock or do they have to do something? if so we need to find a way to tell them."
+
+### The Issue
+
+Users were unclear about when changes needed to be pushed to the lock:
+1. **"Save User" button**: Only saved to local storage, didn't push to lock
+2. **Enable/Disable toggle**: Changed local state but didn't push to lock
+3. **No visual feedback**: Users couldn't tell if sync was needed
+
+### The Solution
+
+**New Service: `check_sync_status`**:
+- Queries the lock for a specific slot's current PIN/status
+- Compares cached values with lock values
+- Updates `synced_to_lock` status automatically
+
+**Visual Indicators**:
+1. **Synced Column**: Shows ⚠️ instead of ✗ when sync is needed
+2. **Push Button**: Changes to "Push Required" (orange/red) when not synced
+3. **Auto-check after Save**: Automatically checks sync status after "Save User" is clicked
+4. **Auto-check after Push**: Verifies sync status after pushing to confirm it worked
+
+### Implementation
+
+**Backend (`coordinator.py`)**:
+- `async_check_sync_status(slot)`: Queries lock, compares values, updates sync status
+- Handles both PIN codes (compares code + enabled) and FOBs (compares enabled only)
+
+**Frontend (`yale-lock-manager-card.js`)**:
+- Push button shows "Push Required" with orange background when `synced_to_lock === false`
+- Synced column shows ⚠️ when not synced, ✓ when synced
+- `saveUser()` calls `check_sync_status` after saving
+- `pushCode()` calls `check_sync_status` after pushing to verify
+
+**Services (`services.py`)**:
+- New service: `yale_lock_manager.check_sync_status` with schema validation
+
+### User Experience
+
+1. **After "Save User"**: Lock is queried, sync status is updated, UI reflects whether push is needed
+2. **After Enable/Disable**: `synced_to_lock` is set to `False`, UI shows ⚠️ and "Push Required"
+3. **After "Push"**: Lock is queried again to verify sync succeeded
+4. **Clear visual feedback**: Users always know when a push is needed
+
+---
+
 ## [1.8.2.15] - 2026-01-22
 
 ### 🔧 FIX - Form Fields Clearing During Auto-Refresh
