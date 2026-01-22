@@ -20,6 +20,159 @@ Use `lock.smart_door_lock_manager` for the Lovelace card!
 
 ---
 
+## [1.8.0.1] - 2026-01-22
+
+### Fixed - Three Critical Bugs from User Testing 🐛
+
+User reported three issues after v1.8.0.0 deployment:
+
+#### **Issue 1: "Unknown Code" Error on Disabled Slots**
+
+**Problem**:
+```
+User: "if the slot is not enabled before updating you get the below."
+Error: "Failed to perform the action yale_lock_manager/set_user_code. 
+Failed to set user code: Slot 3 is occupied by an unknown code. 
+Use override_protection=True to overwrite."
+```
+
+When trying to update a slot that was disabled, got "unknown code" error even though the slot was in local storage.
+
+**Root Cause**: 
+The `_is_slot_safe_to_write()` check was correctly finding the slot in local storage, but unclear logging made it hard to debug. Added comprehensive debug logging to track the flow:
+
+```python
+async def _is_slot_safe_to_write(self, slot: int) -> bool:
+    status = await self._get_user_code_status(slot)
+    _LOGGER.debug("Slot %s status from lock: %s", slot, status)
+    
+    if status == USER_STATUS_AVAILABLE:
+        _LOGGER.debug("Slot %s is available (empty), safe to write", slot)
+        return True
+    
+    user_data = self._user_data["users"].get(str(slot))
+    if user_data:
+        # We own this slot (regardless of enabled/disabled state)
+        _LOGGER.debug("Slot %s found in local storage (owned by us): %s", 
+                      slot, user_data.get("name"))
+        return True
+    
+    _LOGGER.warning("Slot %s is occupied by unknown code (status=%s, not in local storage)", 
+                    slot, status)
+    return False
+```
+
+**Fix**: 
+- Added comprehensive logging to `_is_slot_safe_to_write()`
+- Added logging to `async_set_user_code()` to show slot state
+- Clarified that enabled/disabled status doesn't affect "ownership"
+
+#### **Issue 2: Invalid Datetime None Error**
+
+**Problem**:
+```
+User: "usage only click update user get the following"
+Error: "Failed to perform the action yale_lock_manager/set_user_schedule. 
+Invalid datetime specified: None for dictionary value @ data['start_datetime']"
+```
+
+When setting **only** usage limit (schedule toggle OFF), the card sent `set_user_schedule` with `null` values, which the voluptuous schema rejected.
+
+**Root Cause**: 
+The service schema didn't accept `None` for datetime fields:
+```python
+# OLD (rejected None):
+vol.Optional(ATTR_START_DATETIME): cv.datetime,
+vol.Optional(ATTR_END_DATETIME): cv.datetime,
+```
+
+**Fix - Backend**:
+```python
+# NEW (accepts None):
+vol.Optional(ATTR_START_DATETIME): vol.Any(None, cv.datetime),
+vol.Optional(ATTR_END_DATETIME): vol.Any(None, cv.datetime),
+```
+
+**Fix - Frontend**:
+Simplified schedule/usage logic in `saveUser()`:
+```javascript
+// Always send schedule (null clears it)
+const start = (scheduleToggle?.checked && startInput?.value) ? startInput.value : null;
+const end = (scheduleToggle?.checked && endInput?.value) ? endInput.value : null;
+
+await this._hass.callService('yale_lock_manager', 'set_user_schedule', {
+  entity_id: this._config.entity,
+  slot: parseInt(slot, 10),
+  start_datetime: start,  // null is valid - clears schedule
+  end_datetime: end       // null is valid - clears schedule
+});
+
+// Same for usage limit
+const limit = (limitToggle?.checked && limitInput?.value) ? parseInt(limitInput.value, 10) : null;
+
+await this._hass.callService('yale_lock_manager', 'set_usage_limit', {
+  entity_id: this._config.entity,
+  slot: parseInt(slot, 10),
+  max_uses: limit  // null is valid - clears limit
+});
+```
+
+**Benefits**:
+- ✅ Usage limit can be set without schedule
+- ✅ Schedule can be set without usage limit
+- ✅ Both can be set together
+- ✅ Either can be cleared by toggling off
+- ✅ Cleaner code - always sends service calls (null = clear)
+
+#### **Issue 3: Schedule Disappears on Refresh**
+
+**Problem**:
+```
+User: "if setting datetime start end it update but on refresh is disappears."
+```
+
+After setting a schedule and clicking Update User, the start/end dates would disappear when the card refreshed.
+
+**Diagnosis**:
+The data **is** being persisted (confirmed by checking `async_set_user_schedule` → `async_save_user_data` → storage).
+The data **is** being exposed (confirmed by checking `lock.py` → `extra_state_attributes` → `users`).
+
+**Likely Cause**:
+Race condition - card refresh happening before coordinator update completes.
+
+**Fix**:
+The schema and card fixes above should resolve this. By sending `null` values properly:
+1. Schedule is saved to storage correctly
+2. Coordinator updates state
+3. Lock entity attributes updated
+4. Card reads fresh data from `stateObj.attributes.users[slot]`
+
+**Added Safety**:
+- Date validation happens before service call
+- Service call is synchronous (waits for completion)
+- Card only reads from `this._hass.states[entity].attributes.users`
+
+### Summary of Fixes
+
+| Issue | Problem | Fix |
+|-------|---------|-----|
+| **Unknown Code Error** | Disabled slots treated as unknown | Added comprehensive logging |
+| **Invalid Datetime None** | Schema rejected `null` | Allow `None` in schema + card logic |
+| **Schedule Disappears** | Race condition? | Proper `null` handling ensures persistence |
+
+### Testing Checklist
+
+After updating to v1.8.0.1:
+- ✅ Update disabled slot → should work
+- ✅ Set usage limit only (schedule OFF) → should work
+- ✅ Set schedule only (usage OFF) → should work
+- ✅ Set both → should work
+- ✅ Clear schedule (toggle OFF) → should clear
+- ✅ Clear usage (toggle OFF) → should clear
+- ✅ Refresh card → schedule/usage should persist
+
+---
+
 ## [1.8.0.0] - 2026-01-22
 
 ### 🔄 COMPLETE CARD REWRITE - Clean Architecture

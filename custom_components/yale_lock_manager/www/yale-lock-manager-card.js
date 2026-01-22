@@ -665,11 +665,12 @@ class YaleLockManagerCard extends HTMLElement {
         const startInput = this.shadowRoot.getElementById(`start-${slot}`);
         const endInput = this.shadowRoot.getElementById(`end-${slot}`);
         
-        if (scheduleToggle?.checked && (startInput?.value || endInput?.value)) {
-          const start = startInput.value || null;
-          const end = endInput.value || null;
-          
-          // Validate dates
+        // Always send schedule service call to sync state
+        const start = (scheduleToggle?.checked && startInput?.value) ? startInput.value : null;
+        const end = (scheduleToggle?.checked && endInput?.value) ? endInput.value : null;
+        
+        // Validate dates if provided
+        if (start || end) {
           const now = new Date();
           if (start && new Date(start) < now) {
             this.showStatus(slot, 'Start date must be in the future', 'error');
@@ -683,43 +684,28 @@ class YaleLockManagerCard extends HTMLElement {
             this.showStatus(slot, 'End date must be after start date', 'error');
             return;
           }
-
-          await this._hass.callService('yale_lock_manager', 'set_user_schedule', {
-            entity_id: this._config.entity,
-            slot: parseInt(slot, 10),
-            start_datetime: start,
-            end_datetime: end
-          });
-        } else {
-          // Clear schedule
-          await this._hass.callService('yale_lock_manager', 'set_user_schedule', {
-            entity_id: this._config.entity,
-            slot: parseInt(slot, 10),
-            start_datetime: null,
-            end_datetime: null
-          });
         }
 
+        // Send schedule (null clears it)
+        await this._hass.callService('yale_lock_manager', 'set_user_schedule', {
+          entity_id: this._config.entity,
+          slot: parseInt(slot, 10),
+          start_datetime: start,
+          end_datetime: end
+        });
+
+        // Handle usage limit
         const limitToggle = this.shadowRoot.getElementById(`limit-toggle-${slot}`);
         const limitInput = this.shadowRoot.getElementById(`limit-${slot}`);
         
-        if (limitToggle?.checked && limitInput?.value) {
-          const limit = parseInt(limitInput.value) || null;
-          if (limit) {
-            await this._hass.callService('yale_lock_manager', 'set_usage_limit', {
-              entity_id: this._config.entity,
-              slot: parseInt(slot, 10),
-              max_uses: limit
-            });
-          }
-        } else {
-          // Clear limit
-          await this._hass.callService('yale_lock_manager', 'set_usage_limit', {
-            entity_id: this._config.entity,
-            slot: parseInt(slot, 10),
-            max_uses: null
-          });
-        }
+        const limit = (limitToggle?.checked && limitInput?.value) ? parseInt(limitInput.value, 10) : null;
+        
+        // Send usage limit (null clears it)
+        await this._hass.callService('yale_lock_manager', 'set_usage_limit', {
+          entity_id: this._config.entity,
+          slot: parseInt(slot, 10),
+          max_uses: limit
+        });
       }
 
       this.showStatus(slot, 'User saved successfully', 'success');

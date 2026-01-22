@@ -582,6 +582,11 @@ class YaleLockCoordinator(DataUpdateCoordinator):
         override_protection: bool = False,
     ) -> None:
         """Set a user code."""
+        _LOGGER.info(
+            "Setting user code for slot %s: name=%s, code_type=%s, override=%s", 
+            slot, name, code_type, override_protection
+        )
+        
         # Validate slot
         if slot < 1 or slot > MAX_USER_SLOTS:
             raise ValueError(f"Slot must be between 1 and {MAX_USER_SLOTS}")
@@ -595,6 +600,14 @@ class YaleLockCoordinator(DataUpdateCoordinator):
             # For PINs, validate code length
             if not code or len(code) < 4:
                 raise ValueError("PIN code must be at least 4 digits")
+
+        # Check if slot exists in local storage
+        existing_user = self._user_data["users"].get(str(slot))
+        if existing_user:
+            _LOGGER.debug(
+                "Slot %s already in local storage: name=%s, enabled=%s", 
+                slot, existing_user.get("name"), existing_user.get("enabled")
+            )
 
         # Check slot protection (unless override is True)
         if not override_protection and not await self._is_slot_safe_to_write(slot):
@@ -631,18 +644,27 @@ class YaleLockCoordinator(DataUpdateCoordinator):
         """Check if a slot is safe to write to."""
         # Get current status from lock
         status = await self._get_user_code_status(slot)
+        _LOGGER.debug("Slot %s status from lock: %s", slot, status)
 
         if status == USER_STATUS_AVAILABLE:
             # Slot is empty, safe to write
+            _LOGGER.debug("Slot %s is available (empty), safe to write", slot)
             return True
 
         # Check if we have this slot in our data
         user_data = self._user_data["users"].get(str(slot))
         if user_data:
-            # We own this slot
+            # We own this slot (regardless of enabled/disabled state)
+            _LOGGER.debug("Slot %s found in local storage (owned by us): %s", slot, user_data.get("name"))
             return True
 
         # Slot is occupied by unknown code
+        _LOGGER.warning(
+            "Slot %s is occupied by unknown code (status=%s, not in local storage). "
+            "Use override_protection=True to overwrite.",
+            slot,
+            status
+        )
         return False
 
     async def async_clear_user_code(self, slot: int) -> None:

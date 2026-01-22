@@ -61,8 +61,8 @@ SET_USER_SCHEDULE_SCHEMA = vol.Schema(
     {
         vol.Optional("entity_id"): cv.entity_id,
         vol.Required(ATTR_SLOT): vol.All(vol.Coerce(int), vol.Range(min=1, max=MAX_USER_SLOTS)),
-        vol.Optional(ATTR_START_DATETIME): cv.datetime,
-        vol.Optional(ATTR_END_DATETIME): cv.datetime,
+        vol.Optional(ATTR_START_DATETIME): vol.Any(None, cv.datetime),  # Allow None
+        vol.Optional(ATTR_END_DATETIME): vol.Any(None, cv.datetime),    # Allow None
     }
 )
 
