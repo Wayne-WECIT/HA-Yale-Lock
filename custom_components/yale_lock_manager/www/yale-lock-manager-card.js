@@ -347,33 +347,45 @@ class YaleLockManagerCard extends HTMLElement {
                 
                 ${user.name ? `
                   <button class="action-button secondary" data-action="clear" data-slot="${slot}">Clear Slot</button>
-                  
-                  <hr style="margin: 16px 0; border: none; border-top: 1px solid var(--divider-color);">
-                  
-                  <div class="form-group">
-                    <label>Schedule (optional):</label>
-                    <div style="display: flex; gap: 8px; margin-top: 4px;">
-                      <div style="flex: 1;">
-                        <label style="font-size: 0.8em; color: var(--secondary-text-color);">Start:</label>
-                        <input type="datetime-local" id="start-${slot}" value="${user.schedule?.start ? user.schedule.start.substring(0, 16) : ''}">
-                      </div>
-                      <div style="flex: 1;">
-                        <label style="font-size: 0.8em; color: var(--secondary-text-color);">End:</label>
-                        <input type="datetime-local" id="end-${slot}" value="${user.schedule?.end ? user.schedule.end.substring(0, 16) : ''}">
-                      </div>
-                    </div>
-                    <button class="action-button secondary" data-action="save-schedule" data-slot="${slot}">Save Schedule</button>
-                  </div>
-                  
-                  <div class="form-group">
-                    <label>Usage Limit (optional):</label>
-                    <input type="number" id="limit-${slot}" value="${user.usage_limit || ''}" placeholder="Unlimited" min="1">
-                    <p style="color: var(--secondary-text-color); font-size: 0.85em; margin: 4px 0;">
-                      Used ${user.usage_count || 0} times${user.usage_limit ? ` / ${user.usage_limit} max` : ''}
-                    </p>
-                    <button class="action-button secondary" data-action="save-limit" data-slot="${slot}">Save Limit</button>
-                  </div>
                 ` : ''}
+                
+                <hr style="margin: 16px 0; border: none; border-top: 1px solid var(--divider-color);">
+                
+                <div class="form-group">
+                  <label>Schedule (optional):</label>
+                  <p style="color: var(--secondary-text-color); font-size: 0.85em; margin: 4px 0 8px 0;">
+                    ⏰ Set a time range when this code is valid. Leave blank for 24/7 access.
+                  </p>
+                  <div style="display: flex; gap: 8px; margin-top: 4px;">
+                    <div style="flex: 1;">
+                      <label style="font-size: 0.8em; color: var(--secondary-text-color);">Start Date/Time:</label>
+                      <input type="datetime-local" id="start-${slot}" value="${user.schedule?.start ? user.schedule.start.substring(0, 16) : ''}">
+                    </div>
+                    <div style="flex: 1;">
+                      <label style="font-size: 0.8em; color: var(--secondary-text-color);">End Date/Time:</label>
+                      <input type="datetime-local" id="end-${slot}" value="${user.schedule?.end ? user.schedule.end.substring(0, 16) : ''}">
+                    </div>
+                  </div>
+                  <button class="action-button secondary" style="margin-top: 8px;" data-action="save-schedule" data-slot="${slot}">
+                    ${user.schedule?.start || user.schedule?.end ? 'Update Schedule' : 'Set Schedule'}
+                  </button>
+                </div>
+                
+                <div class="form-group">
+                  <label>Usage Limit (optional):</label>
+                  <p style="color: var(--secondary-text-color); font-size: 0.85em; margin: 4px 0 8px 0;">
+                    🔢 Limit how many times this code can be used. Leave blank for unlimited.
+                  </p>
+                  <input type="number" id="limit-${slot}" value="${user.usage_limit || ''}" placeholder="Unlimited (e.g., 5 uses)" min="1">
+                  ${user.usage_count ? `
+                    <p style="color: var(--warning-color, #ff9800); font-size: 0.85em; margin: 4px 0;">
+                      ⚠️ Used ${user.usage_count} time${user.usage_count !== 1 ? 's' : ''}${user.usage_limit ? ` / ${user.usage_limit} max` : ''}
+                    </p>
+                  ` : ''}
+                  <button class="action-button secondary" style="margin-top: 8px;" data-action="save-limit" data-slot="${slot}">
+                    ${user.usage_limit ? 'Update Limit' : 'Set Limit'}
+                  </button>
+                </div>
               </div>
             </td>
           </tr>

@@ -379,6 +379,22 @@ After updating, you may need to:
 
 ### Planned Features
 
+## [1.3.3.0] - 2026-01-22
+
+### Fixed
+- **UI FIX**: Schedule and usage limit fields now always visible
+  - Previously hidden until after setting user code
+  - Now shown immediately when expanding empty slots
+  - Can set name, code, schedule, and limit all at once
+- Added helpful descriptions for schedule and usage limit fields
+- Improved button labels (shows "Update" vs "Set" based on state)
+- Added usage count warning indicator
+
+### Improved
+- Schedule fields now labeled "Start Date/Time" and "End Date/Time" for clarity
+- Usage limit shows example placeholder text
+- Better visual feedback for usage count
+
 ## [1.3.2.0] - 2026-01-22
 
 ### Fixed
