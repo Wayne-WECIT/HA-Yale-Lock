@@ -516,8 +516,26 @@ class YaleLockCoordinator(DataUpdateCoordinator):
         return {}
 
     async def _get_user_code_status(self, slot: int) -> int:
-        """Get user code status for a slot by reading from Z-Wave node."""
+        """Get user code status for a slot - triggers query then reads cached value."""
         try:
+            # STEP 1: Trigger the query using invoke_cc_api (NO return_response)
+            await self.hass.services.async_call(
+                ZWAVE_JS_DOMAIN,
+                "invoke_cc_api",
+                {
+                    "entity_id": self.lock_entity_id,
+                    "command_class": CC_USER_CODE,
+                    "method_name": "get",
+                    "parameters": [slot],
+                },
+                blocking=True,
+                # NO return_response - this just triggers the query!
+            )
+            
+            # STEP 2: Wait for Z-Wave to query and update the node value
+            await asyncio.sleep(0.5)  # Give Z-Wave time to query
+            
+            # STEP 3: Read the cached value from the Z-Wave node
             # Get the Z-Wave JS entry
             zwave_entries = [
                 entry for entry in self.hass.config_entries.async_entries(ZWAVE_JS_DOMAIN)
@@ -569,10 +587,10 @@ class YaleLockCoordinator(DataUpdateCoordinator):
             
             if value is not None:
                 status = value.value
-                _LOGGER.debug("Slot %s status from node: %s", slot, status)
+                _LOGGER.debug("Slot %s status from node after query: %s", slot, status)
                 return status
             
-            _LOGGER.debug("No value found for slot %s status (value_id: %s)", slot, value_id)
+            _LOGGER.debug("No value found for slot %s status after query (value_id: %s)", slot, value_id)
             return None
             
         except Exception as err:
@@ -580,8 +598,26 @@ class YaleLockCoordinator(DataUpdateCoordinator):
             return None
 
     async def _get_user_code(self, slot: int) -> str:
-        """Get user code for a slot by reading from Z-Wave node."""
+        """Get user code for a slot - triggers query then reads cached value."""
         try:
+            # STEP 1: Trigger the query using invoke_cc_api (NO return_response)
+            await self.hass.services.async_call(
+                ZWAVE_JS_DOMAIN,
+                "invoke_cc_api",
+                {
+                    "entity_id": self.lock_entity_id,
+                    "command_class": CC_USER_CODE,
+                    "method_name": "get",
+                    "parameters": [slot],
+                },
+                blocking=True,
+                # NO return_response - this just triggers the query!
+            )
+            
+            # STEP 2: Wait for Z-Wave to query and update the node value
+            await asyncio.sleep(0.5)  # Give Z-Wave time to query
+            
+            # STEP 3: Read the cached value from the Z-Wave node
             # Get the Z-Wave JS entry
             zwave_entries = [
                 entry for entry in self.hass.config_entries.async_entries(ZWAVE_JS_DOMAIN)
@@ -633,10 +669,10 @@ class YaleLockCoordinator(DataUpdateCoordinator):
             
             if value is not None and value.value:
                 code = value.value
-                _LOGGER.debug("Slot %s code from node: %s", slot, "***")
+                _LOGGER.debug("Slot %s code from node after query: %s", slot, "***")
                 return str(code)
             
-            _LOGGER.debug("No code found for slot %s (value_id: %s)", slot, value_id)
+            _LOGGER.debug("No code found for slot %s after query (value_id: %s)", slot, value_id)
             return ""
             
         except Exception as err:

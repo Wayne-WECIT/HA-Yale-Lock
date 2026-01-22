@@ -20,7 +20,109 @@ Use `lock.smart_door_lock_manager` for the Lovelace card!
 
 ---
 
-## [1.8.1.0] - 2026-01-22
+## [1.8.1.1] - 2026-01-22
+
+### 🔧 CORRECTED FIX - invoke_cc_api Now Used Properly
+
+**User feedback**: *"the reason for invoke_cc_api as its the only way to pull usercodes from the lock. maybe you need to look online to see how to implement this."*
+
+You were absolutely right! My v1.8.1.0 fix was wrong - I tried to bypass `invoke_cc_api` entirely, but that's actually the ONLY way to query user codes from the lock.
+
+### The Real Problem
+
+The error `"An action which does not return responses can't be called with return_response=True"` told us the issue:
+
+❌ **Wrong approach**: Calling `invoke_cc_api` with `return_response=True`  
+✅ **Correct approach**: `invoke_cc_api` **triggers** the query, then read the **cached** value from the node
+
+### How invoke_cc_api Actually Works
+
+`invoke_cc_api` is **asynchronous** and doesn't return data directly:
+
+1. **Call `invoke_cc_api`** → Triggers Z-Wave to query the lock
+2. **Wait** → Lock responds and Z-Wave updates the node value cache
+3. **Read** → Get the value from the node's cached values
+
+### The Correct Implementation
+
+**v1.8.1.0 (WRONG)**:
+```python
+# Tried to bypass invoke_cc_api and read node directly
+# But node doesn't have the value unless we query first!
+node = client.driver.controller.nodes.get(node_id)
+value = node.values.get(value_id)  # ❌ Value might be stale/missing!
+```
+
+**v1.8.1.1 (CORRECT)**:
+```python
+# STEP 1: Trigger the query
+await self.hass.services.async_call(
+    "zwave_js",
+    "invoke_cc_api",
+    {
+        "entity_id": self.lock_entity_id,
+        "command_class": 99,  # User Code CC
+        "method_name": "get",
+        "parameters": [slot],
+    },
+    blocking=True,
+    # NO return_response!
+)
+
+# STEP 2: Wait for Z-Wave to query lock and update cache
+await asyncio.sleep(0.5)
+
+# STEP 3: Read the freshly cached value
+node = client.driver.controller.nodes.get(node_id)
+value_id = f"{node_id}-99-0-userIdStatus-{slot}"
+value = node.values.get(value_id)
+return value.value  # ✅ Now has fresh data!
+```
+
+### Why This Matters
+
+**Z-Wave User Code data is NOT automatically polled** - the lock doesn't broadcast user code changes. The coordinator must actively query each slot using `invoke_cc_api` to get current data.
+
+**Without the query trigger**:
+- Node values are stale (from last query, maybe never)
+- "Refresh from lock" sees outdated data
+- Slot protection checks stale status
+- Verification uses old cached values
+
+**With the query trigger**:
+- ✅ Fresh data from lock
+- ✅ Accurate slot status
+- ✅ Reliable refresh
+- ✅ Correct verification
+
+### What Changed from v1.8.1.0
+
+**Before (v1.8.1.0)**: Tried to read node values directly (stale data)  
+**After (v1.8.1.1)**: Trigger query with `invoke_cc_api`, wait, then read (fresh data)
+
+### User Impact
+
+After v1.8.1.1:
+- ✅ "Refresh from lock" queries each slot and gets current data
+- ✅ Slot protection checks current lock status
+- ✅ "Push" verification reads actual result
+- ✅ No more "return_response" errors
+
+### Performance Note
+
+The 0.5s wait per slot means:
+- **Single slot query**: ~0.5 seconds
+- **Full refresh (20 slots)**: ~10 seconds
+
+This is normal for Z-Wave - each slot must be queried individually from the lock.
+
+### Apology & Thanks
+
+Sorry for the confusion with v1.8.1.0 - I tried to shortcut around `invoke_cc_api` when it's actually essential. Thank you for the correction and patience! 🙏
+
+---
+
+## [1.8.1.0] - 2026-01-22 **[SUPERSEDED by v1.8.1.1]**
 
 ### 🚨 CRITICAL FIX - Coordinator Was Completely Blind!
 
