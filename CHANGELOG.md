@@ -20,6 +20,101 @@ Use `lock.smart_door_lock_manager` for the Lovelace card!
 
 ---
 
+## [1.7.1.0] - 2026-01-22
+
+### Fixed - UI COMPLETE REDESIGN! 🎨
+- **❌ NO MORE POPUPS!** - All alert() and confirm() removed
+  - In-pane status messages for all actions
+  - Confirmation prompts display inline with Yes/No buttons
+  - Works perfectly on mobile apps
+  - Auto-dismissing success messages (3 seconds)
+  - Persistent error messages with close button
+
+- **🏷️ FOB UI** - Proper handling
+  - Code input hidden for FOBs (not applicable)
+  - Schedule section hidden for FOBs
+  - Usage limit section hidden for FOBs
+  - Friendly notice explaining FOB behavior
+  - FOB icon (🏷️) vs PIN icon (🔑) in table
+
+- **🎯 CONSOLIDATED ACTIONS** - Single "Update User" button!
+  - Removed separate "Set Schedule" button
+  - Removed separate "Set Limit" button
+  - ONE "Update User" / "Save User" button does everything:
+    - Saves name, code, type
+    - Saves schedule (if enabled)
+    - Saves usage limit (if enabled)
+    - All in one atomic operation
+  - "Clear Slot" button moved to bottom
+  - "Reset Counter" button when usage > 0
+
+- **📱 BETTER MOBILE UX**
+  - All buttons properly sized
+  - Responsive flex layout
+  - In-pane confirmations (no native dialogs)
+  - Touch-friendly targets
+  - Works in HA companion app
+
+### Improved
+- **Status Message System**
+  - Success (green) - Auto-dismisses after 3s
+  - Error (red) - Stays until dismissed
+  - Warning (orange) - User action needed
+  - Info (blue) - Informational
+  - Confirm (orange) - Yes/No inline buttons
+  - Smooth slide-in animation
+  - Per-slot message isolation
+
+- **Better Validation**
+  - Client-side validation with friendly messages
+  - Date validation (must be future)
+  - End date must be after start date
+  - PIN length validation
+  - Shows validation errors in-pane
+
+- **Smarter Updates**
+  - Type change triggers immediate re-render
+  - Toggling schedule/limit shows/hides fields
+  - Handles override protection with inline confirm
+  - Better error recovery
+
+### Technical Details
+UI Rewrite:
+- New `_statusMessages` state object per slot
+- `showStatus(slot, message, type)` method
+- `clearStatus(slot)` method
+- `getStatusMessageHTML(slot)` for rendering
+- All handlers updated to use status messages
+- No native browser dialogs (alert/confirm/prompt)
+
+Button Consolidation:
+- `handleSaveAll()` - Master save handler
+  - Calls set_user_code
+  - Calls set_user_schedule (if PIN + toggle ON)
+  - Calls set_usage_limit (if PIN + toggle ON)
+  - Single transaction, better UX
+
+FOB Detection:
+- Checks `code_type === 'fob'`
+- Hides: code input, schedule section, usage section
+- Shows: friendly explanatory notice
+- Allows: name changes only for FOBs
+
+Responsive Design:
+- Flex layouts with wrap
+- Min-width on inputs for mobile
+- Button groups with proper gaps
+- Mobile-first approach
+
+### What This Fixes
+✅ "Popups won't work on mobile" - All inline now
+✅ "FOBs shouldn't require codes" - Code field hidden
+✅ "Schedule/limit for FOBs wrong" - Hidden for FOBs
+✅ "Too many buttons" - Consolidated to one
+✅ "Bad mobile UX" - Complete redesign
+
+---
+
 ## [1.7.0.0] - 2026-01-22
 
 ### Fixed
