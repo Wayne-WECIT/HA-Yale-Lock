@@ -520,11 +520,25 @@ class YaleLockManagerCard extends HTMLElement {
                           if (cachedStatus === null || cachedStatus === undefined) {
                             cachedStatus = user.enabled ? 1 : 2; // Default to Enabled or Disabled based on enabled flag
                           }
-                          return `
-                            <option value="0" ${cachedStatus === 0 ? 'selected' : ''}>Available</option>
-                            <option value="1" ${cachedStatus === 1 ? 'selected' : ''}>Enabled</option>
-                            <option value="2" ${cachedStatus === 2 ? 'selected' : ''}>Disabled</option>
-                          `;
+                          
+                          // Determine which options to show based on whether slot has data
+                          const hasLockPin = user.lock_code && user.lock_code.trim() !== '';
+                          const hasCachedPin = user.code && user.code.trim() !== '';
+                          const hasName = user.name && user.name.trim() !== '';
+                          const hasData = hasLockPin || hasCachedPin || hasName;
+                          
+                          // If no data exists, only show Available
+                          // If data exists, only show Enabled/Disabled
+                          if (!hasData) {
+                            return `
+                              <option value="0" ${cachedStatus === 0 ? 'selected' : ''}>Available</option>
+                            `;
+                          } else {
+                            return `
+                              <option value="1" ${cachedStatus === 1 ? 'selected' : ''}>Enabled</option>
+                              <option value="2" ${cachedStatus === 2 ? 'selected' : ''}>Disabled</option>
+                            `;
+                          }
                         })()}
                       </select>
                       <p style="color: var(--secondary-text-color); font-size: 0.75em; margin: 4px 0 0 0;">Status stored locally</p>
@@ -532,9 +546,17 @@ class YaleLockManagerCard extends HTMLElement {
                     <div>
                       <label>🔒 Lock Status (from lock):</label>
                       <select id="lock-status-${user.slot}" disabled style="width: 100%; background: var(--card-background-color); border: 1px solid var(--divider-color); color: var(--secondary-text-color);">
-                        <option value="0" ${user.lock_status === 0 ? 'selected' : ''}>Available</option>
-                        <option value="1" ${user.lock_status === 1 ? 'selected' : ''}>Enabled</option>
-                        <option value="2" ${user.lock_status === 2 ? 'selected' : ''}>Disabled</option>
+                        ${(() => {
+                          // Use lock_status_from_lock if available, otherwise fall back to lock_status
+                          const lockStatus = user.lock_status_from_lock !== null && user.lock_status_from_lock !== undefined 
+                            ? user.lock_status_from_lock 
+                            : user.lock_status;
+                          return `
+                            <option value="0" ${lockStatus === 0 ? 'selected' : ''}>Available</option>
+                            <option value="1" ${lockStatus === 1 ? 'selected' : ''}>Enabled</option>
+                            <option value="2" ${lockStatus === 2 ? 'selected' : ''}>Disabled</option>
+                          `;
+                        })()}
                       </select>
                       <p style="color: var(--secondary-text-color); font-size: 0.75em; margin: 4px 0 0 0;">Status from physical lock</p>
                     </div>
@@ -545,7 +567,10 @@ class YaleLockManagerCard extends HTMLElement {
                     if (cachedStatus === null || cachedStatus === undefined) {
                       cachedStatus = user.enabled ? 1 : 2;
                     }
-                    const lockStatus = user.lock_status;
+                    // Use lock_status_from_lock if available, otherwise fall back to lock_status
+                    const lockStatus = user.lock_status_from_lock !== null && user.lock_status_from_lock !== undefined 
+                      ? user.lock_status_from_lock 
+                      : user.lock_status;
                     
                     if (lockStatus !== null && lockStatus !== undefined && cachedStatus !== lockStatus) {
                       return `
@@ -917,19 +942,14 @@ class YaleLockManagerCard extends HTMLElement {
     const name = this.shadowRoot.getElementById(`name-${slot}`).value.trim();
     const codeType = this.shadowRoot.getElementById(`type-${slot}`).value;
     const code = codeType === 'pin' ? (this.shadowRoot.getElementById(`code-${slot}`)?.value.trim() || '') : '';
-    
-    // Get current cached status from dropdown
-    const cachedStatusSelect = this.shadowRoot.getElementById(`cached-status-${slot}`);
-    const cachedStatus = cachedStatusSelect ? parseInt(cachedStatusSelect.value, 10) : null;
-    const isDisabled = cachedStatus === 2; // USER_STATUS_DISABLED = 2
 
-    // Validation - skip name/PIN validation if status is Disabled
-    if (!isDisabled && !name) {
+    // Validation - always required
+    if (!name) {
       this.showStatus(slot, 'Please enter a user name', 'error');
       return;
     }
 
-    if (!isDisabled && codeType === 'pin' && (!code || code.length < 4)) {
+    if (codeType === 'pin' && (!code || code.length < 4)) {
       this.showStatus(slot, 'PIN must be at least 4 digits', 'error');
       return;
     }

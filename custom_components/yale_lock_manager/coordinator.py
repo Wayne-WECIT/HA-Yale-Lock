@@ -654,23 +654,15 @@ class YaleLockCoordinator(DataUpdateCoordinator):
         if slot < 1 or slot > MAX_USER_SLOTS:
             raise ValueError(f"Slot must be between 1 and {MAX_USER_SLOTS}")
 
-        # Get cached status to determine if validation is needed
-        existing_user = self._user_data["users"].get(str(slot))
-        cached_status = existing_user.get("lock_status", USER_STATUS_AVAILABLE) if existing_user else USER_STATUS_AVAILABLE
-        is_disabled = cached_status == USER_STATUS_DISABLED
-        
         # For FOBs, code can be empty or short
         if code_type == CODE_TYPE_FOB:
             # FOBs don't need a PIN code, use placeholder
             if not code or len(code) < 4:
                 code = "00000000"  # 8-digit placeholder for FOBs
         else:
-            # For PINs, validate code length (unless status is Disabled)
-            if not is_disabled and (not code or len(code) < 4):
+            # For PINs, validate code length
+            if not code or len(code) < 4:
                 raise ValueError("PIN code must be at least 4 digits")
-            # If disabled, allow empty code
-            if is_disabled and (not code or len(code) < 4):
-                code = ""  # Empty code for disabled slots
 
         # Check if slot exists in local storage
         if existing_user:
@@ -766,12 +758,10 @@ class YaleLockCoordinator(DataUpdateCoordinator):
         return False
 
     async def async_clear_user_code(self, slot: int) -> None:
-        """Clear a user code from storage and lock with verification."""
-        # Remove from storage first
-        if str(slot) in self._user_data["users"]:
-            del self._user_data["users"][str(slot)]
-            await self.async_save_user_data()
+        """Clear a user code from storage and lock with verification.
         
+        This clears the PIN on the lock and sets status to Available for both cached and lock.
+        """
         # Clear from lock using invoke_cc_api
         try:
             _LOGGER.info("Clearing slot %s from lock...", slot)
@@ -797,6 +787,40 @@ class YaleLockCoordinator(DataUpdateCoordinator):
             
             if verification_status == USER_STATUS_AVAILABLE or verification_status is None:
                 _LOGGER.info("✓ Verified: Slot %s successfully cleared", slot)
+                
+                # Update storage: set status to Available for both cached and lock
+                slot_str = str(slot)
+                if slot_str in self._user_data["users"]:
+                    # Update existing entry
+                    self._user_data["users"][slot_str].update({
+                        "code": "",  # Clear cached PIN
+                        "lock_code": "",  # Clear lock PIN
+                        "lock_status": USER_STATUS_AVAILABLE,  # Set cached status to Available
+                        "lock_status_from_lock": USER_STATUS_AVAILABLE,  # Set lock status to Available
+                        "lock_enabled": False,
+                        "enabled": False,
+                        "synced_to_lock": True,  # Both are Available, so synced
+                    })
+                else:
+                    # Create new entry with Available status
+                    self._user_data["users"][slot_str] = {
+                        "name": f"User {slot}",
+                        "code_type": CODE_TYPE_PIN,
+                        "code": "",  # No cached PIN
+                        "lock_code": "",  # No lock PIN
+                        "lock_status": USER_STATUS_AVAILABLE,  # Cached status: Available
+                        "lock_status_from_lock": USER_STATUS_AVAILABLE,  # Lock status: Available
+                        "lock_enabled": False,
+                        "enabled": False,
+                        "schedule": {"start": None, "end": None},
+                        "usage_limit": None,
+                        "usage_count": 0,
+                        "synced_to_lock": True,  # Both are Available, so synced
+                        "last_used": None,
+                    }
+                
+                await self.async_save_user_data()
+                await self.async_request_refresh()
             else:
                 _LOGGER.warning("⚠️ Slot %s may not be fully cleared (status: %s)", slot, verification_status)
                 # Don't raise error - just log warning and continue
