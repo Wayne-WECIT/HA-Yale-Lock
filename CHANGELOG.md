@@ -20,6 +20,89 @@ Use `lock.smart_door_lock_manager` for the Lovelace card!
 
 ---
 
+## [1.8.2.37] - 2026-01-22
+
+### 🐛 Bug Fix - via_device Warning
+
+**Issue**: Home Assistant warning about non-existing `via_device` reference when creating the manager device.
+
+### The Fix
+
+- Added verification check to ensure Z-Wave device exists before using it as `via_device`
+- Prevents warning: "Detected that custom integration 'yale_lock_manager' calls `device_registry.async_get_or_create` referencing a non existing `via_device`"
+- Fixes compatibility issue for Home Assistant 2025.12.0+
+
+### Changed
+
+- **Backend (`lock.py`)**:
+  - Added `device_registry.async_get()` check to verify device exists before using as `via_device`
+  - Added warning log if device not found (instead of causing Home Assistant warning)
+
+### What's Fixed
+
+- ✅ No more `via_device` warnings in Home Assistant logs
+- ✅ Better error handling for missing Z-Wave devices
+- ✅ Future-proof for Home Assistant 2025.12.0+
+
+---
+
+## [1.8.2.36] - 2026-01-22
+
+### 🎨 New Feature - Custom Panel Dashboard
+
+**User request**: "should we look at a way to do this as a dedicated dashboard instead of a card would that make thing easier?"
+
+### The Solution
+
+Created a **full-page custom panel dashboard** that uses the **uncontrolled input pattern** to prevent form field reverts.
+
+### Features
+
+- **Full-page interface** - More space for managing codes
+- **Uncontrolled input pattern** - Form fields never revert after save
+- **Auto-detects entity** - Automatically finds your Yale Lock Manager entity
+- **Same functionality** - All features from the card, optimized for dashboard
+
+### How It Solves the Refresh Issue
+
+The panel uses the **uncontrolled input pattern**:
+- Form field values are set **once** when the slot expands
+- After that, values are **read from the DOM**, never overwritten
+- Entity state updates **don't affect** what you've typed
+- Your input persists until you change it or collapse the slot
+
+This is the same pattern used by React, Vue, and other modern frameworks for form state management.
+
+### Added
+
+- **New files**:
+  - `custom_components/yale_lock_manager/www/yale-lock-manager-panel.html` - Panel HTML page
+  - `custom_components/yale_lock_manager/www/yale-lock-manager-panel.js` - Panel JavaScript (uncontrolled input pattern)
+  - `PANEL_SETUP.md` - Setup instructions
+
+- **Backend (`__init__.py`)**:
+  - Updated `_async_setup_frontend()` to copy both card and panel files
+  - Panel accessible at `/local/yale_lock_manager/yale-lock-manager-panel.html`
+
+### Access
+
+After restarting Home Assistant, access the panel at:
+```
+http://your-ha-ip:8123/local/yale_lock_manager/yale-lock-manager-panel.html
+```
+
+Or add it to your sidebar via Settings → Dashboards → Panels.
+
+### What's New
+
+- ✅ Full-page dashboard interface
+- ✅ Uncontrolled input pattern prevents form field reverts
+- ✅ Auto-detects Yale Lock Manager entity
+- ✅ Better UX for managing multiple codes
+- ✅ All card features available in panel format
+
+---
+
 ## [1.8.2.31] - 2026-01-22
 
 ### ⚡ Performance - Immediate Save Without Lock Query
