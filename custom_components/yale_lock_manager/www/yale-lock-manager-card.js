@@ -1051,65 +1051,65 @@ class YaleLockManagerCard extends HTMLElement {
         override_protection: false
       });
 
-      // For PINs, save schedule and usage if enabled
-      if (codeType === 'pin') {
-        const scheduleToggle = this.shadowRoot.getElementById(`schedule-toggle-${slot}`);
-        const startInput = this.shadowRoot.getElementById(`start-${slot}`);
-        const endInput = this.shadowRoot.getElementById(`end-${slot}`);
+      // Save schedule for both PINs and FOBs
+      const scheduleToggle = this.shadowRoot.getElementById(`schedule-toggle-${slot}`);
+      const startInput = this.shadowRoot.getElementById(`start-${slot}`);
+      const endInput = this.shadowRoot.getElementById(`end-${slot}`);
+      
+      // Determine schedule values
+      // If toggle is unchecked, always clear (send null)
+      // If toggle is checked but fields are empty, also clear (send null)
+      let start = null;
+      let end = null;
+      
+      if (scheduleToggle?.checked) {
+        // Toggle is on - check if dates are provided
+        const startVal = startInput?.value?.trim() || '';
+        const endVal = endInput?.value?.trim() || '';
         
-        // Determine schedule values
-        // If toggle is unchecked, always clear (send null)
-        // If toggle is checked but fields are empty, also clear (send null)
-        let start = null;
-        let end = null;
-        
-        if (scheduleToggle?.checked) {
-          // Toggle is on - check if dates are provided
-          const startVal = startInput?.value?.trim() || '';
-          const endVal = endInput?.value?.trim() || '';
-          
-          // Only set dates if both fields have values
-          // If either is empty, clear both (null)
-          if (startVal && endVal) {
-            start = startVal;
-            end = endVal;
-          } else {
-            // At least one field is empty - clear the schedule
-            start = null;
-            end = null;
-          }
+        // Only set dates if both fields have values
+        // If either is empty, clear both (null)
+        if (startVal && endVal) {
+          start = startVal;
+          end = endVal;
         } else {
-          // Toggle is off - always clear schedule
+          // At least one field is empty - clear the schedule
           start = null;
           end = null;
         }
-        
-        // Validate dates if provided
-        if (start && end) {
-          const now = new Date();
-          if (new Date(start) < now) {
-            this.showStatus(slot, 'Start date must be in the future', 'error');
-            return;
-          }
-          if (new Date(end) < now) {
-            this.showStatus(slot, 'End date must be in the future', 'error');
-            return;
-          }
-          if (new Date(end) <= new Date(start)) {
-            this.showStatus(slot, 'End date must be after start date', 'error');
-            return;
-          }
+      } else {
+        // Toggle is off - always clear schedule
+        start = null;
+        end = null;
+      }
+      
+      // Validate dates if provided
+      if (start && end) {
+        const now = new Date();
+        if (new Date(start) < now) {
+          this.showStatus(slot, 'Start date must be in the future', 'error');
+          return;
         }
+        if (new Date(end) < now) {
+          this.showStatus(slot, 'End date must be in the future', 'error');
+          return;
+        }
+        if (new Date(end) <= new Date(start)) {
+          this.showStatus(slot, 'End date must be after start date', 'error');
+          return;
+        }
+      }
 
-        // Always send schedule service call (null clears it)
-        await this._hass.callService('yale_lock_manager', 'set_user_schedule', {
-          entity_id: this._config.entity,
-          slot: parseInt(slot, 10),
-          start_datetime: start,
-          end_datetime: end
-        });
+      // Always send schedule service call (null clears it) - for both PINs and FOBs
+      await this._hass.callService('yale_lock_manager', 'set_user_schedule', {
+        entity_id: this._config.entity,
+        slot: parseInt(slot, 10),
+        start_datetime: start,
+        end_datetime: end
+      });
 
-        // Handle usage limit
+      // For PINs only, save usage limit if enabled
+      if (codeType === 'pin') {
         const limitToggle = this.shadowRoot.getElementById(`limit-toggle-${slot}`);
         const limitInput = this.shadowRoot.getElementById(`limit-${slot}`);
         
