@@ -28,42 +28,51 @@ PLATFORMS: list[Platform] = [
 
 
 async def _async_setup_frontend(hass: HomeAssistant) -> None:
-    """Set up the frontend resources."""
+    """Set up the frontend resources (card and panel)."""
     # Get the path to this integration's directory
     integration_dir = Path(__file__).parent
     card_source = integration_dir / "www" / "yale-lock-manager-card.js"
+    panel_html_source = integration_dir / "www" / "yale-lock-manager-panel.html"
+    panel_js_source = integration_dir / "www" / "yale-lock-manager-panel.js"
     
     # Create the target directory in www
     www_dir = Path(hass.config.path("www"))
     target_dir = www_dir / "yale_lock_manager"
-    target_file = target_dir / "yale-lock-manager-card.js"
-    
-    # Check if source exists
-    if not card_source.exists():
-        _LOGGER.warning("Card source file not found at %s", card_source)
-        return
+    target_card = target_dir / "yale-lock-manager-card.js"
+    target_panel_html = target_dir / "yale-lock-manager-panel.html"
+    target_panel_js = target_dir / "yale-lock-manager-panel.js"
     
     # Run file operations in executor to avoid blocking the event loop
-    def copy_card_file():
-        """Copy the card file (runs in executor)."""
+    def copy_frontend_files():
+        """Copy frontend files (runs in executor)."""
         try:
             # Create target directory if it doesn't exist
             target_dir.mkdir(parents=True, exist_ok=True)
             
-            # Copy the card file
-            shutil.copy2(card_source, target_file)
+            # Copy card file
+            if card_source.exists():
+                shutil.copy2(card_source, target_card)
+            
+            # Copy panel files
+            if panel_html_source.exists():
+                shutil.copy2(panel_html_source, target_panel_html)
+            if panel_js_source.exists():
+                shutil.copy2(panel_js_source, target_panel_js)
+            
             return True
         except Exception as err:
-            _LOGGER.error("Failed to copy Lovelace card: %s", err)
+            _LOGGER.error("Failed to copy frontend files: %s", err)
             return False
     
     # Run the blocking operation in an executor
-    success = await hass.async_add_executor_job(copy_card_file)
+    success = await hass.async_add_executor_job(copy_frontend_files)
     
     if success:
         _LOGGER.info(
-            "Copied Lovelace card to %s - Add resource: /local/yale_lock_manager/yale-lock-manager-card.js",
-            target_file
+            "Copied frontend files to %s\n"
+            "  Card resource: /local/yale_lock_manager/yale-lock-manager-card.js\n"
+            "  Panel: /local/yale_lock_manager/yale-lock-manager-panel.html",
+            target_dir
         )
 
 
