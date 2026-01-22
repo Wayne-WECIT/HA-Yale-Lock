@@ -31,7 +31,7 @@ async def async_setup_entry(
 class YaleLockManagerLock(CoordinatorEntity, LockEntity):
     """Representation of a Yale Lock Manager lock."""
 
-    _attr_has_entity_name = True
+    _attr_has_entity_name = False  # Use custom full name
 
     def __init__(
         self,
@@ -41,16 +41,23 @@ class YaleLockManagerLock(CoordinatorEntity, LockEntity):
         """Initialize the lock."""
         super().__init__(coordinator)
         
+        # Get the lock name from the Z-Wave entity
+        lock_state = coordinator.hass.states.get(coordinator.lock_entity_id)
+        base_name = "Smart Door Lock"
+        if lock_state and lock_state.attributes.get("friendly_name"):
+            # Use the Z-Wave lock's name as base
+            base_name = lock_state.attributes["friendly_name"]
+        
         # Use a unique ID that won't conflict with Z-Wave lock
         self._attr_unique_id = f"{DOMAIN}_{coordinator.node_id}_manager"
-        self._attr_name = "Manager"  # With has_entity_name=True, becomes "Smart Door Lock Manager"
+        self._attr_name = f"{base_name} Manager"  # Creates lock.smart_door_lock_manager
         
         # Link to existing Z-Wave device so all entities are grouped together
         self._attr_device_info = {
             "identifiers": {(ZWAVE_JS_DOMAIN, coordinator.node_id)},
         }
         
-        _LOGGER.info("Created Yale Lock Manager entity for node %s", coordinator.node_id)
+        _LOGGER.info("Created Yale Lock Manager entity '%s' for node %s", self._attr_name, coordinator.node_id)
 
     @property
     def is_locked(self) -> bool | None:

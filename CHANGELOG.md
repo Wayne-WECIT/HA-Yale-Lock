@@ -15,6 +15,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.1.2.3] - 2026-01-22
+
+### Fixed
+- **CRITICAL**: Fixed entity naming creating `lock.none_manager` instead of `lock.smart_door_lock_manager`
+  - Changed `_attr_has_entity_name` from `True` to `False`
+  - Now reads the Z-Wave lock's friendly name and appends " Manager"
+  - Creates correct entity ID: `lock.smart_door_lock_manager`
+  - Entity will now be properly named and discoverable
+
+### Technical Details
+- Lock entity now gets base name from Z-Wave lock's friendly_name attribute
+- Falls back to "Smart Door Lock" if name not found
+- Appends " Manager" to create unique name
+- Entity ID will be generated from this name (e.g., `lock.smart_door_lock_manager`)
+
+### Important
+After updating, you may need to:
+1. Remove the old integration entry
+2. Delete the `lock.none_manager` entity
+3. Re-add the integration
+4. Update your Lovelace card to use the correct entity
+
 ## [1.1.2.2] - 2026-01-22
 
 ### Fixed
