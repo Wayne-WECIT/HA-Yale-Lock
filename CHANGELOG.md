@@ -20,6 +20,67 @@ Use `lock.smart_door_lock_manager` for the Lovelace card!
 
 ---
 
+## [1.8.2.12] - 2026-01-22
+
+### 🔧 FIX - Log Capture for invoke_cc_api Response
+
+**User feedback**: Logs show `invoke_cc_api` returns data but cache doesn't contain it.
+
+### The Issue
+
+The logs clearly show:
+- `invoke_cc_api` successfully returns data: `{'userIdStatus': 1, 'userCode': '19992017'}`
+- But the node's cache doesn't contain the values: `No value found for CC:99, Property:userIdStatus, Key:1`
+- Events aren't fired for `invoke_cc_api` responses
+- Cache isn't updated with the response
+
+**The response is ONLY logged, not stored anywhere accessible.**
+
+### The Solution
+
+**Log Capture Approach**: Since the response is logged by Z-Wave JS, we temporarily intercept log messages to capture the response:
+
+1. Set up a temporary log handler for `homeassistant.components.zwave_js.services` logger
+2. Call `invoke_cc_api` to trigger the query
+3. Wait for the log message containing the response
+4. Parse the response dictionary from the log message
+5. Remove the log handler
+
+### Implementation
+
+```python
+class ResponseLogHandler(logging.Handler):
+    """Temporary log handler to capture invoke_cc_api response."""
+    
+    def emit(self, record):
+        if "Invoked USER_CODE CC API method get" in message:
+            # Extract: "... with the following result: {'userIdStatus': 1, 'userCode': '19992017'}"
+            match = re.search(r"with the following result:\s*(\{.*?\})", message)
+            result_dict = json.loads(match.group(1).replace("'", '"'))
+            self.captured_data = result_dict
+```
+
+### Changed
+
+- `_get_user_code_data()`: 
+  - Now uses temporary log handler to capture response from Z-Wave JS log messages
+  - Parses the response dictionary from the log message
+  - Removed cache reading approach (doesn't work)
+  - Added `json` and `re` imports
+
+### What's Fixed
+
+- ✅ **Captures response** from Z-Wave JS log messages
+- ✅ **No direct client access** (still using service calls)
+- ✅ **No cache dependency** (reads directly from log)
+- ✅ **"Lock PIN" field should now populate** correctly
+
+### Note
+
+This is a workaround since Z-Wave JS doesn't store `get` responses in the cache or fire events. The response is only logged, so we capture it from the log. This is the only way to get the data without direct client access.
+
+---
+
 ## [1.8.2.11] - 2026-01-22
 
 ### 🔧 FIX - Events Not Fired for invoke_cc_api Responses

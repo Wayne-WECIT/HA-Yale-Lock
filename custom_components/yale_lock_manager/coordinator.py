@@ -3,7 +3,9 @@ from __future__ import annotations
 
 import asyncio
 from datetime import datetime, timedelta
+import json
 import logging
+import re
 from typing import Any
 
 from homeassistant.components.zwave_js import DOMAIN as ZWAVE_JS_DOMAIN
@@ -512,65 +514,107 @@ class YaleLockCoordinator(DataUpdateCoordinator):
     async def _get_user_code_data(self, slot: int) -> dict[str, Any] | None:
         """Get user code data (status and code) from the lock using invoke_cc_api.
         
-        Since zwave_js_value_updated events are NOT fired for invoke_cc_api responses,
-        we call invoke_cc_api to trigger the query, then read the updated values directly
-        from the node's cache using _get_zwave_value.
+        The response from invoke_cc_api is logged by Z-Wave JS but not stored in the node's cache.
+        We capture the response by temporarily intercepting log messages from Z-Wave JS.
         """
+        captured_response: dict[str, Any] | None = None
+        log_capture_complete = asyncio.Event()
+        
+        # Set up a temporary log handler to capture the Z-Wave JS log message
+        class ResponseLogHandler(logging.Handler):
+            """Temporary log handler to capture invoke_cc_api response from Z-Wave JS logs."""
+            
+            def __init__(self, target_slot: int, event: asyncio.Event):
+                super().__init__()
+                self.target_slot = target_slot
+                self.event = event
+                self.captured_data: dict[str, Any] | None = None
+                
+            def emit(self, record):
+                """Capture log messages containing invoke_cc_api responses."""
+                if record.name != "homeassistant.components.zwave_js.services":
+                    return
+                
+                message = record.getMessage()
+                # Look for the log pattern: "Invoked USER_CODE CC API method get... with the following result: {...}"
+                if "Invoked USER_CODE CC API method get" in message and "with the following result:" in message:
+                    # Extract the result dictionary from the log message
+                    # Pattern: "... with the following result: {'userIdStatus': 1, 'userCode': '19992017'}"
+                    match = re.search(r"with the following result:\s*(\{.*?\})", message)
+                    if match:
+                        try:
+                            # Parse the dictionary string
+                            result_str = match.group(1)
+                            # Replace single quotes with double quotes for JSON parsing
+                            result_str = result_str.replace("'", '"')
+                            result_dict = json.loads(result_str)
+                            
+                            # Verify this is for our slot by checking if the data makes sense
+                            # (We can't verify slot from the log, but we'll capture the first response)
+                            if isinstance(result_dict, dict) and ("userIdStatus" in result_dict or "userCode" in result_dict):
+                                self.captured_data = result_dict
+                                self.event.set()
+                                _LOGGER.debug("Captured response from log: %s", {k: "***" if k == "userCode" and v else v for k, v in result_dict.items()})
+                        except (json.JSONDecodeError, AttributeError) as err:
+                            _LOGGER.debug("Could not parse response from log message: %s", err)
+        
         try:
             _LOGGER.info("Querying lock for user code data for slot %s...", slot)
             
-            # Call invoke_cc_api to trigger the lock to report its user code data
-            # The response is logged by Z-Wave JS but not returned by the service call
-            _LOGGER.debug("Calling invoke_cc_api for slot %s...", slot)
-            await self.hass.services.async_call(
-                ZWAVE_JS_DOMAIN,
-                "invoke_cc_api",
-                {
-                    "entity_id": self.lock_entity_id,
-                    "command_class": CC_USER_CODE,
-                    "method_name": "get",
-                    "parameters": [slot],
-                },
-                blocking=True,
-            )
+            # Set up log handler BEFORE calling invoke_cc_api
+            log_handler = ResponseLogHandler(slot, log_capture_complete)
+            log_handler.setLevel(logging.INFO)
             
-            _LOGGER.debug("invoke_cc_api call completed, waiting for node values to update...")
+            # Get the Z-Wave JS services logger
+            zwave_js_logger = logging.getLogger("homeassistant.components.zwave_js.services")
+            zwave_js_logger.addHandler(log_handler)
             
-            # Wait for Z-Wave JS to process the response and update node values
-            # The response is logged, but we need to read it from the node's cache
-            # Try multiple times with increasing delays, as the update might be delayed
-            for attempt in range(3):
-                await asyncio.sleep(0.5 + (attempt * 0.5))  # 0.5s, 1.0s, 1.5s
+            try:
+                # Call invoke_cc_api to trigger the lock to report its user code data
+                _LOGGER.debug("Calling invoke_cc_api for slot %s...", slot)
+                await self.hass.services.async_call(
+                    ZWAVE_JS_DOMAIN,
+                    "invoke_cc_api",
+                    {
+                        "entity_id": self.lock_entity_id,
+                        "command_class": CC_USER_CODE,
+                        "method_name": "get",
+                        "parameters": [slot],
+                    },
+                    blocking=True,
+                )
                 
-                # Try to read the values from the node's cache
-                status = await self._get_zwave_value(CC_USER_CODE, PROP_USER_ID_STATUS, slot)
-                code = await self._get_zwave_value(CC_USER_CODE, PROP_USER_CODE, slot)
+                _LOGGER.debug("invoke_cc_api call completed, waiting for log message...")
                 
-                if status is not None or code is not None:
-                    # We got at least one value, return what we have
-                    result_data: dict[str, Any] = {}
-                    if status is not None:
-                        result_data["userIdStatus"] = status
-                    if code is not None:
-                        result_data["userCode"] = str(code) if code else ""
-                    
-                    _LOGGER.info(
-                        "✓ Retrieved data for slot %s (attempt %s): status=%s, code=%s",
+                # Wait for the log handler to capture the response (with timeout)
+                try:
+                    await asyncio.wait_for(log_capture_complete.wait(), timeout=3.0)
+                    captured_response = log_handler.captured_data
+                except asyncio.TimeoutError:
+                    _LOGGER.warning(
+                        "Timeout waiting for invoke_cc_api response log for slot %s",
                         slot,
-                        attempt + 1,
-                        result_data.get("userIdStatus"),
-                        "***" if result_data.get("userCode") else None,
                     )
-                    return result_data if result_data else None
+                
+            finally:
+                # Always remove the log handler
+                zwave_js_logger.removeHandler(log_handler)
             
-            # If we still don't have data after all attempts, log warning
-            _LOGGER.warning(
-                "Could not retrieve user code data for slot %s after multiple attempts. "
-                "The invoke_cc_api call succeeded (see Z-Wave JS logs), but values are not "
-                "accessible from the node cache.",
-                slot,
-            )
-            return None
+            if captured_response:
+                _LOGGER.info(
+                    "✓ Captured response for slot %s from log: status=%s, code=%s",
+                    slot,
+                    captured_response.get("userIdStatus"),
+                    "***" if captured_response.get("userCode") else None,
+                )
+                return captured_response
+            else:
+                _LOGGER.warning(
+                    "Could not capture response from invoke_cc_api log for slot %s. "
+                    "The call succeeded (see Z-Wave JS logs), but the response was not captured.",
+                    slot,
+                )
+                return None
                 
         except Exception as err:
             _LOGGER.error("Error getting user code data for slot %s: %s", slot, err, exc_info=True)
