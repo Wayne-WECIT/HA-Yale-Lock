@@ -518,35 +518,73 @@ class YaleLockCoordinator(DataUpdateCoordinator):
         result_data: dict[str, Any] = {}
         event_received = asyncio.Event()
         listener_removed = False
+        events_captured = []
         
         @callback
         def _capture_value_update(event) -> None:
             """Capture value update event for our specific slot."""
-            nonlocal result_data, listener_removed
+            nonlocal result_data, listener_removed, events_captured
+            
+            # Log all events for debugging (filtered by node and CC)
+            event_node_id = event.data.get("node_id")
+            event_cc = event.data.get("command_class")
+            event_property = event.data.get("property")
+            event_property_key = event.data.get("property_key")
+            event_value = event.data.get("value")
             
             # Check if this is for our node
-            if event.data.get("node_id") != int(self.node_id):
+            if event_node_id != int(self.node_id):
                 return
             
             # Check if this is for User Code command class
-            if event.data.get("command_class") != CC_USER_CODE:
+            if event_cc != CC_USER_CODE:
                 return
             
-            # Check property_key matches our slot
-            property_key = event.data.get("property_key")
-            if property_key != slot:
+            # Log all User Code events for this node (for debugging)
+            _LOGGER.debug(
+                "User Code event received - Property: %s, PropertyKey: %s (type: %s), Value: %s",
+                event_property,
+                event_property_key,
+                type(event_property_key).__name__,
+                "***" if event_property == "userCode" and event_value else event_value,
+            )
+            
+            # Check property_key matches our slot (handle both int and string)
+            # property_key can be int, string, or None
+            slot_match = False
+            if event_property_key is not None:
+                # Try both int and string comparison
+                try:
+                    if int(event_property_key) == slot:
+                        slot_match = True
+                except (ValueError, TypeError):
+                    if str(event_property_key) == str(slot):
+                        slot_match = True
+            else:
+                # If property_key is None, this might be a different event structure
+                # Log it for debugging
+                _LOGGER.debug(
+                    "Event has no property_key - Property: %s, Full event data: %s",
+                    event_property,
+                    {k: v for k, v in event.data.items() if k != "value" or event_property != "userCode"},
+                )
+                return
+            
+            if not slot_match:
                 return
             
             # Capture the values we need
             property_name = event.data.get("property")
             value = event.data.get("value")
             
-            _LOGGER.debug(
-                "Value update event for slot %s: property=%s, value=%s",
+            _LOGGER.info(
+                "✓ Captured value update for slot %s: property=%s, value=%s",
                 slot,
                 property_name,
                 "***" if property_name == "userCode" and value else value,
             )
+            
+            events_captured.append(property_name)
             
             if property_name == "userIdStatus":
                 result_data["userIdStatus"] = value
@@ -557,19 +595,25 @@ class YaleLockCoordinator(DataUpdateCoordinator):
             if "userIdStatus" in result_data and "userCode" in result_data:
                 if not listener_removed:
                     listener_removed = True
+                    _LOGGER.info("✓ Both values captured for slot %s, signaling completion", slot)
                     event_received.set()
         
         try:
-            _LOGGER.debug("Querying lock for user code data for slot %s...", slot)
+            _LOGGER.info("Querying lock for user code data for slot %s using event listener...", slot)
             
-            # Set up temporary event listener
+            # Set up temporary event listener BEFORE calling invoke_cc_api
+            # This ensures we don't miss any events
             remove_listener = self.hass.bus.async_listen(
                 "zwave_js_value_updated",
                 _capture_value_update,
             )
             
             try:
+                # Small delay to ensure listener is fully registered
+                await asyncio.sleep(0.1)
+                
                 # Call invoke_cc_api to trigger the lock to report its user code data
+                _LOGGER.debug("Calling invoke_cc_api for slot %s...", slot)
                 await self.hass.services.async_call(
                     ZWAVE_JS_DOMAIN,
                     "invoke_cc_api",
@@ -582,22 +626,26 @@ class YaleLockCoordinator(DataUpdateCoordinator):
                     blocking=True,
                 )
                 
+                _LOGGER.debug("invoke_cc_api call completed, waiting for events...")
+                
                 # Wait for the value update events (with timeout)
                 # The lock should respond with both userIdStatus and userCode
                 try:
-                    await asyncio.wait_for(event_received.wait(), timeout=3.0)
+                    await asyncio.wait_for(event_received.wait(), timeout=5.0)
+                    _LOGGER.info("✓ Event received for slot %s", slot)
                 except asyncio.TimeoutError:
                     _LOGGER.warning(
                         "Timeout waiting for user code data response for slot %s. "
-                        "Got partial data: %s",
+                        "Got partial data: %s (events captured: %s)",
                         slot,
                         result_data,
+                        events_captured,
                     )
                 
                 # Return whatever data we captured (even if incomplete)
                 if result_data:
-                    _LOGGER.debug(
-                        "Captured data for slot %s: status=%s, code=%s",
+                    _LOGGER.info(
+                        "✓ Captured data for slot %s: status=%s, code=%s",
                         slot,
                         result_data.get("userIdStatus"),
                         "***" if result_data.get("userCode") else None,
@@ -605,7 +653,9 @@ class YaleLockCoordinator(DataUpdateCoordinator):
                     return result_data
                 else:
                     _LOGGER.warning(
-                        "No data captured from value update events for slot %s", slot
+                        "No data captured from value update events for slot %s (events captured: %s)", 
+                        slot,
+                        events_captured,
                     )
                     return None
                     
@@ -915,9 +965,23 @@ class YaleLockCoordinator(DataUpdateCoordinator):
 
         for slot in range(1, MAX_USER_SLOTS + 1):
             _LOGGER.debug("Checking slot %s...", slot)
-            status = await self._get_user_code_status(slot)
-            code = await self._get_user_code(slot)
-
+            
+            # Use _get_user_code_data to get both status and code in one call
+            data = await self._get_user_code_data(slot)
+            
+            if not data:
+                _LOGGER.debug("Slot %s - No data returned (empty or timeout)", slot)
+                continue
+            
+            status = data.get("userIdStatus")
+            code = data.get("userCode", "")
+            
+            # Convert code to string if it's not already
+            if code is not None:
+                code = str(code)
+            else:
+                code = ""
+            
             _LOGGER.debug("Slot %s - Status: %s, Code: %s", slot, status, "***" if code else "None")
 
             if status == USER_STATUS_AVAILABLE or status is None:

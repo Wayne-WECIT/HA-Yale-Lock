@@ -20,6 +20,63 @@ Use `lock.smart_door_lock_manager` for the Lovelace card!
 
 ---
 
+## [1.8.2.10] - 2026-01-22
+
+### 🔧 FIX - Improved Event Listener for User Code Capture
+
+**User feedback**: "you have the codes yet the lock pins are empty why ?"
+
+### The Issue
+
+The event listener in `_get_user_code_data()` was not capturing events because:
+1. **Type mismatch**: `property_key` from events could be a string ("1") while `slot` was an int (1), causing the comparison to fail
+2. **Insufficient logging**: Hard to debug what events were being received
+3. **Timeout too short**: 3 seconds might not be enough for slower locks
+
+### The Fix
+
+**1. Fixed Property Key Comparison**:
+- Now handles both `int` and `string` property_key values
+- Converts both sides to int for comparison
+- Falls back to string comparison if int conversion fails
+
+**2. Enhanced Debug Logging**:
+- Logs all User Code events for the node (for debugging)
+- Shows property_key type and value
+- Tracks which events were captured
+- More detailed success/failure messages
+
+**3. Improved Timing**:
+- Increased timeout from 3.0s to 5.0s
+- Added 0.1s delay before calling `invoke_cc_api` to ensure listener is registered
+- Better event tracking to see what's happening
+
+**4. Optimized Pull Operation**:
+- `async_pull_codes_from_lock()` now uses `_get_user_code_data()` directly
+- Gets both status and code in a single call (more efficient)
+- Better error handling and logging
+
+### Changed
+
+- `_get_user_code_data()`: 
+  - Fixed property_key comparison (handles int/string)
+  - Enhanced debug logging
+  - Increased timeout to 5 seconds
+  - Added delay before API call
+- `async_pull_codes_from_lock()`: 
+  - Now uses `_get_user_code_data()` directly instead of separate calls
+  - More efficient (one API call per slot instead of two)
+
+### What's Fixed
+
+- ✅ **Property key comparison** now works with both int and string values
+- ✅ **Better debugging** with comprehensive event logging
+- ✅ **More reliable** with longer timeout and better timing
+- ✅ **More efficient** pull operation
+- ✅ **"Lock PIN" field should now populate** correctly
+
+---
+
 ## [1.8.2.9] - 2026-01-22
 
 ### ✅ SOLUTION - Event-Based Response Capture
