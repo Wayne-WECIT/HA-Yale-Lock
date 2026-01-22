@@ -20,6 +20,43 @@ Use `lock.smart_door_lock_manager` for the Lovelace card!
 
 ---
 
+## [1.8.1.4] - 2026-01-22
+
+### 🔧 CRITICAL FIX - Code Retrieval Now Works!
+
+**User feedback**: *"you are getting the key but you are not showing them on the card. what causing the issue now?"*
+
+The codes **were being retrieved** successfully from the lock:
+```
+Invoked USER_CODE CC API method get with result: {'userIdStatus': 1, 'userCode': '19992017'}
+```
+
+But they **weren't being read from cache** to display on the card:
+```
+WARNING: Could not refresh value: extra keys not allowed @ data['command_class']
+WARNING: No value found for CC:99, Property:userIdStatus, Key:1
+```
+
+### The Issue
+
+The `_get_zwave_value` function was broken - it was trying to call the `refresh_value` service with a `command_class` parameter, which isn't allowed. This caused it to fail reading the cached values.
+
+### The Fix
+
+Completely rewrote `_get_zwave_value` to:
+- **Remove** broken `refresh_value` service call
+- **Directly access** the Z-Wave JS node's cached values
+- **Simplify** the logic to just read what's already there
+
+After `invoke_cc_api` retrieves the codes, they're in the node cache. Now we can actually read them!
+
+### Changed
+- Rewrote `_get_zwave_value()` to directly access node values
+- Removed broken `refresh_value` service call
+- Codes should now display on the card correctly
+
+---
+
 ## [1.8.1.3] - 2026-01-22
 
 ### 🔧 CRITICAL REVERT - v1.8.1.2 Was Broken!

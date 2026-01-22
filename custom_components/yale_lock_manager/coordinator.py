@@ -408,18 +408,8 @@ class YaleLockCoordinator(DataUpdateCoordinator):
     async def _get_zwave_value(
         self, command_class: int, property_name: str, property_key: int | None = None
     ) -> Any:
-        """Get a Z-Wave JS value."""
+        """Get a Z-Wave JS value from the node's cached values."""
         try:
-            # Use Z-Wave JS refresh_value service to get the current value
-            service_data = {
-                "entity_id": self.lock_entity_id,
-                "command_class": command_class,
-                "property": property_name,
-            }
-            
-            if property_key is not None:
-                service_data["property_key"] = property_key
-            
             _LOGGER.debug(
                 "Getting Z-Wave value - CC: %s, Property: %s, Key: %s",
                 command_class,
@@ -427,85 +417,57 @@ class YaleLockCoordinator(DataUpdateCoordinator):
                 property_key,
             )
             
-            # First refresh the value from the device
-            try:
-                await self.hass.services.async_call(
-                    ZWAVE_JS_DOMAIN,
-                    "refresh_value",
-                    service_data,
-                    blocking=True,
-                )
-                # Give the lock time to respond
-                await asyncio.sleep(1.0)  # Increased from 0.5 to give lock more time
-            except Exception as err:
-                _LOGGER.warning("Could not refresh value: %s", err)
+            # Get the lock entity to find the node_id
+            lock_entity = self.hass.states.get(self.lock_entity_id)
+            if not lock_entity or "node_id" not in lock_entity.attributes:
+                _LOGGER.warning("Could not get node_id from lock entity")
+                return None
             
-            # Try to get value from Z-Wave JS integration data
-            if ZWAVE_JS_DOMAIN in self.hass.data:
-                try:
-                    # Get Z-Wave JS entry
-                    lock_entity = self.hass.states.get(self.lock_entity_id)
-                    if lock_entity and "node_id" in lock_entity.attributes:
-                        node_id = lock_entity.attributes["node_id"]
-                        
-                        # Try to find matching Z-Wave JS entry
-                        for entry_id, entry_data in self.hass.data[ZWAVE_JS_DOMAIN].items():
-                            if hasattr(entry_data, "client") and hasattr(entry_data.client, "driver"):
-                                driver = entry_data.client.driver
-                                if hasattr(driver, "controller"):
-                                    node = driver.controller.nodes.get(node_id)
-                                    if node:
-                                        # Try to get the value
-                                        value_id = f"{node_id}-{command_class}-0-{property_name}"
-                                        if property_key is not None:
-                                            value_id += f"-{property_key}"
-                                        
-                                        for value in node.values.values():
-                                            if (value.command_class == command_class and 
-                                                value.property_name == property_name):
-                                                if property_key is not None:
-                                                    if value.property_key == property_key:
-                                                        _LOGGER.debug("Found value from driver: %s", value.value)
-                                                        return value.value
-                                                else:
-                                                    _LOGGER.debug("Found value from driver: %s", value.value)
-                                                    return value.value
-                except Exception as err:
-                    _LOGGER.debug("Could not access Z-Wave JS driver data: %s", err)
+            node_id = lock_entity.attributes["node_id"]
             
-            # Fallback: Search for entities that match our command class and property
-            device_registry = dr.async_get(self.hass)
-            entity_registry = er.async_get(self.hass)
+            # Access Z-Wave JS integration data directly
+            if ZWAVE_JS_DOMAIN not in self.hass.data:
+                _LOGGER.warning("Z-Wave JS domain not found in hass.data")
+                return None
             
-            # Find the Z-Wave device
-            device = device_registry.async_get_device(
-                identifiers={(ZWAVE_JS_DOMAIN, self.node_id)}
-            )
-            
-            if device:
-                # Search for entities that match our command class and property
-                for entity_entry in er.async_entries_for_device(entity_registry, device.id):
-                    if entity_entry.platform == ZWAVE_JS_DOMAIN:
-                        state = self.hass.states.get(entity_entry.entity_id)
-                        if state and state.attributes:
-                            # Check if this entity matches our query
-                            if (
-                                state.attributes.get("command_class") == command_class
-                                and state.attributes.get("property") == property_name
-                            ):
-                                if property_key is not None:
-                                    if state.attributes.get("property_key") == property_key:
-                                        _LOGGER.debug("Found value from entity: %s", state.state)
-                                        return state.state
-                                else:
-                                    _LOGGER.debug("Found value from entity: %s", state.state)
-                                    return state.state
+            # Find the Z-Wave JS client
+            for entry_id, entry_data in self.hass.data[ZWAVE_JS_DOMAIN].items():
+                if not isinstance(entry_data, dict):
+                    continue
+                    
+                client = entry_data.get("client")
+                if not client or not hasattr(client, "driver"):
+                    continue
+                
+                driver = client.driver
+                if not hasattr(driver, "controller"):
+                    continue
+                
+                node = driver.controller.nodes.get(node_id)
+                if not node:
+                    continue
+                
+                # Search through node values
+                for value in node.values.values():
+                    if value.command_class != command_class:
+                        continue
+                    if value.property_ != property_name:
+                        continue
+                    
+                    # Check property_key if specified
+                    if property_key is not None:
+                        if value.property_key == property_key:
+                            _LOGGER.debug("Found value: %s", value.value)
+                            return value.value
+                    else:
+                        _LOGGER.debug("Found value: %s", value.value)
+                        return value.value
             
             _LOGGER.warning("No value found for CC:%s, Property:%s, Key:%s", command_class, property_name, property_key)
             return None
 
         except Exception as err:
-            _LOGGER.error("Error getting Z-Wave value: %s", err)
+            _LOGGER.error("Error getting Z-Wave value: %s", err, exc_info=True)
             return None
 
     async def _get_all_user_codes(self) -> dict[int, dict[str, Any]]:
