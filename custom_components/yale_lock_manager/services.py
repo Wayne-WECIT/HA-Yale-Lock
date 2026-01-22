@@ -40,6 +40,7 @@ _LOGGER = logging.getLogger(__name__)
 # Service schemas
 SET_USER_CODE_SCHEMA = vol.Schema(
     {
+        vol.Optional("entity_id"): cv.entity_id,
         vol.Required(ATTR_SLOT): vol.All(vol.Coerce(int), vol.Range(min=1, max=MAX_USER_SLOTS)),
         vol.Required(ATTR_CODE): vol.All(
             cv.string,
@@ -52,12 +53,14 @@ SET_USER_CODE_SCHEMA = vol.Schema(
 
 CLEAR_USER_CODE_SCHEMA = vol.Schema(
     {
+        vol.Optional("entity_id"): cv.entity_id,
         vol.Required(ATTR_SLOT): vol.All(vol.Coerce(int), vol.Range(min=1, max=MAX_USER_SLOTS)),
     }
 )
 
 SET_USER_SCHEDULE_SCHEMA = vol.Schema(
     {
+        vol.Optional("entity_id"): cv.entity_id,
         vol.Required(ATTR_SLOT): vol.All(vol.Coerce(int), vol.Range(min=1, max=MAX_USER_SLOTS)),
         vol.Optional(ATTR_START_DATETIME): cv.datetime,
         vol.Optional(ATTR_END_DATETIME): cv.datetime,
@@ -66,6 +69,7 @@ SET_USER_SCHEDULE_SCHEMA = vol.Schema(
 
 SET_USAGE_LIMIT_SCHEMA = vol.Schema(
     {
+        vol.Optional("entity_id"): cv.entity_id,
         vol.Required(ATTR_SLOT): vol.All(vol.Coerce(int), vol.Range(min=1, max=MAX_USER_SLOTS)),
         vol.Optional(ATTR_MAX_USES): vol.Any(None, vol.All(vol.Coerce(int), vol.Range(min=1))),
     }
@@ -73,26 +77,34 @@ SET_USAGE_LIMIT_SCHEMA = vol.Schema(
 
 PUSH_CODE_TO_LOCK_SCHEMA = vol.Schema(
     {
+        vol.Optional("entity_id"): cv.entity_id,
         vol.Required(ATTR_SLOT): vol.All(vol.Coerce(int), vol.Range(min=1, max=MAX_USER_SLOTS)),
     }
 )
 
-PULL_CODES_FROM_LOCK_SCHEMA = vol.Schema({})
+PULL_CODES_FROM_LOCK_SCHEMA = vol.Schema(
+    {
+        vol.Optional("entity_id"): cv.entity_id,
+    }
+)
 
 ENABLE_USER_SCHEMA = vol.Schema(
     {
+        vol.Optional("entity_id"): cv.entity_id,
         vol.Required(ATTR_SLOT): vol.All(vol.Coerce(int), vol.Range(min=1, max=MAX_USER_SLOTS)),
     }
 )
 
 DISABLE_USER_SCHEMA = vol.Schema(
     {
+        vol.Optional("entity_id"): cv.entity_id,
         vol.Required(ATTR_SLOT): vol.All(vol.Coerce(int), vol.Range(min=1, max=MAX_USER_SLOTS)),
     }
 )
 
 RESET_USAGE_COUNT_SCHEMA = vol.Schema(
     {
+        vol.Optional("entity_id"): cv.entity_id,
         vol.Required(ATTR_SLOT): vol.All(vol.Coerce(int), vol.Range(min=1, max=MAX_USER_SLOTS)),
     }
 )

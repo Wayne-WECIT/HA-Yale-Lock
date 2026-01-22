@@ -379,6 +379,15 @@ After updating, you may need to:
 
 ### Planned Features
 
+## [1.5.1.0] - 2026-01-22
+
+### Fixed
+- **CRITICAL FIX**: Added `entity_id` parameter to all service schemas
+  - Services were rejecting calls with "extra keys not allowed" error
+  - All schemas now accept optional `entity_id` parameter
+  - Makes services future-proof for multi-lock support
+  - Fixes card functionality completely
+
 ## [1.5.0.0] - 2026-01-22
 
 ### Added
