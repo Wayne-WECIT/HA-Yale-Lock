@@ -5,6 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+---
+
+**📌 Current Entity Structure** (as of v1.1.2.1):
+- Lock: `lock.smart_door_lock_manager` (created by integration)
+- Z-Wave Lock: `lock.smart_door_lock` (original Z-Wave entity)
+- Sensors: `sensor.smart_door_lock_*` (battery, last_access, etc.)
+- Use `lock.smart_door_lock_manager` for the Lovelace card
+
+---
+
+## [1.1.2.2] - 2026-01-22
+
+### Fixed
+- **Documentation updates** - All files now reference correct entity names
+  - Updated QUICKSTART.md to use `lock.smart_door_lock_manager`
+  - Updated CHANGELOG.md with entity structure clarification
+  - Fixed all lock/unlock automation examples
+  - Clarified v1.1.0.0 was broken (use v1.1.1.0+)
+  
+### Documentation Changes
+- QUICKSTART.md: Updated card configuration example (line 66)
+- QUICKSTART.md: Updated lock/unlock automation examples (lines 170, 175)
+- CHANGELOG.md: Added current entity structure note at top
+- CHANGELOG.md: Marked v1.1.0.0 as superseded/broken
+
 ## [1.1.2.1] - 2026-01-22
 
 ### Fixed
@@ -67,24 +92,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - FOB/PIN toggle works ✅
 - Wider, more readable UI ✅
 
-## [1.1.0.0] - 2026-01-22
+## [1.1.0.0] - 2026-01-22 (SUPERSEDED by 1.1.1.0)
 
-### MAJOR CHANGE - Cleaner Design
-- **Removed wrapper lock entity** - No more `lock.smart_door_lock_2`!
-- Integration now works directly with the Z-Wave lock (`lock.smart_door_lock`)
-- **Fixed all entity naming conflicts**
-- Sensors now automatically match the Z-Wave entity names
-- Cleaner, simpler design - no duplicate entities
+### ⚠️ THIS VERSION WAS BROKEN - DO NOT USE
+- **Removed wrapper lock entity** - This broke lock/unlock functionality
+- Was attempting cleaner design but removed critical functionality
+- Fixed in v1.1.1.0
 
-### What Changed
+### What Went Wrong
 - Removed `Platform.LOCK` from integration platforms
-- Lock entity removed from `lock.py` (still in codebase for reference)
-- Users now lock/unlock using the existing Z-Wave lock entity
-- Sensors, services, and Lovelace card provide all the extra functionality
+- Lock entity removed completely
+- Lock/unlock stopped working
+- Card showed no data
 
-### Configuration
-- When configuring the Lovelace card, use: `entity: lock.smart_door_lock`
-- All sensor entities will be: `sensor.smart_door_lock_*` (no more `_2` suffix)
+**DO NOT USE THIS VERSION - Update to v1.1.1.0 or later**
 
 ## [1.0.2.0] - 2026-01-22
 

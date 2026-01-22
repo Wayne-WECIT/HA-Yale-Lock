@@ -63,7 +63,7 @@ Your lock is now configured! You'll see:
    - Or manually add YAML:
      ```yaml
      type: custom:yale-lock-manager-card
-     entity: lock.yale_smart_door_lock  # Your lock entity ID
+     entity: lock.smart_door_lock_manager  # Your lock entity ID
      ```
    - Click **Save**
 
@@ -167,12 +167,12 @@ Check **Last User** and **Last Access** sensors
 # Lock
 service: lock.lock
 target:
-  entity_id: lock.yale_smart_door_lock
+  entity_id: lock.smart_door_lock_manager
 
 # Unlock
 service: lock.unlock
 target:
-  entity_id: lock.yale_smart_door_lock
+  entity_id: lock.smart_door_lock_manager
 ```
 
 ### Disable a User Temporarily
