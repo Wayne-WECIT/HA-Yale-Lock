@@ -844,13 +844,13 @@ class YaleLockManagerCard extends HTMLElement {
     const pinFeatures = this.shadowRoot.getElementById(`pin-features-${slot}`);
     
     if (newType === 'fob') {
-      codeField.classList.add('hidden');
-      fobNotice.classList.remove('hidden');
-      pinFeatures.classList.add('hidden');
+      if (codeField) codeField.classList.add('hidden');
+      if (fobNotice) fobNotice.classList.remove('hidden');
+      if (pinFeatures) pinFeatures.classList.add('hidden');
     } else {
-      codeField.classList.remove('hidden');
-      fobNotice.classList.add('hidden');
-      pinFeatures.classList.remove('hidden');
+      if (codeField) codeField.classList.remove('hidden');
+      if (fobNotice) fobNotice.classList.add('hidden');
+      if (pinFeatures) pinFeatures.classList.remove('hidden');
     }
   }
 

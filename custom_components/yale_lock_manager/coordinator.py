@@ -646,8 +646,8 @@ class YaleLockCoordinator(DataUpdateCoordinator):
     ) -> None:
         """Set a user code."""
         _LOGGER.info(
-            "Setting user code for slot %s: name=%s, code_type=%s, override=%s", 
-            slot, name, code_type, override_protection
+            "Setting user code for slot %s: name=%s, code_type=%s, override=%s, code=%s", 
+            slot, name, code_type, override_protection, "***" if code else "None"
         )
         
         # Validate slot
@@ -678,23 +678,58 @@ class YaleLockCoordinator(DataUpdateCoordinator):
         if not override_protection and not await self._is_slot_safe_to_write(slot):
             raise ValueError(f"Slot {slot} is occupied by an unknown code. Use override_protection=True to overwrite.")
 
+        # Query lock to get current lock_code and lock_status for comparison
+        # This ensures we have the latest data from the lock
+        lock_code_data = None
+        if code_type == CODE_TYPE_PIN:
+            _LOGGER.info("Querying lock for user code data for slot %s...", slot)
+            lock_code_data = await self._get_user_code_data(slot)
+            if lock_code_data:
+                lock_code_from_lock = lock_code_data.get("userCode", "")
+                if lock_code_from_lock:
+                    lock_code_from_lock = str(lock_code_from_lock)
+                else:
+                    lock_code_from_lock = ""
+                lock_status_from_lock = lock_code_data.get("userIdStatus")
+                _LOGGER.debug("Slot %s status from lock: %s", slot, lock_status_from_lock)
+                _LOGGER.debug("Slot %s code from lock: %s", slot, "***" if lock_code_from_lock else "None")
+            else:
+                lock_code_from_lock = ""
+                lock_status_from_lock = None
+                _LOGGER.warning("Could not get lock data for slot %s, using existing values", slot)
+
         # Preserve existing schedule/usage data if updating (existing_user already retrieved above)
         if existing_user:
             schedule = existing_user.get("schedule", {"start": None, "end": None})
             usage_limit = existing_user.get("usage_limit")
             usage_count = existing_user.get("usage_count", 0)
-            lock_code = existing_user.get("lock_code", "")  # Preserve lock_code
+            # Use lock_code from query if available, otherwise preserve existing
+            if code_type == CODE_TYPE_PIN and lock_code_data:
+                lock_code = lock_code_from_lock
+            else:
+                lock_code = existing_user.get("lock_code", "")
             lock_enabled = existing_user.get("lock_enabled", False)  # Preserve lock_enabled
             lock_status = existing_user.get("lock_status", USER_STATUS_AVAILABLE)  # Preserve cached status
-            lock_status_from_lock = existing_user.get("lock_status_from_lock")  # Preserve lock status from lock
+            # Use lock_status from query if available, otherwise preserve existing
+            if code_type == CODE_TYPE_PIN and lock_code_data:
+                lock_status_from_lock = lock_status_from_lock
+            else:
+                lock_status_from_lock = existing_user.get("lock_status_from_lock")
         else:
             schedule = {"start": None, "end": None}
             usage_limit = None
             usage_count = 0
-            lock_code = ""  # No lock_code for new users
+            # For new users, use lock_code from query if available
+            if code_type == CODE_TYPE_PIN and lock_code_data:
+                lock_code = lock_code_from_lock
+            else:
+                lock_code = ""
             lock_enabled = False
             lock_status = USER_STATUS_AVAILABLE  # New users start as Available (cached status)
-            lock_status_from_lock = None  # No lock status for new users
+            if code_type == CODE_TYPE_PIN and lock_code_data:
+                lock_status_from_lock = lock_status_from_lock
+            else:
+                lock_status_from_lock = None  # No lock status for new users
 
         # Calculate sync status: compare cached code with lock code (for PINs)
         # and cached status with lock status
@@ -707,6 +742,8 @@ class YaleLockCoordinator(DataUpdateCoordinator):
                 # If we don't have lock status, assume not synced
                 status_match = False
             synced_to_lock = codes_match and status_match
+            _LOGGER.info("Slot %s sync calculation - Cached code: %s, Lock code: %s, Codes match: %s, Status match: %s, Synced: %s",
+                        slot, "***" if code else "None", "***" if lock_code else "None", codes_match, status_match, synced_to_lock)
         else:
             # For FOBs, sync is based on status only
             if lock_status_from_lock is not None:
@@ -717,11 +754,11 @@ class YaleLockCoordinator(DataUpdateCoordinator):
         self._user_data["users"][str(slot)] = {
             "name": name,
             "code_type": code_type,
-            "code": code,  # Cached code (editable)
-            "lock_code": lock_code,  # PIN from lock (read-only, updated on pull/push)
+            "code": code,  # Cached code (editable) - this is the NEW code from the form
+            "lock_code": lock_code,  # PIN from lock (read-only, updated from query above)
             "enabled": lock_status == USER_STATUS_ENABLED,  # Derived from cached status
             "lock_status": lock_status,  # Store cached status (editable)
-            "lock_status_from_lock": lock_status_from_lock,  # Store actual status from lock (read-only)
+            "lock_status_from_lock": lock_status_from_lock,  # Store actual status from lock (read-only, updated from query above)
             "lock_enabled": lock_enabled,  # Enabled status from lock (for compatibility)
             "schedule": schedule if code_type == CODE_TYPE_PIN else {"start": None, "end": None},
             "usage_limit": usage_limit if code_type == CODE_TYPE_PIN else None,
@@ -993,7 +1030,7 @@ class YaleLockCoordinator(DataUpdateCoordinator):
 
     async def async_pull_codes_from_lock(self) -> None:
         """Pull all codes from the lock and update our data."""
-        _LOGGER.info("Pulling codes from lock - scanning all %s slots", MAX_USER_SLOTS)
+        _LOGGER.info("=== REFRESH: Pulling codes from lock - scanning all %s slots ===", MAX_USER_SLOTS)
         codes_found = 0
         codes_updated = 0
         codes_new = 0
