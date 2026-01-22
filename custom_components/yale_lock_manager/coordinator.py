@@ -351,7 +351,7 @@ class YaleLockCoordinator(DataUpdateCoordinator):
     async def _get_zwave_value(
         self, command_class: int, property_name: str, property_key: int | None = None
     ) -> Any:
-        """Get a Z-Wave JS value using the multicast_set_value service."""
+        """Get a Z-Wave JS value."""
         try:
             # Use Z-Wave JS refresh_value service to get the current value
             service_data = {
@@ -379,12 +379,44 @@ class YaleLockCoordinator(DataUpdateCoordinator):
                     blocking=True,
                 )
                 # Give the lock time to respond
-                await asyncio.sleep(0.5)
+                await asyncio.sleep(1.0)  # Increased from 0.5 to give lock more time
             except Exception as err:
-                _LOGGER.debug("Could not refresh value: %s", err)
+                _LOGGER.warning("Could not refresh value: %s", err)
             
-            # Now try to read the value from related entities
-            # Z-Wave JS might expose user codes as separate sensor entities
+            # Try to get value from Z-Wave JS integration data
+            if ZWAVE_JS_DOMAIN in self.hass.data:
+                try:
+                    # Get Z-Wave JS entry
+                    lock_entity = self.hass.states.get(self.lock_entity_id)
+                    if lock_entity and "node_id" in lock_entity.attributes:
+                        node_id = lock_entity.attributes["node_id"]
+                        
+                        # Try to find matching Z-Wave JS entry
+                        for entry_id, entry_data in self.hass.data[ZWAVE_JS_DOMAIN].items():
+                            if hasattr(entry_data, "client") and hasattr(entry_data.client, "driver"):
+                                driver = entry_data.client.driver
+                                if hasattr(driver, "controller"):
+                                    node = driver.controller.nodes.get(node_id)
+                                    if node:
+                                        # Try to get the value
+                                        value_id = f"{node_id}-{command_class}-0-{property_name}"
+                                        if property_key is not None:
+                                            value_id += f"-{property_key}"
+                                        
+                                        for value in node.values.values():
+                                            if (value.command_class == command_class and 
+                                                value.property_name == property_name):
+                                                if property_key is not None:
+                                                    if value.property_key == property_key:
+                                                        _LOGGER.debug("Found value from driver: %s", value.value)
+                                                        return value.value
+                                                else:
+                                                    _LOGGER.debug("Found value from driver: %s", value.value)
+                                                    return value.value
+                except Exception as err:
+                    _LOGGER.debug("Could not access Z-Wave JS driver data: %s", err)
+            
+            # Fallback: Search for entities that match our command class and property
             device_registry = dr.async_get(self.hass)
             entity_registry = er.async_get(self.hass)
             
@@ -406,13 +438,13 @@ class YaleLockCoordinator(DataUpdateCoordinator):
                             ):
                                 if property_key is not None:
                                     if state.attributes.get("property_key") == property_key:
-                                        _LOGGER.debug("Found value: %s", state.state)
+                                        _LOGGER.debug("Found value from entity: %s", state.state)
                                         return state.state
                                 else:
-                                    _LOGGER.debug("Found value: %s", state.state)
+                                    _LOGGER.debug("Found value from entity: %s", state.state)
                                     return state.state
             
-            _LOGGER.debug("No value found for CC:%s, Property:%s, Key:%s", command_class, property_name, property_key)
+            _LOGGER.warning("No value found for CC:%s, Property:%s, Key:%s", command_class, property_name, property_key)
             return None
 
         except Exception as err:
@@ -592,32 +624,47 @@ class YaleLockCoordinator(DataUpdateCoordinator):
 
     async def async_pull_codes_from_lock(self) -> None:
         """Pull all codes from the lock and update our data."""
-        _LOGGER.info("Pulling codes from lock")
+        _LOGGER.info("Pulling codes from lock - scanning all %s slots", MAX_USER_SLOTS)
+        codes_found = 0
+        codes_updated = 0
+        codes_new = 0
 
         for slot in range(1, MAX_USER_SLOTS + 1):
+            _LOGGER.debug("Checking slot %s...", slot)
             status = await self._get_user_code_status(slot)
             code = await self._get_user_code(slot)
 
-            if status == USER_STATUS_AVAILABLE:
+            _LOGGER.debug("Slot %s - Status: %s, Code: %s", slot, status, "***" if code else "None")
+
+            if status == USER_STATUS_AVAILABLE or status is None:
                 # Slot is empty
+                _LOGGER.debug("Slot %s is empty", slot)
                 continue
+
+            codes_found += 1
+            _LOGGER.info("Found code in slot %s (Status: %s)", slot, status)
 
             # Check if we already have this slot
             slot_str = str(slot)
             if slot_str in self._user_data["users"]:
                 # Update existing
+                _LOGGER.info("Slot %s already known, marking as synced", slot)
                 self._user_data["users"][slot_str]["synced_to_lock"] = True
+                codes_updated += 1
             else:
                 # New code we don't know about
+                _LOGGER.info("Slot %s is NEW (unknown code detected)", slot)
+                
                 # Try to determine if it's a FOB
                 code_type = CODE_TYPE_PIN
                 if code and (not code.isdigit() or len(code) < 4):
                     code_type = CODE_TYPE_FOB
+                    _LOGGER.debug("Detected as FOB based on code format")
 
                 self._user_data["users"][slot_str] = {
                     "name": f"User {slot}",
                     "code_type": code_type,
-                    "code": code,
+                    "code": code if code else "",
                     "enabled": status == USER_STATUS_ENABLED,
                     "schedule": {"start": None, "end": None},
                     "usage_limit": None,
@@ -625,6 +672,15 @@ class YaleLockCoordinator(DataUpdateCoordinator):
                     "synced_to_lock": True,
                     "last_used": None,
                 }
+                codes_new += 1
+                _LOGGER.info("Added slot %s as '%s' (%s)", slot, f"User {slot}", code_type)
+
+        _LOGGER.info(
+            "Pull complete: Found %s codes (%s new, %s updated)", 
+            codes_found, 
+            codes_new, 
+            codes_updated
+        )
 
         await self.async_save_user_data()
         await self.async_request_refresh()

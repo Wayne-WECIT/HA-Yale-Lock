@@ -20,6 +20,38 @@ Use `lock.smart_door_lock_manager` for the Lovelace card!
 
 ---
 
+## [1.6.1.0] - 2026-01-22
+
+### Fixed
+- **🔍 Refresh From Lock** now works correctly
+  - Improved Z-Wave value retrieval to access driver data directly
+  - Added fallback methods to ensure codes are read properly
+  - Enhanced logging to show pull progress and results
+  - Now displays: "Found X codes (Y new, Z updated)"
+  - Properly detects PIN vs FOB/RFID codes based on format
+
+### Improved
+- **Better Z-Wave Communication**
+  - Now accesses Z-Wave JS driver data directly for more reliable reads
+  - Increased refresh timeout from 0.5s to 1.0s for better lock response
+  - Multi-layer approach: driver data → entity attributes → fallback
+  - More detailed debug logging for troubleshooting
+
+### Technical Details
+- `_get_zwave_value()` now tries three methods in order:
+  1. Direct access to Z-Wave JS driver node values (most reliable)
+  2. Entity registry search for matching command class
+  3. Fallback to refresh_value service
+- `async_pull_codes_from_lock()` now provides detailed progress logging
+
+### What This Fixes
+- "Refresh from Lock" button previously showed no results
+- Unknown codes on lock now properly detected and imported
+- Codes set directly on keypad are now discovered
+- Better visibility into what codes exist on the physical lock
+
+---
+
 ## [1.6.0.0] - 2026-01-22
 
 ### Added
