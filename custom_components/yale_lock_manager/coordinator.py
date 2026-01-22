@@ -515,11 +515,13 @@ class YaleLockCoordinator(DataUpdateCoordinator):
         # This avoids complex Z-Wave queries that may not work reliably
         return {}
 
-    async def _get_user_code_status(self, slot: int) -> int:
-        """Get user code status for a slot - triggers query then reads cached value."""
+    async def _get_user_code_status(self, slot: int) -> int | None:
+        """Get user code status for a slot by querying the lock."""
         try:
-            # STEP 1: Trigger the query using invoke_cc_api (NO return_response)
-            await self.hass.services.async_call(
+            _LOGGER.debug("Querying lock for user code status for slot %s...", slot)
+            
+            # Call invoke_cc_api with return_response to get the result
+            response = await self.hass.services.async_call(
                 ZWAVE_JS_DOMAIN,
                 "invoke_cc_api",
                 {
@@ -529,79 +531,28 @@ class YaleLockCoordinator(DataUpdateCoordinator):
                     "parameters": [slot],
                 },
                 blocking=True,
-                # NO return_response - this just triggers the query!
+                return_response=True,
             )
             
-            # STEP 2: Wait for Z-Wave to query and update the node value
-            await asyncio.sleep(0.5)  # Give Z-Wave time to query
-            
-            # STEP 3: Read the cached value from the Z-Wave node
-            # Get the Z-Wave JS entry
-            zwave_entries = [
-                entry for entry in self.hass.config_entries.async_entries(ZWAVE_JS_DOMAIN)
-                if entry.state == ConfigEntryState.LOADED
-            ]
-            
-            if not zwave_entries:
-                _LOGGER.error("No Z-Wave JS config entries found")
-                return None
-            
-            # Get the client from the first entry
-            client = self.hass.data[ZWAVE_JS_DOMAIN][zwave_entries[0].entry_id]["client"]
-            
-            # Get the node
-            device_registry = dr.async_get(self.hass)
-            entity_registry = er.async_get(self.hass)
-            
-            lock_entry = entity_registry.async_get(self.lock_entity_id)
-            if not lock_entry or not lock_entry.device_id:
-                _LOGGER.error("Could not find device for lock entity %s", self.lock_entity_id)
-                return None
-            
-            device_entry = device_registry.async_get(lock_entry.device_id)
-            if not device_entry:
-                _LOGGER.error("Could not find device entry")
-                return None
-            
-            # Extract node ID from device identifiers
-            node_id = None
-            for identifier in device_entry.identifiers:
-                if identifier[0] == ZWAVE_JS_DOMAIN:
-                    node_id = int(identifier[1].split("-")[0])
-                    break
-            
-            if node_id is None:
-                _LOGGER.error("Could not extract node ID from device")
-                return None
-            
-            # Get the node
-            node = client.driver.controller.nodes.get(node_id)
-            if not node:
-                _LOGGER.error("Could not find node %s", node_id)
-                return None
-            
-            # Get the value for this slot's status
-            # Command Class 99 (User Code), property userIdStatus, endpoint 0, property key is the slot
-            value_id = f"{node_id}-99-0-userIdStatus-{slot}"
-            value = node.values.get(value_id)
-            
-            if value is not None:
-                status = value.value
-                _LOGGER.debug("Slot %s status from node after query: %s", slot, status)
+            if response and "userIdStatus" in response:
+                status = int(response["userIdStatus"])
+                _LOGGER.debug("Slot %s status from invoke_cc_api: %s", slot, status)
                 return status
             
-            _LOGGER.debug("No value found for slot %s status after query (value_id: %s)", slot, value_id)
+            _LOGGER.warning("No status returned from invoke_cc_api for slot %s", slot)
             return None
             
         except Exception as err:
-            _LOGGER.debug("Error getting user code status for slot %s: %s", slot, err, exc_info=True)
+            _LOGGER.error("Error getting user code status for slot %s: %s", slot, err, exc_info=True)
             return None
 
     async def _get_user_code(self, slot: int) -> str:
-        """Get user code for a slot - triggers query then reads cached value."""
+        """Get user code for a slot by querying the lock."""
         try:
-            # STEP 1: Trigger the query using invoke_cc_api (NO return_response)
-            await self.hass.services.async_call(
+            _LOGGER.debug("Querying lock for user code for slot %s...", slot)
+            
+            # Call invoke_cc_api with return_response to get the result
+            response = await self.hass.services.async_call(
                 ZWAVE_JS_DOMAIN,
                 "invoke_cc_api",
                 {
@@ -611,72 +562,19 @@ class YaleLockCoordinator(DataUpdateCoordinator):
                     "parameters": [slot],
                 },
                 blocking=True,
-                # NO return_response - this just triggers the query!
+                return_response=True,
             )
             
-            # STEP 2: Wait for Z-Wave to query and update the node value
-            await asyncio.sleep(0.5)  # Give Z-Wave time to query
+            if response and "userCode" in response:
+                code = str(response["userCode"])
+                _LOGGER.debug("Slot %s code from invoke_cc_api: %s", slot, "***" if code else "None")
+                return code or ""
             
-            # STEP 3: Read the cached value from the Z-Wave node
-            # Get the Z-Wave JS entry
-            zwave_entries = [
-                entry for entry in self.hass.config_entries.async_entries(ZWAVE_JS_DOMAIN)
-                if entry.state == ConfigEntryState.LOADED
-            ]
-            
-            if not zwave_entries:
-                _LOGGER.error("No Z-Wave JS config entries found")
-                return ""
-            
-            # Get the client from the first entry
-            client = self.hass.data[ZWAVE_JS_DOMAIN][zwave_entries[0].entry_id]["client"]
-            
-            # Get the node
-            device_registry = dr.async_get(self.hass)
-            entity_registry = er.async_get(self.hass)
-            
-            lock_entry = entity_registry.async_get(self.lock_entity_id)
-            if not lock_entry or not lock_entry.device_id:
-                _LOGGER.error("Could not find device for lock entity %s", self.lock_entity_id)
-                return ""
-            
-            device_entry = device_registry.async_get(lock_entry.device_id)
-            if not device_entry:
-                _LOGGER.error("Could not find device entry")
-                return ""
-            
-            # Extract node ID from device identifiers
-            node_id = None
-            for identifier in device_entry.identifiers:
-                if identifier[0] == ZWAVE_JS_DOMAIN:
-                    node_id = int(identifier[1].split("-")[0])
-                    break
-            
-            if node_id is None:
-                _LOGGER.error("Could not extract node ID from device")
-                return ""
-            
-            # Get the node
-            node = client.driver.controller.nodes.get(node_id)
-            if not node:
-                _LOGGER.error("Could not find node %s", node_id)
-                return ""
-            
-            # Get the value for this slot's code
-            # Command Class 99 (User Code), property userCode, endpoint 0, property key is the slot
-            value_id = f"{node_id}-99-0-userCode-{slot}"
-            value = node.values.get(value_id)
-            
-            if value is not None and value.value:
-                code = value.value
-                _LOGGER.debug("Slot %s code from node after query: %s", slot, "***")
-                return str(code)
-            
-            _LOGGER.debug("No code found for slot %s after query (value_id: %s)", slot, value_id)
+            _LOGGER.warning("No code returned from invoke_cc_api for slot %s", slot)
             return ""
             
         except Exception as err:
-            _LOGGER.debug("Error getting user code for slot %s: %s", slot, err, exc_info=True)
+            _LOGGER.error("Error getting user code for slot %s: %s", slot, err, exc_info=True)
             return ""
 
     async def async_set_user_code(
