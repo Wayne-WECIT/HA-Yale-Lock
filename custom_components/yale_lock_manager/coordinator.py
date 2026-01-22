@@ -994,30 +994,46 @@ class YaleLockCoordinator(DataUpdateCoordinator):
             # Wait for lock to process the write
             await asyncio.sleep(2.0)
             
-            # VERIFY: Read back the code from the lock
+            # VERIFY: Read back the code from the lock using _get_user_code_data to get both status and code
             _LOGGER.info("Verifying code was written to slot %s...", slot)
-            verification_status = await self._get_user_code_status(slot)
-            verification_code = await self._get_user_code(slot)
+            verification_data = await self._get_user_code_data(slot)
             
-            # Check if verification succeeded
-            if verification_status is None:
-                _LOGGER.warning("Could not verify slot %s - status read returned None", slot)
+            if not verification_data:
+                _LOGGER.warning("Could not verify slot %s - no data returned", slot)
                 user_data["synced_to_lock"] = False
-            elif verification_status == USER_STATUS_AVAILABLE:
-                _LOGGER.error("Verification failed: Slot %s is empty after push!", slot)
-                user_data["synced_to_lock"] = False
-                raise ValueError(f"Verification failed: Slot {slot} is empty after push")
-            elif verification_code and verification_code != code:
-                _LOGGER.error("Verification failed: Code mismatch in slot %s (expected: ***, got: ***)", slot)
-                user_data["synced_to_lock"] = False
-                raise ValueError(f"Verification failed: Code mismatch in slot {slot}")
             else:
-                # Verification succeeded!
-                _LOGGER.info("✓ Verified: Code successfully written to slot %s", slot)
-                user_data["synced_to_lock"] = True
-                user_data["lock_code"] = verification_code if verification_code else ""  # Update lock_code
-                user_data["lock_status"] = verification_status  # Update full status (0/1/2)
-                user_data["lock_enabled"] = verification_status == USER_STATUS_ENABLED  # Update lock_enabled (for compatibility)
+                verification_status = verification_data.get("userIdStatus")
+                verification_code = verification_data.get("userCode", "")
+                
+                if verification_code:
+                    verification_code = str(verification_code)
+                else:
+                    verification_code = ""
+                
+                # Check if verification succeeded
+                if verification_status is None:
+                    _LOGGER.warning("Could not verify slot %s - status read returned None", slot)
+                    user_data["synced_to_lock"] = False
+                elif verification_status == USER_STATUS_AVAILABLE:
+                    _LOGGER.error("Verification failed: Slot %s is empty after push!", slot)
+                    user_data["synced_to_lock"] = False
+                    raise ValueError(f"Verification failed: Slot {slot} is empty after push")
+                elif verification_code and verification_code != code:
+                    _LOGGER.error("Verification failed: Code mismatch in slot %s (expected: ***, got: ***)", slot)
+                    # Still update lock_code with what we got from the lock
+                    user_data["lock_code"] = verification_code
+                    user_data["lock_status_from_lock"] = verification_status
+                    user_data["lock_enabled"] = verification_status == USER_STATUS_ENABLED
+                    user_data["synced_to_lock"] = False
+                    raise ValueError(f"Verification failed: Code mismatch in slot {slot}")
+                else:
+                    # Verification succeeded!
+                    _LOGGER.info("✓ Verified: Code successfully written to slot %s", slot)
+                    user_data["synced_to_lock"] = True
+                    user_data["lock_code"] = verification_code  # Update lock_code with verified value
+                    user_data["lock_status_from_lock"] = verification_status  # Update lock status from lock
+                    user_data["lock_enabled"] = verification_status == USER_STATUS_ENABLED  # Update lock_enabled (for compatibility)
+                    _LOGGER.info("✓ Updated lock_code for slot %s: %s", slot, "***" if verification_code else "None")
             
             await self.async_save_user_data()
             await self.async_request_refresh()
