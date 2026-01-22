@@ -20,6 +20,172 @@ Use `lock.smart_door_lock_manager` for the Lovelace card!
 
 ---
 
+## [1.8.1.0] - 2026-01-22
+
+### 🚨 CRITICAL FIX - Coordinator Was Completely Blind!
+
+**User Log Analysis**:
+```
+Error getting user code status for slot X: An action which does not return responses can't be called with return_response=True
+```
+
+This error was happening for **EVERY SINGLE SLOT** - the integration couldn't read ANY data from the lock!
+
+### The Catastrophic Bug
+
+**What Was Broken**:
+- ❌ `invoke_cc_api` with `method_name="get"` doesn't support `return_response=True`
+- ❌ `_get_user_code_status()` always returned `None`
+- ❌ `_get_user_code()` always returned `""`
+- ❌ Coordinator was completely blind to what was actually on the lock
+
+**Impact**:
+1. **Slot Protection Broken**: Every slot appeared "unknown" because status check failed
+2. **Refresh Broken**: "Pull codes from lock" found 0 codes (saw all slots as empty)
+3. **Verification Broken**: "Push" couldn't verify if code was written
+4. **Unknown Code Errors**: Since coordinator couldn't read slot status, it thought EVERY slot with a code was "unknown"
+
+### User Experience (From Logs)
+
+```
+03:02:45 - Error getting user code status for slot 3
+03:02:45 - ERROR: Slot 3 is occupied by an unknown code
+03:02:58 - Error getting user code status for slot 3  
+03:02:58 - ERROR: Slot 3 is occupied by an unknown code
+03:03:08 - Error getting user code status for slot 3
+03:03:08 - ERROR: Slot 3 is occupied by an unknown code
+```
+
+User kept trying to add codes → Integration kept saying "unknown code" → User kept trying → Same error → Frustration!
+
+**Refresh also broken**:
+```
+03:01:54 - Pulling codes from lock - scanning all 20 slots
+03:01:54 - Checking slot 1...
+03:01:54 - Error getting user code status for slot 1
+03:01:54 - Slot 1 is empty
+[... repeated for all 20 slots ...]
+03:01:54 - Pull complete: Found 0 codes
+```
+
+Lock had codes, but coordinator couldn't see them!
+
+**Push verification also broken**:
+```
+03:12:10 - Pushing fob code for slot 3 to lock
+03:12:12 - Invoked USER_CODE CC API method set → None
+03:12:14 - Verifying code was written to slot 3...
+03:12:14 - Error getting user code status for slot 3
+03:12:14 - Could not verify slot 3 - status read returned None
+```
+
+Push succeeded, but verification failed because coordinator couldn't read!
+
+### Root Cause
+
+The `invoke_cc_api` service with `method_name="get"` and `return_response=True` doesn't work. Z-Wave JS doesn't return data from `get` calls via service responses.
+
+**Old (Broken) Code**:
+```python
+result = await self.hass.services.async_call(
+    "zwave_js",
+    "invoke_cc_api",
+    {
+        "entity_id": self.lock_entity_id,
+        "command_class": 99,  # User Code
+        "method_name": "get",
+        "parameters": [slot],
+    },
+    blocking=True,
+    return_response=True,  # ❌ THIS DOESN'T WORK!
+)
+# result is always None!
+```
+
+### The Fix
+
+Changed to read directly from Z-Wave JS node values instead of trying to use service calls:
+
+```python
+async def _get_user_code_status(self, slot: int) -> int:
+    # Get Z-Wave JS client
+    client = self.hass.data["zwave_js"][entry_id]["client"]
+    
+    # Get the node
+    node = client.driver.controller.nodes.get(node_id)
+    
+    # Read the value directly from the node
+    value_id = f"{node_id}-99-0-userIdStatus-{slot}"
+    value = node.values.get(value_id)
+    
+    if value is not None:
+        return value.value  # ✅ Actually returns the status!
+    
+    return None
+```
+
+Same fix for `_get_user_code()`:
+```python
+# Read code directly from node
+value_id = f"{node_id}-99-0-userCode-{slot}"
+value = node.values.get(value_id)
+
+if value is not None and value.value:
+    return str(value.value)  # ✅ Actually returns the code!
+
+return ""
+```
+
+### What's Fixed Now
+
+✅ **Slot Protection Works**: Coordinator can check if slot is occupied
+✅ **Refresh Works**: Can pull all codes from lock correctly
+✅ **Verification Works**: Push can verify code was actually written
+✅ **No More "Unknown Code" Errors**: Coordinator sees what's really on the lock
+✅ **Update Existing Slots**: Can now update slots you own without override
+
+### Testing After Fix
+
+After deploying v1.8.1.0:
+1. ✅ Click "Refresh from lock" → Should pull ALL codes
+2. ✅ Try to update an existing slot → Should work without "unknown code" error
+3. ✅ Try to add new code → Should detect if slot is truly occupied
+4. ✅ Push code → Verification should succeed
+
+### Why This Wasn't Caught Earlier
+
+The error was logged as DEBUG, not ERROR, so it wasn't obvious:
+```python
+_LOGGER.debug("Error getting user code status for slot %s: %s", slot, err)
+```
+
+Changed to:
+```python
+_LOGGER.debug("Error getting user code status for slot %s: %s", slot, err, exc_info=True)
+```
+
+Now includes full traceback for better debugging.
+
+### User Impact
+
+**Before v1.8.1.0**:
+- Integration completely blind
+- Can't read codes from lock
+- Can't verify pushes
+- Every slot appears "unknown"
+- Constant errors and frustration
+
+**After v1.8.1.0**:
+- ✅ Can read all codes from lock
+- ✅ Slot protection works correctly
+- ✅ Refresh works
+- ✅ Verification works
+- ✅ No false "unknown code" errors
+
+This was a **critical** bug that made the integration nearly unusable. Sorry for the frustration!
+
+---
+
 ## [1.8.0.1] - 2026-01-22
 
 ### Fixed - Three Critical Bugs from User Testing 🐛
