@@ -696,24 +696,36 @@ class YaleLockCoordinator(DataUpdateCoordinator):
             lock_status_from_lock = None  # No lock status for new users
 
         # Calculate sync status: compare cached code with lock code (for PINs)
+        # and cached status with lock status
         if code_type == CODE_TYPE_PIN:
-            synced_to_lock = (code == lock_code)
+            codes_match = (code == lock_code)
+            # Compare cached status with lock status
+            if lock_status_from_lock is not None:
+                status_match = (lock_status == lock_status_from_lock)
+            else:
+                # If we don't have lock status, assume not synced
+                status_match = False
+            synced_to_lock = codes_match and status_match
         else:
-            # For FOBs, sync is based on enabled status (will be updated on pull)
-            synced_to_lock = False
+            # For FOBs, sync is based on status only
+            if lock_status_from_lock is not None:
+                synced_to_lock = (lock_status == lock_status_from_lock)
+            else:
+                synced_to_lock = False
         
         self._user_data["users"][str(slot)] = {
             "name": name,
             "code_type": code_type,
             "code": code,  # Cached code (editable)
             "lock_code": lock_code,  # PIN from lock (read-only, updated on pull/push)
-            "enabled": True,
-            "lock_status": lock_status,  # Store full status (0=Available, 1=Enabled, 2=Disabled)
+            "enabled": lock_status == USER_STATUS_ENABLED,  # Derived from cached status
+            "lock_status": lock_status,  # Store cached status (editable)
+            "lock_status_from_lock": lock_status_from_lock,  # Store actual status from lock (read-only)
             "lock_enabled": lock_enabled,  # Enabled status from lock (for compatibility)
             "schedule": schedule if code_type == CODE_TYPE_PIN else {"start": None, "end": None},
             "usage_limit": usage_limit if code_type == CODE_TYPE_PIN else None,
             "usage_count": usage_count if code_type == CODE_TYPE_PIN else 0,
-            "synced_to_lock": synced_to_lock,  # Calculated based on code comparison
+            "synced_to_lock": synced_to_lock,  # Calculated based on code and status comparison
             "last_used": None,
         }
 

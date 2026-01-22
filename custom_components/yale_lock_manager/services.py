@@ -351,6 +351,13 @@ async def async_setup_services(hass: HomeAssistant) -> None:
 
     hass.services.async_register(
         DOMAIN,
+        SERVICE_SET_USER_STATUS,
+        handle_set_user_status,
+        schema=SET_USER_STATUS_SCHEMA,
+    )
+
+    hass.services.async_register(
+        DOMAIN,
         SERVICE_ENABLE_USER,
         handle_enable_user,
         schema=ENABLE_USER_SCHEMA,
