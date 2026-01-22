@@ -362,16 +362,40 @@ class YaleLockManagerCard extends HTMLElement {
       const isFob = user.code_type === 'fob';
       
       // Get status text from lock_status value
-      const getStatusText = (status) => {
-        if (status === null || status === undefined) return 'Unknown';
-        if (status === 0) return 'Available';
-        if (status === 1) return 'Enabled';
-        if (status === 2) return 'Disabled';
+      // If lock_status is not available, try to derive from lock_enabled or enabled
+      const getStatusText = (status, lockEnabled, enabled) => {
+        if (status !== null && status !== undefined) {
+          if (status === 0) return 'Available';
+          if (status === 1) return 'Enabled';
+          if (status === 2) return 'Disabled';
+        }
+        // Fallback: if we have lock_enabled, derive status
+        if (lockEnabled !== null && lockEnabled !== undefined) {
+          return lockEnabled ? 'Enabled' : 'Disabled';
+        }
+        // Fallback: if we have enabled, use that
+        if (enabled !== null && enabled !== undefined) {
+          return enabled ? 'Enabled' : 'Disabled';
+        }
         return 'Unknown';
       };
       
-      const statusText = getStatusText(user.lock_status);
-      const statusColor = user.lock_status === 0 ? '#9e9e9e' : user.lock_status === 1 ? '#4caf50' : '#f44336';
+      const getStatusColor = (status, lockEnabled, enabled) => {
+        if (status !== null && status !== undefined) {
+          if (status === 0) return '#9e9e9e';  // Gray for Available
+          if (status === 1) return '#4caf50';  // Green for Enabled
+          if (status === 2) return '#f44336';  // Red for Disabled
+        }
+        // Fallback colors
+        if (lockEnabled !== null && lockEnabled !== undefined || enabled !== null && enabled !== undefined) {
+          const isEnabled = lockEnabled !== null && lockEnabled !== undefined ? lockEnabled : enabled;
+          return isEnabled ? '#4caf50' : '#f44336';
+        }
+        return '#9e9e9e';  // Gray for Unknown
+      };
+      
+      const statusText = getStatusText(user.lock_status, user.lock_enabled, user.enabled);
+      const statusColor = getStatusColor(user.lock_status, user.lock_enabled, user.enabled);
       
       return `
         <tr class="clickable" onclick="card.toggleExpand(${user.slot})">

@@ -20,6 +20,48 @@ Use `lock.smart_door_lock_manager` for the Lovelace card!
 
 ---
 
+## [1.8.2.14] - 2026-01-22
+
+### 🔧 FIX - Status Column Fallback Logic
+
+**User feedback**: Status column shows "Unknown" for all slots even after refresh.
+
+### The Issue
+
+The logs show that `lock_status` is being captured correctly (status=1 for enabled slots, status=0 for available slots), but the card was showing "Unknown" because:
+1. Existing users created before `lock_status` was added don't have this field
+2. The color logic was defaulting to red for null/undefined values
+3. No fallback to derive status from `lock_enabled` or `enabled` fields
+
+### The Fix
+
+**Enhanced Status Display Logic**:
+1. **Primary**: Use `lock_status` (0/1/2) if available
+2. **Fallback 1**: If `lock_status` is null/undefined, use `lock_enabled` (boolean) to determine status
+3. **Fallback 2**: If `lock_enabled` is also null/undefined, use `enabled` (boolean)
+4. **Default**: Show "Unknown" with gray color if none are available
+
+**Color Logic**:
+- Gray (#9e9e9e) for Available (0) or Unknown
+- Green (#4caf50) for Enabled (1)
+- Red (#f44336) for Disabled (2)
+
+### Changed
+
+- **`yale-lock-manager-card.js`**:
+  - Enhanced `getStatusText()` to accept fallback parameters (`lockEnabled`, `enabled`)
+  - Added `getStatusColor()` function with proper fallback logic
+  - Status now displays correctly even for users without `lock_status` field
+
+### What's Fixed
+
+- ✅ Status column now shows correct status even for existing users
+- ✅ Proper fallback to `lock_enabled` or `enabled` when `lock_status` is missing
+- ✅ Correct color coding for all status values
+- ✅ "Unknown" only shows when no status information is available
+
+---
+
 ## [1.8.2.13] - 2026-01-22
 
 ### ✨ NEW - Status Column in User Table
