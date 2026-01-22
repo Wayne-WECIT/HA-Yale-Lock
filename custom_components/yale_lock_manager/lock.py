@@ -48,15 +48,37 @@ class YaleLockManagerLock(CoordinatorEntity, LockEntity):
         self._attr_unique_id = f"{DOMAIN}_{entry.entry_id}_lock"
         self._attr_name = f"{lock_name} Manager"
         
-        # Create our own separate device (not linked to Z-Wave device)
-        self._attr_device_info = {
+        # Try to find the Z-Wave device in the device registry for via_device
+        via_device_id = None
+        device_registry = dr.async_get(coordinator.hass)
+        for device in device_registry.devices.values():
+            # Check if this device is from zwave_js and matches our node_id
+            zwave_identifiers = [
+                identifier for identifier in device.identifiers 
+                if identifier[0] == ZWAVE_JS_DOMAIN
+            ]
+            if zwave_identifiers:
+                # Z-Wave device identifier format is (zwave_js, "node_id-endpoint")
+                identifier = zwave_identifiers[0]
+                node_id_str = identifier[1].split("-")[0]  # Get node_id part
+                if node_id_str == str(coordinator.node_id):
+                    via_device_id = device.id
+                    break
+        
+        # Create our own separate device
+        device_info = {
             "identifiers": {(DOMAIN, entry.entry_id)},
             "name": f"{lock_name} Manager",
             "manufacturer": "Yale Lock Manager",
             "model": "Lock Code Manager",
             "sw_version": coordinator.hass.data[DOMAIN].get("version", "1.0.0"),
-            "via_device": (ZWAVE_JS_DOMAIN, coordinator.node_id),  # Show it's related to Z-Wave lock
         }
+        
+        # Only add via_device if we found the Z-Wave device
+        if via_device_id:
+            device_info["via_device"] = via_device_id
+        
+        self._attr_device_info = device_info
         
         _LOGGER.info("Created Yale Lock Manager device '%s' for entry %s", lock_name, entry.entry_id)
 
