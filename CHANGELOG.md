@@ -20,6 +20,39 @@ Use `lock.smart_door_lock_manager` for the Lovelace card!
 
 ---
 
+## [1.6.0.0] - 2026-01-22
+
+### Added
+- **🛡️ Slot Protection Override**
+  - New `override_protection` parameter for `set_user_code` service
+  - Allows overwriting codes that weren't set through the integration
+  - Confirmation dialog in UI when trying to overwrite unknown codes
+  - Warns user about permanently replacing existing codes
+  - Protects against accidental overwrites by default
+
+### Improved
+- Better error handling in card:
+  - Catches slot protection errors
+  - Shows detailed confirmation dialog explaining the situation
+  - Retries with override if user confirms
+  - Clear warning about permanent replacement
+
+### How It Works
+- **Default behavior**: Slot protection prevents overwriting unknown codes
+- **When protected slot encountered**: Card shows confirmation dialog:
+  ```
+  ⚠️ Slot 4 contains a code that wasn't set through this integration.
+  
+  This could be:
+  • A code set directly on the lock keypad
+  • A code from another system
+  
+  Do you want to OVERWRITE it?
+  
+  ⚠️ WARNING: The existing code will be permanently replaced!
+  ```
+- **If confirmed**: Code is overwritten and added to integration's management
+
 ## [1.5.1.0] - 2026-01-22
 
 ### Fixed

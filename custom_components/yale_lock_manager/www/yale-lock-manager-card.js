@@ -660,7 +660,7 @@ class YaleLockManagerCard extends HTMLElement {
     });
   }
 
-  async handleSetCode(slot) {
+  async handleSetCode(slot, overrideProtection = false) {
     const name = this.shadowRoot.getElementById(`name-${slot}`).value.trim();
     const codeType = this.shadowRoot.getElementById(`type-${slot}`).value;
     const code = codeType === 'pin' ? this.shadowRoot.getElementById(`code-${slot}`)?.value.trim() : '';
@@ -675,16 +675,30 @@ class YaleLockManagerCard extends HTMLElement {
       return;
     }
 
-    await this._hass.callService('yale_lock_manager', 'set_user_code', {
-      entity_id: this._config.entity,
-      slot: slot,
-      name: name,
-      code: code,
-      code_type: codeType
-    });
+    try {
+      await this._hass.callService('yale_lock_manager', 'set_user_code', {
+        entity_id: this._config.entity,
+        slot: slot,
+        name: name,
+        code: code,
+        code_type: codeType,
+        override_protection: overrideProtection
+      });
 
-    alert(`✅ User code set for slot ${slot}`);
-    this.render();
+      alert(`✅ User code set for slot ${slot}`);
+      this.render();
+    } catch (error) {
+      // Check if this is a slot protection error
+      if (error.message && error.message.includes('occupied by an unknown code')) {
+        if (confirm(`⚠️ Slot ${slot} contains a code that wasn't set through this integration.\n\nThis could be:\n• A code set directly on the lock keypad\n• A code from another system\n\nDo you want to OVERWRITE it?\n\n⚠️ WARNING: The existing code will be permanently replaced!`)) {
+          // Retry with override
+          await this.handleSetCode(slot, true);
+        }
+      } else {
+        // Different error, show it
+        alert(`❌ Error: ${error.message}`);
+      }
+    }
   }
 
   async handlePushCode(slot) {

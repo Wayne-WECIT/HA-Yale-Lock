@@ -2,7 +2,7 @@
 from typing import Final
 
 DOMAIN: Final = "yale_lock_manager"
-VERSION: Final = "1.5.1.0"
+VERSION: Final = "1.6.0.0"
 
 # Z-Wave JS Domain
 ZWAVE_JS_DOMAIN: Final = "zwave_js"
@@ -91,6 +91,7 @@ ATTR_SLOT: Final = "slot"
 ATTR_CODE: Final = "code"
 ATTR_NAME: Final = "name"
 ATTR_CODE_TYPE: Final = "code_type"
+ATTR_OVERRIDE_PROTECTION: Final = "override_protection"
 ATTR_START_DATETIME: Final = "start_datetime"
 ATTR_END_DATETIME: Final = "end_datetime"
 ATTR_MAX_USES: Final = "max_uses"

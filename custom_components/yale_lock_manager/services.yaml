@@ -39,6 +39,14 @@ set_user_code:
               value: "pin"
             - label: "FOB/RFID"
               value: "fob"
+    override_protection:
+      name: Override Slot Protection
+      description: Allow overwriting codes that weren't set through this integration (use with caution!)
+      required: false
+      default: false
+      example: false
+      selector:
+        boolean:
 
 clear_user_code:
   name: Clear User Code

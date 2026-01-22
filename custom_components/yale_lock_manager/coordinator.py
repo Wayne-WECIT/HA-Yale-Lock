@@ -441,15 +441,16 @@ class YaleLockCoordinator(DataUpdateCoordinator):
         code: str,
         name: str,
         code_type: str = CODE_TYPE_PIN,
+        override_protection: bool = False,
     ) -> None:
         """Set a user code."""
         # Validate slot
         if slot < 1 or slot > MAX_USER_SLOTS:
             raise ValueError(f"Slot must be between 1 and {MAX_USER_SLOTS}")
 
-        # Check slot protection
-        if not await self._is_slot_safe_to_write(slot):
-            raise ValueError(f"Slot {slot} is occupied by an unknown code")
+        # Check slot protection (unless override is True)
+        if not override_protection and not await self._is_slot_safe_to_write(slot):
+            raise ValueError(f"Slot {slot} is occupied by an unknown code. Use override_protection=True to overwrite.")
 
         # Store user data
         self._user_data["users"][str(slot)] = {
