@@ -673,7 +673,6 @@ class YaleLockCoordinator(DataUpdateCoordinator):
                 code = ""  # Empty code for disabled slots
 
         # Check if slot exists in local storage
-        existing_user = self._user_data["users"].get(str(slot))
         if existing_user:
             _LOGGER.debug(
                 "Slot %s already in local storage: name=%s, enabled=%s", 
