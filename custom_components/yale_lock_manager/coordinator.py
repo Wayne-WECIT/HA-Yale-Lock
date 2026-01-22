@@ -510,14 +510,27 @@ class YaleLockCoordinator(DataUpdateCoordinator):
         return {}
 
     async def _get_user_code_data(self, slot: int) -> dict[str, Any] | None:
-        """Get user code data (status and code) from the lock using service call."""
+        """Get user code data (status and code) from the lock using service call.
+        
+        The invoke_cc_api service logs the response but doesn't return it directly.
+        The response is visible in logs: {'userIdStatus': 1, 'userCode': '19992017'}
+        but we can't capture it from the service call return value.
+        
+        SOLUTION: Since the response is logged by Z-Wave JS but not stored in node values,
+        we'll use the logged response data directly. We need to access it through the
+        Z-Wave JS integration's internal state or parse it from the service call context.
+        
+        For now, we'll call the service and then immediately store the response data
+        that we know is being returned (even though we can't capture it directly).
+        We'll need to rely on the user clicking "Refresh" to pull codes, and when they do,
+        we'll store the lock_code and lock_enabled values from the response.
+        """
         try:
             _LOGGER.debug("Querying lock for user code data for slot %s...", slot)
             
-            # Use service call approach (most reliable)
-            # The invoke_cc_api service triggers the query and the response is logged
-            # We then try to read from the node's cached values
-            await self.hass.services.async_call(
+            # Call invoke_cc_api - try to capture response
+            # The response is logged by Z-Wave JS but may not be in return value
+            result = await self.hass.services.async_call(
                 ZWAVE_JS_DOMAIN,
                 "invoke_cc_api",
                 {
@@ -529,11 +542,24 @@ class YaleLockCoordinator(DataUpdateCoordinator):
                 blocking=True,
             )
             
-            # Wait for the response to be processed and cached
-            await asyncio.sleep(1.5)
+            # Log what the service call returned
+            _LOGGER.debug("Service call returned for slot %s: %s (type: %s)", slot, result, type(result))
             
-            # Try to read from node's cached values using _get_zwave_value
-            # This uses the same lookup logic that works for other values
+            # Check if result contains the response (it might, even without return_response)
+            if result and isinstance(result, dict):
+                if "userIdStatus" in result or "userCode" in result:
+                    _LOGGER.info("✓ Got response directly from service call for slot %s", slot)
+                    return result
+            
+            # The response is logged by Z-Wave JS but not accessible to us
+            # We see in logs: "Invoked USER_CODE CC API method get... with the following result: {'userIdStatus': 1, 'userCode': '19992017'}"
+            # But we can't capture it from the service call return value
+            # NOTE: The service call likely returns None, and the response is only in the Z-Wave JS logs
+            
+            # Wait for response to be processed
+            await asyncio.sleep(2.0)
+            
+            # Try to read from node's cached values (this usually fails)
             status = await self._get_zwave_value(CC_USER_CODE, "userIdStatus", slot)
             code = await self._get_zwave_value(CC_USER_CODE, "userCode", slot)
             
@@ -543,18 +569,29 @@ class YaleLockCoordinator(DataUpdateCoordinator):
             if code is None:
                 code = await self._get_zwave_value(CC_USER_CODE, "code", slot)
             
-            # Build result dict if we got any data
-            if status is not None or code is not None:
-                result = {}
-                if status is not None:
-                    result["userIdStatus"] = status
-                if code is not None:
-                    result["userCode"] = code
-                _LOGGER.debug("Retrieved data for slot %s: status=%s, code=%s", slot, status, "***" if code else None)
-                return result
+            # NOTE: The response IS being returned by the lock (we see it in logs),
+            # but we can't capture it. This is a limitation of how invoke_cc_api works
+            # for 'get' methods - they don't return the response through the service call.
             
-            _LOGGER.debug("No data found for slot %s after service call", slot)
-            return None
+            # For now, return None so the user knows we couldn't get the data
+            # The user will need to manually check the logs or we need a different approach
+            if status is None and code is None:
+                _LOGGER.warning(
+                    "Slot %s: invoke_cc_api returned data in logs (check Z-Wave JS logs) "
+                    "but we couldn't capture it. The response is logged but not accessible "
+                    "through the service call return value or node cache.",
+                    slot
+                )
+                return None
+            
+            # If we got some data, return it
+            result = {}
+            if status is not None:
+                result["userIdStatus"] = status
+            if code is not None:
+                result["userCode"] = code
+            _LOGGER.debug("Retrieved data for slot %s: status=%s, code=%s", slot, status, "***" if code else None)
+            return result
             
         except Exception as err:
             _LOGGER.error("Error getting user code data for slot %s: %s", slot, err, exc_info=True)

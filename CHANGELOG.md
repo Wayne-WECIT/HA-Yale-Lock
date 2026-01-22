@@ -20,6 +20,62 @@ Use `lock.smart_door_lock_manager` for the Lovelace card!
 
 ---
 
+## [1.8.2.5] - 2026-01-22
+
+### 🔍 DEBUG - Investigating Response Capture Issue
+
+**User feedback**: "same again code is pulled but not populated in the card. are you storing the code you pulled from the lock for compare?"
+
+### The Issue
+
+The `invoke_cc_api` service call **IS** returning data (visible in logs):
+```
+Invoked USER_CODE CC API method get... with the following result: {'userIdStatus': 1, 'userCode': '19992017'}
+```
+
+But we **CAN'T capture it** because:
+- `return_response=True` doesn't work for `get` methods
+- Reading from node cache doesn't work (values not stored there)
+- Service call return value is likely `None`
+
+### What We're Doing
+
+**YES, we ARE trying to store the code for comparison**:
+- `lock_code` - stores PIN from lock (for comparison)
+- `lock_enabled` - stores enabled status from lock (for comparison)
+- `synced_to_lock` - calculated by comparing cached vs lock values
+
+**The problem**: We can't GET the data from the lock because the response isn't accessible.
+
+### Current Status
+
+- ✅ `invoke_cc_api` is being called correctly
+- ✅ Response is logged by Z-Wave JS
+- ❌ Response is NOT accessible through service call return value
+- ❌ Response is NOT stored in node cache in a readable format
+- ❌ We can't capture the response to store in `lock_code`/`lock_enabled`
+
+### Added
+
+- Debug logging to see what service call actually returns
+- Better error messages explaining the limitation
+
+### Next Steps
+
+We need to find a way to capture the response from `invoke_cc_api`. Options:
+1. Use Z-Wave JS websocket API to listen for responses
+2. Use a callback/listener to capture when response arrives
+3. Parse response from Z-Wave JS internal state
+4. Use a different service call method that DOES return the response
+
+### User Suggestion
+
+User suggested: "maybe we need a sync check button that just check that specific slot and compare the cache and the lock code after an update?"
+
+This is a good idea, but first we need to be able to GET the lock code.
+
+---
+
 ## [1.8.2.4] - 2026-01-22
 
 ### 🔧 FIX - Removed All Direct Z-Wave JS Client Access
