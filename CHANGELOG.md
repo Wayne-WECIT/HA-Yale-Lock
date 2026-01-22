@@ -20,6 +20,50 @@ Use `lock.smart_door_lock_manager` for the Lovelace card!
 
 ---
 
+## [1.8.1.6] - 2026-01-22
+
+### 🔧 FIX - Use Value ID Lookup for Cache Reading
+
+**User feedback**: Codes are retrieved but not shown on card:
+```
+WARNING: No value found for CC:99, Property:userIdStatus, Key:1
+```
+
+### The Issue
+
+Even though `invoke_cc_api` was successfully returning data (`{'userIdStatus': 1, 'userCode': '19992017'}`), `_get_zwave_value` couldn't find it in the node's cache because:
+1. Property name matching was too strict (only checking `property_`)
+2. Not using the value ID format that Z-Wave JS uses internally
+
+### The Fix
+
+**1. Added Value ID Lookup** (most reliable method):
+```python
+# Try value ID lookup first
+value_id = f"{node_id}-{command_class}-0-{property_name}-{property_key}"
+if value_id in node.values:
+    return node.values[value_id].value
+```
+
+**2. Improved Property Matching**:
+- Now checks `property_`, `property_name`, and `property` attributes
+- Better fallback search through all values
+
+**3. Increased Wait Time**:
+- Changed from 0.5s to 1.0s to give Z-Wave JS more time to update cache
+
+**4. Enhanced Debugging**:
+- Logs all available CC:99 values when lookup fails
+- Shows value IDs for easier troubleshooting
+
+### Changed
+- `_get_zwave_value()` now uses value ID lookup first
+- Improved property name matching (multiple attribute checks)
+- Increased wait time from 0.5s to 1.0s
+- Better debug logging to show available values
+
+---
+
 ## [1.8.1.5] - 2026-01-22
 
 ### 🔧 CRITICAL FIX - Use Stored node_id!

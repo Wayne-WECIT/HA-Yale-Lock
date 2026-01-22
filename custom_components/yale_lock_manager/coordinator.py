@@ -442,21 +442,58 @@ class YaleLockCoordinator(DataUpdateCoordinator):
                 if not node:
                     continue
                 
-                # Search through node values
+                # Try value ID lookup first (most reliable)
+                # Format: {node_id}-{command_class}-{endpoint}-{property}-{property_key}
+                if property_key is not None:
+                    value_id = f"{node_id}-{command_class}-0-{property_name}-{property_key}"
+                    if value_id in node.values:
+                        value = node.values[value_id]
+                        _LOGGER.debug("Found value via value_id %s: %s", value_id, value.value)
+                        return value.value
+                
+                # Fallback: Search through node values
                 for value in node.values.values():
                     if value.command_class != command_class:
                         continue
-                    if value.property_ != property_name:
+                    
+                    # Check property name (try multiple attribute names)
+                    prop_attr = None
+                    if hasattr(value, 'property_'):
+                        prop_attr = value.property_
+                    elif hasattr(value, 'property_name'):
+                        prop_attr = value.property_name
+                    elif hasattr(value, 'property'):
+                        prop_attr = value.property
+                    
+                    if prop_attr != property_name:
                         continue
                     
                     # Check property_key if specified
                     if property_key is not None:
-                        if value.property_key == property_key:
-                            _LOGGER.debug("Found value: %s", value.value)
+                        prop_key = getattr(value, 'property_key', None)
+                        if prop_key == property_key:
+                            _LOGGER.debug("Found value: %s (CC:%s, Prop:%s, Key:%s)", 
+                                         value.value, command_class, property_name, property_key)
                             return value.value
                     else:
-                        _LOGGER.debug("Found value: %s", value.value)
+                        _LOGGER.debug("Found value: %s (CC:%s, Prop:%s)", 
+                                     value.value, command_class, property_name)
                         return value.value
+                
+                # Debug: log all matching CC values to see what's available
+                _LOGGER.debug("Searching for CC:%s, Property:%s, Key:%s", command_class, property_name, property_key)
+                matching_cc_values = []
+                for val_id, val in node.values.items():
+                    if val.command_class == command_class:
+                        prop_attr = getattr(val, 'property_', None) or getattr(val, 'property_name', None) or getattr(val, 'property', None)
+                        matching_cc_values.append({
+                            'value_id': val_id,
+                            'property': prop_attr,
+                            'property_key': getattr(val, 'property_key', None),
+                            'value': val.value
+                        })
+                if matching_cc_values:
+                    _LOGGER.debug("Available CC:%s values: %s", command_class, matching_cc_values)
             
             _LOGGER.warning("No value found for CC:%s, Property:%s, Key:%s", command_class, property_name, property_key)
             return None
@@ -491,7 +528,8 @@ class YaleLockCoordinator(DataUpdateCoordinator):
             )
             
             # Wait for the value to be updated in the node cache
-            await asyncio.sleep(0.5)
+            # Give it more time for the lock to respond and Z-Wave JS to update
+            await asyncio.sleep(1.0)
             
             # Now read from the node's cached value
             status = await self._get_zwave_value(CC_USER_CODE, "userIdStatus", slot)
@@ -525,7 +563,8 @@ class YaleLockCoordinator(DataUpdateCoordinator):
             )
             
             # Wait for the value to be updated in the node cache
-            await asyncio.sleep(0.5)
+            # Give it more time for the lock to respond and Z-Wave JS to update
+            await asyncio.sleep(1.0)
             
             # Now read from the node's cached value
             code = await self._get_zwave_value(CC_USER_CODE, "userCode", slot)
