@@ -5,6 +5,33 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.1.0] - 2026-01-22
+
+### Fixed
+- **CRITICAL FIX**: Restored lock entity (v1.1.0.0 broke lock/unlock functionality)
+- Lock entity now has unique name to avoid conflicts: `lock.smart_door_lock_manager`
+- Links to existing Z-Wave device (all entities grouped together)
+- **Card UI completely fixed**:
+  - Now shows REAL user data from Home Assistant (not mock data)
+  - All form fields visible even for empty slots
+  - Can set name, PIN code, and code type for any slot
+  - Wider card layout (max 1200px) for better readability
+  - FOB/RFID handling improved with helpful instructions
+  - PIN validation (4-10 digits, numbers only)
+
+### Technical Changes
+- Lock entity unique ID: `yale_lock_manager_{node_id}_manager`
+- Lock entity links to Z-Wave device via `device_info`
+- Card reads user data from `lock.attributes.users`
+- Lock entity exposes full user data in `extra_state_attributes`
+
+### User Experience
+- Lock/Unlock works correctly again ✅
+- Card displays real data ✅
+- Can set PINs and names ✅
+- FOB/PIN toggle works ✅
+- Wider, more readable UI ✅
+
 ## [1.1.0.0] - 2026-01-22
 
 ### MAJOR CHANGE - Cleaner Design

@@ -31,8 +31,7 @@ async def async_setup_entry(
 class YaleLockManagerLock(CoordinatorEntity, LockEntity):
     """Representation of a Yale Lock Manager lock."""
 
-    _attr_has_entity_name = False  # Use custom name to avoid conflicts
-    _attr_name = "Yale Lock Manager"  # This will create lock.yale_lock_manager
+    _attr_has_entity_name = True
 
     def __init__(
         self,
@@ -42,30 +41,16 @@ class YaleLockManagerLock(CoordinatorEntity, LockEntity):
         """Initialize the lock."""
         super().__init__(coordinator)
         
-        # Use the Z-Wave device instead of creating a new one
-        device_registry = dr.async_get(coordinator.hass)
-        zwave_device = device_registry.async_get_device(
-            identifiers={(ZWAVE_JS_DOMAIN, coordinator.node_id)}
-        )
+        # Use a unique ID that won't conflict with Z-Wave lock
+        self._attr_unique_id = f"{DOMAIN}_{coordinator.node_id}_manager"
+        self._attr_name = "Manager"  # With has_entity_name=True, becomes "Smart Door Lock Manager"
         
-        if zwave_device:
-            # Link to existing Z-Wave device
-            self._attr_device_info = {
-                "identifiers": {(ZWAVE_JS_DOMAIN, coordinator.node_id)},
-            }
-            # Use a unique ID that won't conflict with Z-Wave lock
-            self._attr_unique_id = f"{DOMAIN}_{coordinator.node_id}_manager"
-            _LOGGER.info("Linked Yale Lock Manager to existing Z-Wave device: %s", zwave_device.name)
-        else:
-            # Fallback: create our own device (shouldn't happen)
-            _LOGGER.warning("Could not find Z-Wave device for node %s, creating standalone device", coordinator.node_id)
-            self._attr_unique_id = f"{entry.entry_id}_lock"
-            self._attr_device_info = {
-                "identifiers": {(DOMAIN, entry.entry_id)},
-                "name": entry.data[CONF_LOCK_NAME],
-                "manufacturer": "Yale",
-                "model": "Smart Door Lock",
-            }
+        # Link to existing Z-Wave device so all entities are grouped together
+        self._attr_device_info = {
+            "identifiers": {(ZWAVE_JS_DOMAIN, coordinator.node_id)},
+        }
+        
+        _LOGGER.info("Created Yale Lock Manager entity for node %s", coordinator.node_id)
 
     @property
     def is_locked(self) -> bool | None:
@@ -107,11 +92,14 @@ class YaleLockManagerLock(CoordinatorEntity, LockEntity):
         if battery_level is not None:
             attrs["battery_level"] = battery_level
 
-        # Add user count info
+        # Add user data for the card
         users = self.coordinator.get_all_users()
         enabled_users = [u for u in users.values() if u.get("enabled")]
-        attrs["total_users"] = len(users)
+        attrs["total_users"] = len([u for u in users.values() if u.get("name")])
         attrs["enabled_users"] = len(enabled_users)
+        
+        # Expose full user data for the Lovelace card
+        attrs["users"] = users
 
         return attrs
 

@@ -43,29 +43,46 @@ class YaleLockManagerCard extends HTMLElement {
 
   async handleSetCode(slot) {
     const name = this.shadowRoot.getElementById(`name-${slot}`).value;
-    const code = this.shadowRoot.getElementById(`code-${slot}`).value;
     const codeType = this.shadowRoot.getElementById(`type-${slot}`).value;
-
-    if (!name || !code) {
-      alert('Please enter both name and code');
+    
+    if (!name) {
+      alert('Please enter a user name');
       return;
     }
 
-    if (code.length < 4 || code.length > 10) {
-      alert('Code must be 4-10 characters');
-      return;
+    let code = '';
+    
+    // Only require PIN code for PIN type
+    if (codeType === 'pin') {
+      const codeInput = this.shadowRoot.getElementById(`code-${slot}`);
+      code = codeInput ? codeInput.value : '';
+      
+      if (!code) {
+        alert('Please enter a PIN code');
+        return;
+      }
+
+      if (code.length < 4 || code.length > 10) {
+        alert('PIN code must be 4-10 digits');
+        return;
+      }
+      
+      if (!/^\d+$/.test(code)) {
+        alert('PIN code must contain only numbers');
+        return;
+      }
     }
 
     try {
       await this.callService('set_user_code', {
         slot: slot,
         name: name,
-        code: code,
+        code: code || null,
         code_type: codeType
       });
-      alert('Code set successfully!');
+      alert(`User "${name}" configured successfully!${codeType === 'fob' ? '\n\nPresent the FOB/RFID card to the lock to pair it with this slot.' : ''}`);
     } catch (err) {
-      alert('Error setting code: ' + err.message);
+      alert('Error setting user: ' + err.message);
     }
   }
 
@@ -139,20 +156,59 @@ class YaleLockManagerCard extends HTMLElement {
   }
 
   getUserData() {
-    // Get user data from Home Assistant storage/coordinator
-    // For now, we'll return mock data structure
-    const users = {};
-    for (let i = 1; i <= 20; i++) {
-      users[i] = {
-        name: '',
-        code_type: 'pin',
-        enabled: false,
-        synced_to_lock: false,
-        schedule: { start: null, end: null },
-        usage_limit: null,
-        usage_count: 0
-      };
+    // Get user data from the lock entity attributes
+    const lockEntity = this._hass.states[this._config.entity];
+    if (!lockEntity || !lockEntity.attributes.users) {
+      // Return empty structure if no data available
+      const users = {};
+      for (let i = 1; i <= 20; i++) {
+        users[i] = {
+          slot: i,
+          name: '',
+          code: '',
+          code_type: 'pin',
+          enabled: false,
+          synced_to_lock: false,
+          schedule: { start: null, end: null },
+          usage_limit: null,
+          usage_count: 0
+        };
+      }
+      return users;
     }
+    
+    // Get real user data from entity attributes
+    const userData = lockEntity.attributes.users || {};
+    const users = {};
+    
+    for (let i = 1; i <= 20; i++) {
+      if (userData[i]) {
+        users[i] = {
+          slot: i,
+          name: userData[i].name || '',
+          code: userData[i].code || '',
+          code_type: userData[i].code_type || 'pin',
+          enabled: userData[i].enabled || false,
+          synced_to_lock: userData[i].synced_to_lock || false,
+          schedule: userData[i].schedule || { start: null, end: null },
+          usage_limit: userData[i].usage_limit || null,
+          usage_count: userData[i].usage_count || 0
+        };
+      } else {
+        users[i] = {
+          slot: i,
+          name: '',
+          code: '',
+          code_type: 'pin',
+          enabled: false,
+          synced_to_lock: false,
+          schedule: { start: null, end: null },
+          usage_limit: null,
+          usage_count: 0
+        };
+      }
+    }
+    
     return users;
   }
 
@@ -181,6 +237,8 @@ class YaleLockManagerCard extends HTMLElement {
       <style>
         ha-card {
           padding: 16px;
+          max-width: 1200px;
+          width: 100%;
         }
         .header {
           display: flex;
@@ -445,33 +503,31 @@ class YaleLockManagerCard extends HTMLElement {
                           <input type="text" id="name-${slot}" value="${user.name || ''}" placeholder="Enter name">
                         </div>
                         
-                        ${user.code_type !== 'fob' ? `
-                          <div class="form-group">
-                            <label>PIN Code (4-10 digits):</label>
-                            <input type="text" id="code-${slot}" value="${user.code || ''}" placeholder="Enter PIN" maxlength="10">
-                          </div>
-                        ` : `
-                          <div class="form-group">
-                            <label>Code Type:</label>
-                            <p style="color: var(--secondary-text-color); margin: 4px 0;">
-                              🏷️ This slot is configured as a FOB/RFID. PINs cannot be set for FOB slots.
-                            </p>
-                          </div>
-                        `}
-                        
                         <div class="form-group">
                           <label>Code Type:</label>
-                          <select id="type-${slot}" ${user.code_type === 'fob' ? 'disabled' : ''}>
-                            <option value="pin" ${user.code_type === 'pin' ? 'selected' : ''}>PIN</option>
-                            <option value="fob" ${user.code_type === 'fob' ? 'selected' : ''}>FOB/RFID</option>
+                          <select id="type-${slot}">
+                            <option value="pin" ${user.code_type === 'pin' ? 'selected' : ''}>PIN Code</option>
+                            <option value="fob" ${user.code_type === 'fob' ? 'selected' : ''}>FOB/RFID Card</option>
                           </select>
                         </div>
                         
                         ${user.code_type !== 'fob' ? `
-                          <button class="action-button" @click="${() => this.handleSetCode(slot)}">
-                            ${user.name ? 'Update Code' : 'Set Code'}
-                          </button>
-                        ` : ''}
+                          <div class="form-group">
+                            <label>PIN Code (4-10 digits):</label>
+                            <input type="text" id="code-${slot}" value="${user.code || ''}" placeholder="Enter PIN code (e.g., 1234)" maxlength="10" pattern="[0-9]*">
+                          </div>
+                        ` : `
+                          <div class="form-group">
+                            <label>FOB/RFID:</label>
+                            <p style="color: var(--secondary-text-color); margin: 4px 0; padding: 8px; background: var(--table-row-alternative-background-color); border-radius: 4px;">
+                              🏷️ This slot is for a FOB/RFID card. The code will be read automatically when the card is presented to the lock.
+                            </p>
+                          </div>
+                        `}
+                        
+                        <button class="action-button" @click="${() => this.handleSetCode(slot)}">
+                          ${user.name ? 'Update User' : 'Set User'}
+                        </button>
                         
                         ${user.name ? `
                           <button class="action-button secondary" @click="${() => this.handleClearCode(slot)}">Clear Slot</button>
