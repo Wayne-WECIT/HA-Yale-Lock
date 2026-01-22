@@ -277,6 +277,17 @@ These have been implemented in v1.1.2.0:
 
 ---
 
+## 🧹 Code Cleanup & Optimization
+
+### Priority: LOW
+Code quality improvements and optimizations that don't affect functionality.
+
+- [ ] **Remove redundant sync check after save**
+  - Currently `async_set_user_code` queries the lock and calculates sync status
+  - Frontend also calls `check_sync_status` after save, causing duplicate lock queries
+  - Remove the redundant `check_sync_status` call from `saveUser()` in the card
+  - The sync status is already calculated correctly in `async_set_user_code`
+
 ## 📝 Notes
 
 ### Known Limitations
