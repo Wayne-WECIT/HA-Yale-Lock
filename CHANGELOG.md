@@ -20,6 +20,72 @@ Use `lock.smart_door_lock_manager` for the Lovelace card!
 
 ---
 
+## [1.8.2.15] - 2026-01-22
+
+### 🔧 FIX - Form Fields Clearing During Auto-Refresh
+
+**User feedback**: "when i fill in some data like the image suddenly the contents disappear, is there like a auto refresh or something happensing which is causing this?"
+
+### The Issue
+
+The card was re-rendering every time Home Assistant updated the entity state (via the `set hass(hass)` method), which caused form fields to be cleared while the user was typing. This happened because:
+
+1. **Auto-refresh**: Home Assistant automatically updates the `hass` object when entity states change
+2. **Full re-render**: The `set hass()` method called `render()`, which rebuilt the entire card HTML
+3. **Lost input**: Form field values were lost because they were re-read from entity state (which doesn't have unsaved changes)
+
+### The Solution
+
+**Form Value Preservation**:
+1. **Save before render**: Before any re-render, save all form field values from the expanded slot
+2. **Restore after render**: After the DOM is rebuilt, restore the saved form field values
+3. **Smart re-render prevention**: Check if a form field has focus before allowing auto-refresh re-renders
+
+### Implementation
+
+**New Methods**:
+- `_saveFormValues()`: Captures all form field values (name, code, type, schedule, usage limit, toggles) before re-render
+- `_restoreFormValues()`: Restores saved values after re-render completes
+- `_isFormBeingEdited()`: Checks if any form field has focus or has been modified
+- `_updateDataOnly()`: Updates data reference without full re-render when form is being edited
+
+**Enhanced `render()` method**:
+- Now saves form values before re-render
+- Restores form values after DOM is ready
+- Preserves user input during auto-refreshes
+
+**Enhanced `refresh()` method**:
+- Saves form values before pulling codes from lock
+- Restores form values after refresh completes
+- Ensures user input isn't lost during manual refresh
+
+### Changed
+
+- **`yale-lock-manager-card.js`**:
+  - `set hass()`: Now checks if form is being edited before re-rendering
+  - `render()`: Saves and restores form values automatically
+  - `refresh()`: Preserves form values during refresh
+  - Added `_saveFormValues()`, `_restoreFormValues()`, `_isFormBeingEdited()`, `_updateDataOnly()` helper methods
+
+### What's Fixed
+
+- ✅ **Form fields no longer clear** during auto-refresh
+- ✅ **User input is preserved** while typing
+- ✅ **Values persist** through entity state updates
+- ✅ **Manual refresh** also preserves form values
+- ✅ **Better UX** - no more lost input
+
+### How It Works
+
+1. User starts typing in a form field
+2. Home Assistant updates entity state → `set hass()` is called
+3. Card checks if form is being edited → If yes, skip re-render or preserve values
+4. If re-render is needed, form values are saved before render
+5. After DOM is rebuilt, form values are restored
+6. User's input is preserved!
+
+---
+
 ## [1.8.2.14] - 2026-01-22
 
 ### 🔧 FIX - Status Column Fallback Logic

@@ -22,7 +22,66 @@ class YaleLockManagerCard extends HTMLElement {
 
   set hass(hass) {
     this._hass = hass;
-    this.render();
+    // Only re-render if no form is currently being edited
+    // This prevents form fields from being cleared while user is typing
+    if (!this._isFormBeingEdited()) {
+      this.render();
+    } else {
+      // Just update the data reference, don't re-render
+      // This allows status messages to work without clearing forms
+      this._updateDataOnly();
+    }
+  }
+  
+  _isFormBeingEdited() {
+    // Check if any form field has focus or has been modified
+    if (!this.shadowRoot) return false;
+    
+    const activeElement = this.shadowRoot.activeElement;
+    if (activeElement && (
+      activeElement.tagName === 'INPUT' || 
+      activeElement.tagName === 'SELECT' ||
+      activeElement.tagName === 'TEXTAREA'
+    )) {
+      return true;
+    }
+    
+    // Also check if any input has a value that differs from the stored value
+    // This catches cases where user typed but field lost focus
+    if (this._expandedSlot) {
+      const slot = this._expandedSlot;
+      const nameInput = this.shadowRoot.getElementById(`name-${slot}`);
+      const codeInput = this.shadowRoot.getElementById(`code-${slot}`);
+      
+      if (nameInput && nameInput.value && nameInput.value !== (this._getStoredValue(slot, 'name') || '')) {
+        return true;
+      }
+      if (codeInput && codeInput.value && codeInput.value !== (this._getStoredValue(slot, 'code') || '')) {
+        return true;
+      }
+    }
+    
+    return false;
+  }
+  
+  _getStoredValue(slot, field) {
+    // Get the stored value from entity state
+    const stateObj = this._hass?.states[this._config?.entity];
+    const users = stateObj?.attributes?.users || {};
+    const user = users[slot.toString()] || {};
+    return user[field];
+  }
+  
+  _updateDataOnly() {
+    // Update internal data reference without re-rendering
+    // This allows status messages and other updates to work
+    // without clearing form fields
+    if (!this._hass || !this._config) return;
+    
+    // Update status messages if needed (they don't require full render)
+    if (this._expandedSlot) {
+      this.renderStatusMessage(this._expandedSlot);
+    }
   }
 
   // ========== STATUS MESSAGE SYSTEM ==========
@@ -151,6 +210,9 @@ class YaleLockManagerCard extends HTMLElement {
       return;
     }
 
+    // Save form values before re-render if a form is expanded
+    const savedValues = this._saveFormValues();
+
     const users = this.getUserData();
     const isLocked = stateObj.state === 'locked';
     const batteryLevel = stateObj.attributes.battery_level || 0;
@@ -165,6 +227,11 @@ class YaleLockManagerCard extends HTMLElement {
     `;
 
     this.attachEventListeners();
+    
+    // Restore form values after re-render
+    if (savedValues && savedValues.slot) {
+      this._restoreFormValues(savedValues);
+    }
   }
 
   getStyles() {
@@ -659,13 +726,88 @@ class YaleLockManagerCard extends HTMLElement {
 
   async refresh() {
     try {
+      // Save current form values before refresh
+      const savedValues = this._saveFormValues();
+      
       await this._hass.callService('yale_lock_manager', 'pull_codes_from_lock', {
         entity_id: this._config.entity
       });
+      
+      // Restore form values after refresh
+      this._restoreFormValues(savedValues);
+      
       this.showStatus(0, 'Refreshed from lock', 'success');
+      // Force a render after refresh to show updated data
+      this.render();
     } catch (error) {
       this.showStatus(0, `Refresh failed: ${error.message}`, 'error');
     }
+  }
+  
+  _saveFormValues() {
+    // Save current form field values before re-render
+    const saved = {};
+    if (!this._expandedSlot || !this.shadowRoot) return saved;
+    
+    const slot = this._expandedSlot;
+    const fields = {
+      name: `name-${slot}`,
+      code: `code-${slot}`,
+      type: `type-${slot}`,
+      scheduleStart: `start-${slot}`,
+      scheduleEnd: `end-${slot}`,
+      usageLimit: `limit-${slot}`,
+      scheduleToggle: `schedule-toggle-${slot}`,
+      limitToggle: `limit-toggle-${slot}`
+    };
+    
+    for (const [key, id] of Object.entries(fields)) {
+      const element = this.shadowRoot.getElementById(id);
+      if (element) {
+        if (element.type === 'checkbox') {
+          saved[key] = element.checked;
+        } else {
+          saved[key] = element.value;
+        }
+      }
+    }
+    
+    return { slot, values: saved };
+  }
+  
+  _restoreFormValues(saved) {
+    // Restore form field values after re-render
+    if (!saved || !saved.slot || !this.shadowRoot) return;
+    
+    const slot = saved.slot;
+    const values = saved.values || {};
+    
+    // Wait a tick for DOM to be ready
+    setTimeout(() => {
+      const fields = {
+        name: `name-${slot}`,
+        code: `code-${slot}`,
+        type: `type-${slot}`,
+        scheduleStart: `start-${slot}`,
+        scheduleEnd: `end-${slot}`,
+        usageLimit: `limit-${slot}`,
+        scheduleToggle: `schedule-toggle-${slot}`,
+        limitToggle: `limit-toggle-${slot}`
+      };
+      
+      for (const [key, id] of Object.entries(fields)) {
+        const element = this.shadowRoot.getElementById(id);
+        if (element && values[key] !== undefined) {
+          if (element.type === 'checkbox') {
+            element.checked = values[key];
+            // Trigger change event to show/hide fields
+            element.dispatchEvent(new Event('change'));
+          } else {
+            element.value = values[key];
+          }
+        }
+      }
+    }, 0);
   }
 
   async toggleUser(slot, checked) {
