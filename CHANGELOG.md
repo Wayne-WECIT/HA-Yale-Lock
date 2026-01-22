@@ -20,6 +20,62 @@ Use `lock.smart_door_lock_manager` for the Lovelace card!
 
 ---
 
+## [1.7.2.1] - 2026-01-22
+
+### Fixed - Clear Slot Race Condition! ⚡
+- **🐛 Race Condition Fixed** - Clear + Add now works reliably
+  - Added 2-second wait after clearing slot
+  - Verifies slot is empty before returning
+  - No more "occupied by unknown code" after clear
+
+### The Problem (User Reported)
+```
+1. Click "Clear Slot" → Cleared ✓
+2. Immediately click "Add" → Error! ❌
+   "Slot 5 is occupied by an unknown code"
+```
+
+**Root Cause:**
+- Clear sent to lock ✓
+- Storage cleared immediately ✓
+- Function returned immediately ❌
+- User tried to add too fast
+- Lock hadn't processed clear yet
+- Status still showed "occupied"
+- Storage was empty, so we don't "own" it
+- Error: "unknown code"
+
+### The Solution
+```python
+async_clear_user_code():
+  1. Delete from storage ✓
+  2. Send clear to lock ✓
+  3. Wait 2 seconds ⏱️ NEW!
+  4. Read back status 🔍 NEW!
+  5. Verify it's empty ✅ NEW!
+  6. Only then return
+```
+
+### What Gets Verified
+- Status reads as `USER_STATUS_AVAILABLE`
+- Or status reads as `None` (completely empty)
+- Logs confirmation: "✓ Verified: Slot X successfully cleared"
+
+### Error Handling
+- If verification fails: Logs warning but continues
+- Still refreshes coordinator
+- Storage is cleared regardless
+- User can retry if needed
+
+### Benefits
+✅ No more race condition errors
+✅ Reliable clear → add workflow
+✅ Proper verification of clear operation
+✅ User can add immediately after clear completes
+✅ Clear feedback in logs
+
+---
+
 ## [1.7.2.0] - 2026-01-22
 
 ### Fixed - CRITICAL: Push Verification! 🔍

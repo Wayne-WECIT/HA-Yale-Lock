@@ -589,7 +589,7 @@ class YaleLockCoordinator(DataUpdateCoordinator):
         return False
 
     async def async_clear_user_code(self, slot: int) -> None:
-        """Clear a user code from storage and lock."""
+        """Clear a user code from storage and lock with verification."""
         # Remove from storage first
         if str(slot) in self._user_data["users"]:
             del self._user_data["users"][str(slot)]
@@ -597,6 +597,8 @@ class YaleLockCoordinator(DataUpdateCoordinator):
         
         # Clear from lock using invoke_cc_api
         try:
+            _LOGGER.info("Clearing slot %s from lock...", slot)
+            
             await self.hass.services.async_call(
                 ZWAVE_JS_DOMAIN,
                 "invoke_cc_api",
@@ -608,9 +610,23 @@ class YaleLockCoordinator(DataUpdateCoordinator):
                 },
                 blocking=True,
             )
-            _LOGGER.info("Cleared slot %s from lock", slot)
+            
+            # Wait for lock to process the clear operation
+            await asyncio.sleep(2.0)
+            
+            # VERIFY: Read back the status to confirm it's cleared
+            _LOGGER.info("Verifying slot %s was cleared...", slot)
+            verification_status = await self._get_user_code_status(slot)
+            
+            if verification_status == USER_STATUS_AVAILABLE or verification_status is None:
+                _LOGGER.info("✓ Verified: Slot %s successfully cleared", slot)
+            else:
+                _LOGGER.warning("⚠️ Slot %s may not be fully cleared (status: %s)", slot, verification_status)
+                # Don't raise error - just log warning and continue
+                
         except Exception as err:
-            _LOGGER.warning("Could not clear slot %s from lock: %s", slot, err)
+            _LOGGER.error("Error clearing slot %s from lock: %s", slot, err)
+            # Don't raise - allow storage clear to complete
         
         await self.async_request_refresh()
 
