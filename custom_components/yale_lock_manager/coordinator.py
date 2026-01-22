@@ -683,8 +683,7 @@ class YaleLockCoordinator(DataUpdateCoordinator):
         if not override_protection and not await self._is_slot_safe_to_write(slot):
             raise ValueError(f"Slot {slot} is occupied by an unknown code. Use override_protection=True to overwrite.")
 
-        # Preserve existing schedule/usage data if updating
-        existing_user = self._user_data["users"].get(str(slot))
+        # Preserve existing schedule/usage data if updating (existing_user already retrieved above)
         if existing_user:
             schedule = existing_user.get("schedule", {"start": None, "end": None})
             usage_limit = existing_user.get("usage_limit")
