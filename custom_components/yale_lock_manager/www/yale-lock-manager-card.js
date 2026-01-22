@@ -12,6 +12,7 @@ class YaleLockManagerCard extends HTMLElement {
     this._expandedSlot = null;
     this._statusMessages = {}; // Per-slot status messages
     this._showClearCacheConfirm = false;
+    this._skipFormRestore = false; // Flag to skip form value restoration after save
   }
 
   setConfig(config) {
@@ -224,10 +225,12 @@ class YaleLockManagerCard extends HTMLElement {
 
     this.attachEventListeners();
     
-    // Restore form values after re-render
-    if (savedValues && savedValues.slot) {
+    // Restore form values after re-render (unless we just saved - then let entity state update it)
+    if (savedValues && savedValues.slot && !this._skipFormRestore) {
       this._restoreFormValues(savedValues);
     }
+    // Reset the flag after render
+    this._skipFormRestore = false;
   }
 
   getStyles() {
@@ -1173,21 +1176,20 @@ class YaleLockManagerCard extends HTMLElement {
       // Show success message (will persist until slot is collapsed or Push is clicked)
       this.showStatus(slot, '✅ User saved successfully!', 'success');
       
-      // After saving, we need to ensure the form field shows the NEW cached code
-      // Save the new code value before render so it gets preserved
-      const savedCode = code; // The new code that was just saved
+      // After saving, skip form value restoration so the entity state can update the form
+      // with the new cached code value
+      this._skipFormRestore = true;
       
       // Render will be triggered by the refresh from check_sync_status
-      // But add a small delay to ensure data is updated, then restore the NEW code
+      // But add a small delay to ensure data is updated
       setTimeout(() => {
-        // Get the updated user data from entity state
+        // Get the updated user data from entity state and ensure form shows new code
         const updatedUser = this.getUserData().find(u => u.slot === slot);
         if (updatedUser && this.shadowRoot) {
-          // Force update the form field with the new cached code that was just saved
+          // Update the form field with the new cached code from entity state
           const codeField = this.shadowRoot.getElementById(`code-${slot}`);
-          if (codeField) {
-            // Use the saved code (what user just entered) or the updated entity code
-            codeField.value = savedCode || updatedUser.code || '';
+          if (codeField && updatedUser.code) {
+            codeField.value = updatedUser.code; // This is the new cached code (23432448)
           }
         }
         this.render();
