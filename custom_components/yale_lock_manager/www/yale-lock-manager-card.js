@@ -1,8 +1,12 @@
 /**
  * Yale Lock Manager Card
- * Clean rebuild - v1.8.2.27
- * Architecture: Entity state is single source of truth
- * Form preservation: Only when user is actively editing (has focus)
+ * Clean, simple logic - v1.8.2.30
+ * 
+ * Rules:
+ * 1. When slot is expanded/being edited - NO refreshes of editable fields
+ * 2. When save is clicked - NO refresh of editable fields, only update message area
+ * 3. After confirmed save - refresh editable fields from entity state, compare with lock, update sync status
+ * 4. After push - verify push, update lock fields, update sync status
  */
 
 class YaleLockManagerCard extends HTMLElement {
@@ -14,8 +18,8 @@ class YaleLockManagerCard extends HTMLElement {
     this._expandedSlot = null;
     this._statusMessages = {}; // Per-slot status messages
     this._showClearCacheConfirm = false;
-    this._focusedFields = new Set(); // Track which fields have focus
-    this._pendingSave = false; // Flag to prevent form preservation during save
+    this._editingSlots = new Set(); // Track which slots are being edited (no field updates)
+    this._savedSlots = new Set(); // Track slots that just saved (will refresh fields after)
   }
 
   setConfig(config) {
@@ -27,17 +31,17 @@ class YaleLockManagerCard extends HTMLElement {
 
   set hass(hass) {
     this._hass = hass;
-    // Only render if not saving and no fields have focus
-    if (!this._pendingSave && this._focusedFields.size === 0) {
+    // Only render if no slots are being edited
+    if (this._editingSlots.size === 0) {
     this.render();
     } else {
-      // Just update status messages without full render
-      this._updateStatusMessages();
+      // Just update message area, don't touch editable fields
+      this._updateMessagesOnly();
     }
   }
 
-  _updateStatusMessages() {
-    // Update status messages without full render
+  _updateMessagesOnly() {
+    // Update only the message areas, not editable fields
     if (this._expandedSlot) {
       this.renderStatusMessage(this._expandedSlot);
     }
@@ -176,6 +180,38 @@ class YaleLockManagerCard extends HTMLElement {
     `;
 
     this.attachEventListeners();
+    
+    // After render, if a slot just saved, refresh its editable fields from entity state
+    if (this._savedSlots.size > 0) {
+      this._savedSlots.forEach(slot => {
+        this._refreshEditableFields(slot);
+      });
+      this._savedSlots.clear();
+    }
+  }
+
+  _refreshEditableFields(slot) {
+    // Refresh editable fields from entity state after save
+    const user = this.getUserData().find(u => u.slot === slot);
+    if (!user) return;
+    
+    const nameField = this.shadowRoot.getElementById(`name-${slot}`);
+    const codeField = this.shadowRoot.getElementById(`code-${slot}`);
+    const typeField = this.shadowRoot.getElementById(`type-${slot}`);
+    const statusField = this.shadowRoot.getElementById(`cached-status-${slot}`);
+    
+    if (nameField) nameField.value = user.name || '';
+    if (codeField) codeField.value = user.code || '';
+    if (typeField) typeField.value = user.code_type || 'pin';
+    if (statusField) {
+      const status = user.lock_status !== null && user.lock_status !== undefined 
+        ? user.lock_status 
+        : (user.enabled ? 1 : 2);
+      statusField.value = status.toString();
+    }
+    
+    // Update status dropdown options if needed
+    this.updateStatusOptions(slot);
   }
 
   getStyles() {
@@ -371,6 +407,7 @@ class YaleLockManagerCard extends HTMLElement {
     const rows = users.map(user => {
       const isExpanded = this._expandedSlot === user.slot;
       const isFob = user.code_type === 'fob';
+      const isEditing = this._editingSlots.has(user.slot);
       
       const getStatusText = (status, lockEnabled, enabled) => {
         if (status !== null && status !== undefined) {
@@ -402,18 +439,6 @@ class YaleLockManagerCard extends HTMLElement {
       
       const statusText = getStatusText(user.lock_status, user.lock_enabled, user.enabled);
       const statusColor = getStatusColor(user.lock_status, user.lock_enabled, user.enabled);
-      
-      // Get current field values - preserve focused fields, otherwise use entity state
-      const getFieldValue = (fieldId, defaultValue) => {
-        const fieldKey = `${user.slot}-${fieldId}`;
-        if (this._focusedFields.has(fieldKey)) {
-          // Field has focus - preserve current value from DOM
-          const element = this.shadowRoot?.getElementById(`${fieldId}-${user.slot}`);
-          return element ? element.value : defaultValue;
-        }
-        // No focus - use entity state
-        return defaultValue;
-      };
       
       // Get cached status for dropdown
       let cachedStatus = user.lock_status;
@@ -458,10 +483,8 @@ class YaleLockManagerCard extends HTMLElement {
                   <input 
                     type="text" 
                     id="name-${user.slot}" 
-                    value="${getFieldValue('name', user.name || '')}" 
+                    value="${user.name || ''}" 
                     placeholder="Enter name"
-                    onfocus="card._handleFocus('${user.slot}-name')"
-                    onblur="card._handleBlur('${user.slot}-name')"
                   >
                         </div>
                         
@@ -470,8 +493,6 @@ class YaleLockManagerCard extends HTMLElement {
                   <select 
                     id="type-${user.slot}" 
                     onchange="card.changeType(${user.slot}, this.value)"
-                    onfocus="card._handleFocus('${user.slot}-type')"
-                    onblur="card._handleBlur('${user.slot}-type')"
                   >
                     <option value="pin" ${!isFob ? 'selected' : ''}>PIN Code</option>
                     <option value="fob" ${isFob ? 'selected' : ''}>FOB/RFID Card</option>
@@ -487,8 +508,6 @@ class YaleLockManagerCard extends HTMLElement {
                           id="cached-status-${user.slot}" 
                           onchange="card.changeStatus(${user.slot}, this.value)" 
                           style="width: 100%;"
-                          onfocus="card._handleFocus('${user.slot}-cached-status')"
-                          onblur="card._handleBlur('${user.slot}-cached-status')"
                         >
                           ${!hasData ? `
                             <option value="0" ${cachedStatus === 0 ? 'selected' : ''}>Available</option>
@@ -541,13 +560,11 @@ class YaleLockManagerCard extends HTMLElement {
                         <input 
                           type="text" 
                           id="code-${user.slot}" 
-                          value="${getFieldValue('code', user.code || '')}" 
+                          value="${user.code || ''}" 
                           placeholder="Enter PIN code" 
                           maxlength="10" 
                           pattern="[0-9]*" 
                           style="width: 100%;"
-                          onfocus="card._handleFocus('${user.slot}-code')"
-                          onblur="card._handleBlur('${user.slot}-code')"
                         >
                         <p style="color: var(--secondary-text-color); font-size: 0.75em; margin: 4px 0 0 0;">PIN stored locally</p>
                       </div>
@@ -609,8 +626,6 @@ class YaleLockManagerCard extends HTMLElement {
                           type="datetime-local" 
                           id="start-${user.slot}" 
                           value="${user.schedule?.start ? user.schedule.start.substring(0, 16) : ''}"
-                          onfocus="card._handleFocus('${user.slot}-start')"
-                          onblur="card._handleBlur('${user.slot}-start')"
                         >
                               </div>
                       <div style="flex: 1; min-width: 200px;">
@@ -619,8 +634,6 @@ class YaleLockManagerCard extends HTMLElement {
                           type="datetime-local" 
                           id="end-${user.slot}" 
                           value="${user.schedule?.end ? user.schedule.end.substring(0, 16) : ''}"
-                          onfocus="card._handleFocus('${user.slot}-end')"
-                          onblur="card._handleBlur('${user.slot}-end')"
                         >
                               </div>
                             </div>
@@ -659,8 +672,6 @@ class YaleLockManagerCard extends HTMLElement {
                             value="${user.usage_limit || ''}" 
                             placeholder="e.g., 5" 
                             min="1"
-                            onfocus="card._handleFocus('${user.slot}-limit')"
-                            onblur="card._handleBlur('${user.slot}-limit')"
                           >
                         </div>
                       </div>
@@ -757,19 +768,6 @@ class YaleLockManagerCard extends HTMLElement {
     `;
   }
 
-  // ========== FOCUS TRACKING ==========
-
-  _handleFocus(fieldKey) {
-    this._focusedFields.add(fieldKey);
-  }
-
-  _handleBlur(fieldKey) {
-    // Small delay to allow save operations to complete
-    setTimeout(() => {
-      this._focusedFields.delete(fieldKey);
-    }, 100);
-  }
-
   // ========== EVENT HANDLING ==========
 
   attachEventListeners() {
@@ -823,7 +821,7 @@ class YaleLockManagerCard extends HTMLElement {
       disabledOption.value = '2';
       disabledOption.textContent = 'Disabled';
       disabledOption.selected = currentValue === '2';
-      statusSelect.appendChild(disabledOption);
+      disabledOption.appendChild(disabledOption);
       
       if (currentValue === '0') {
         statusSelect.value = '1';
@@ -837,7 +835,9 @@ class YaleLockManagerCard extends HTMLElement {
     
     if (wasExpanded) {
       this.clearStatus(slot);
-      this._focusedFields.clear(); // Clear focus tracking when collapsing
+      this._editingSlots.delete(slot); // Stop editing when collapsed
+    } else {
+      this._editingSlots.add(slot); // Start editing when expanded
     }
     
     this.render();
@@ -885,17 +885,19 @@ class YaleLockManagerCard extends HTMLElement {
   async refresh() {
     try {
       this.showStatus(0, '⏳ Refreshing codes from lock... This may take a moment.', 'info');
-      this.render();
+      this._updateMessagesOnly();
       
       await this._hass.callService('yale_lock_manager', 'pull_codes_from_lock', {
         entity_id: this._config.entity
       });
       
       this.showStatus(0, '✅ Refreshed from lock successfully!', 'success');
+      // Refresh all slots after pull
+      this._editingSlots.clear();
       setTimeout(() => this.render(), 500);
     } catch (error) {
       this.showStatus(0, `❌ Refresh failed: ${error.message}`, 'error');
-      this.render();
+      this._updateMessagesOnly();
     }
   }
 
@@ -903,18 +905,14 @@ class YaleLockManagerCard extends HTMLElement {
     const status = parseInt(statusValue, 10);
     
     try {
-      // Don't trigger full render - just update status message
-      // The entity state will update naturally, and render will happen when hass updates
-      // but only if no fields have focus (handled by set hass())
       await this._hass.callService('yale_lock_manager', 'set_user_status', {
         entity_id: this._config.entity,
         slot: parseInt(slot, 10),
         status: status
       });
       
-      // Show brief success message without full render
+      // Just update message, don't refresh fields
       this.showStatus(slot, 'Status updated', 'success');
-      // Clear message after 2 seconds
       setTimeout(() => {
         if (this._statusMessages[slot]?.message === 'Status updated') {
           this.clearStatus(slot);
@@ -948,6 +946,7 @@ class YaleLockManagerCard extends HTMLElement {
         this.showStatus(slot, '⏳ Verifying code was set...', 'info');
         this.renderStatusMessage(slot);
         
+        // Step 5: Verify push succeeded by checking status and PIN
         try {
           await this._hass.callService('yale_lock_manager', 'check_sync_status', {
             entity_id: this._config.entity,
@@ -957,50 +956,58 @@ class YaleLockManagerCard extends HTMLElement {
           console.warn('Failed to check sync status after push:', syncError);
         }
         
+        // Update lock fields and sync status
         this.showStatus(slot, '✅ Code pushed successfully!', 'success');
+        
+        // Refresh editable fields from entity state (which now has updated lock data)
         setTimeout(() => {
-          this._pendingSave = false;
+          this._refreshEditableFields(slot);
+          // Also update lock PIN/status fields
+          const user = this.getUserData().find(u => u.slot === slot);
+          if (user) {
+            const lockCodeField = this.shadowRoot.getElementById(`lock-code-${slot}`);
+            const lockStatusField = this.shadowRoot.getElementById(`lock-status-${slot}`);
+            if (lockCodeField) lockCodeField.value = user.lock_code || '';
+            if (lockStatusField) {
+              const lockStatus = user.lock_status_from_lock ?? user.lock_status;
+              if (lockStatus !== null && lockStatus !== undefined) {
+                lockStatusField.value = lockStatus.toString();
+              }
+            }
+          }
           this.render();
         }, 1000);
       } catch (error) {
         this.showStatus(slot, `❌ Push failed: ${error.message}`, 'error');
-        this._pendingSave = false;
-        this.render();
+        this.renderStatusMessage(slot);
       }
     });
   }
 
   async saveUser(slot) {
-    // Save current form values BEFORE clearing focus - we'll use these to update fields after save
-    const savedFormValues = {
-      name: this.shadowRoot.getElementById(`name-${slot}`).value.trim(),
-      code: codeType === 'pin' ? (this.shadowRoot.getElementById(`code-${slot}`)?.value.trim() || '') : '',
-      codeType: this.shadowRoot.getElementById(`type-${slot}`).value,
-      cachedStatus: parseInt(this.shadowRoot.getElementById(`cached-status-${slot}`)?.value || '0', 10)
-    };
+    // Rule 2: Mark slot as editing - no field refreshes
+    this._editingSlots.add(slot);
     
-    // Don't clear focus yet - we'll do it after entity state updates
-    this._pendingSave = true;
-    
-    const name = savedFormValues.name;
-    const codeType = savedFormValues.codeType;
-    const code = savedFormValues.code;
-    const cachedStatus = savedFormValues.cachedStatus;
+    const name = this.shadowRoot.getElementById(`name-${slot}`).value.trim();
+    const codeType = this.shadowRoot.getElementById(`type-${slot}`).value;
+    const code = codeType === 'pin' ? (this.shadowRoot.getElementById(`code-${slot}`)?.value.trim() || '') : '';
+    const cachedStatus = parseInt(this.shadowRoot.getElementById(`cached-status-${slot}`)?.value || '0', 10);
 
     // Validation
     if (!name) {
       this.showStatus(slot, 'Please enter a user name', 'error');
-      this._pendingSave = false;
+      this._editingSlots.delete(slot);
       return;
     }
 
     if (codeType === 'pin' && (!code || code.length < 4)) {
       this.showStatus(slot, 'PIN must be at least 4 digits', 'error');
-      this._pendingSave = false;
+      this._editingSlots.delete(slot);
       return;
     }
 
     try {
+      // Rule 2: Only update message area, not fields
       this.showStatus(slot, '⏳ Saving user data...', 'info');
       this.renderStatusMessage(slot);
       
@@ -1036,17 +1043,17 @@ class YaleLockManagerCard extends HTMLElement {
         const now = new Date();
         if (new Date(start) < now) {
           this.showStatus(slot, 'Start date must be in the future', 'error');
-          this._pendingSave = false;
+          this._editingSlots.delete(slot);
           return;
         }
         if (new Date(end) < now) {
           this.showStatus(slot, 'End date must be in the future', 'error');
-          this._pendingSave = false;
+          this._editingSlots.delete(slot);
           return;
         }
         if (new Date(end) <= new Date(start)) {
           this.showStatus(slot, 'End date must be after start date', 'error');
-          this._pendingSave = false;
+          this._editingSlots.delete(slot);
           return;
         }
       }
@@ -1072,12 +1079,12 @@ class YaleLockManagerCard extends HTMLElement {
         });
       }
 
-      // Check sync status (PINs only)
+      // Rule 3: After confirmed save, refresh editable fields and check sync
+      this.showStatus(slot, '⏳ Checking sync status...', 'info');
+      this.renderStatusMessage(slot);
+      
       if (codeType === 'pin') {
         try {
-          this.showStatus(slot, '⏳ Checking sync status...', 'info');
-          this.renderStatusMessage(slot);
-          
           await this._hass.callService('yale_lock_manager', 'check_sync_status', {
             entity_id: this._config.entity,
             slot: parseInt(slot, 10)
@@ -1089,28 +1096,18 @@ class YaleLockManagerCard extends HTMLElement {
 
       this.showStatus(slot, '✅ User saved successfully!', 'success');
       
-      // Wait for entity state to update, then explicitly update form fields and render
+      // Rule 3: After confirmed save, refresh editable fields from entity state
+      // Compare with lock fields, update sync status
+      this._editingSlots.delete(slot); // Allow field refresh
+      this._savedSlots.add(slot); // Mark for field refresh
+      
+      // Wait for entity state to update, then refresh fields
       setTimeout(() => {
-        // Explicitly update form fields with the values we just saved
-        // This ensures they show the new values even if entity state hasn't updated yet
-        const nameField = this.shadowRoot.getElementById(`name-${slot}`);
-        const codeField = this.shadowRoot.getElementById(`code-${slot}`);
-        const typeField = this.shadowRoot.getElementById(`type-${slot}`);
-        const statusField = this.shadowRoot.getElementById(`cached-status-${slot}`);
-        
-        if (nameField) nameField.value = savedFormValues.name;
-        if (codeField && codeType === 'pin') codeField.value = savedFormValues.code;
-        if (typeField) typeField.value = savedFormValues.codeType;
-        if (statusField) statusField.value = savedFormValues.cachedStatus.toString();
-        
-        // Now clear focus and render - entity state should have updated by now
-        this._focusedFields.clear();
-        this._pendingSave = false;
         this.render();
       }, 1500);
       
     } catch (error) {
-      this._pendingSave = false;
+      this._editingSlots.delete(slot);
       
       if (error.message && error.message.includes('occupied by an unknown code')) {
         this.showStatus(slot, 'Slot contains an unknown code. Overwrite it?', 'confirm', async () => {
@@ -1134,13 +1131,8 @@ class YaleLockManagerCard extends HTMLElement {
               console.warn('Failed to check sync status:', syncError);
             }
             
-            // Update form fields with saved values
-            const nameField = this.shadowRoot.getElementById(`name-${slot}`);
-            const codeField = this.shadowRoot.getElementById(`code-${slot}`);
-            if (nameField) nameField.value = name;
-            if (codeField && codeType === 'pin') codeField.value = code;
-            
-            this._focusedFields.clear();
+            this._editingSlots.delete(slot);
+            this._savedSlots.add(slot);
             setTimeout(() => this.render(), 500);
           } catch (retryError) {
             this.showStatus(slot, `Failed: ${retryError.message}`, 'error');
@@ -1148,7 +1140,7 @@ class YaleLockManagerCard extends HTMLElement {
         });
       } else {
         this.showStatus(slot, `Failed: ${error.message}`, 'error');
-        this.render();
+        this.renderStatusMessage(slot);
       }
     }
   }
@@ -1161,6 +1153,7 @@ class YaleLockManagerCard extends HTMLElement {
           slot: parseInt(slot, 10)
         });
         this._expandedSlot = null;
+        this._editingSlots.delete(slot);
         this.showStatus(slot, 'Slot cleared', 'success');
         setTimeout(() => this.render(), 1000);
       } catch (error) {
@@ -1201,6 +1194,7 @@ class YaleLockManagerCard extends HTMLElement {
       });
       this._showClearCacheConfirm = false;
       this.showStatus(0, 'Local cache cleared', 'success');
+      this._editingSlots.clear();
       setTimeout(() => this.render(), 500);
     } catch (error) {
       this.showStatus(0, `Failed to clear cache: ${error.message}`, 'error');
