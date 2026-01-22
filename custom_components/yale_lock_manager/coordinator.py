@@ -520,8 +520,8 @@ class YaleLockCoordinator(DataUpdateCoordinator):
         try:
             _LOGGER.debug("Querying lock for user code status for slot %s...", slot)
             
-            # Call invoke_cc_api with return_response to get the result
-            response = await self.hass.services.async_call(
+            # Trigger the query (do NOT use return_response=True)
+            await self.hass.services.async_call(
                 ZWAVE_JS_DOMAIN,
                 "invoke_cc_api",
                 {
@@ -531,15 +531,18 @@ class YaleLockCoordinator(DataUpdateCoordinator):
                     "parameters": [slot],
                 },
                 blocking=True,
-                return_response=True,
             )
             
-            if response and "userIdStatus" in response:
-                status = int(response["userIdStatus"])
-                _LOGGER.debug("Slot %s status from invoke_cc_api: %s", slot, status)
-                return status
+            # Wait for the value to be updated in the node cache
+            await asyncio.sleep(0.5)
             
-            _LOGGER.warning("No status returned from invoke_cc_api for slot %s", slot)
+            # Now read from the node's cached value
+            status = await self._get_zwave_value(CC_USER_CODE, "userIdStatus", slot)
+            if status is not None:
+                _LOGGER.debug("Slot %s status from cache: %s", slot, status)
+                return int(status)
+            
+            _LOGGER.warning("No status in cache for slot %s after query", slot)
             return None
             
         except Exception as err:
@@ -551,8 +554,8 @@ class YaleLockCoordinator(DataUpdateCoordinator):
         try:
             _LOGGER.debug("Querying lock for user code for slot %s...", slot)
             
-            # Call invoke_cc_api with return_response to get the result
-            response = await self.hass.services.async_call(
+            # Trigger the query (do NOT use return_response=True)
+            await self.hass.services.async_call(
                 ZWAVE_JS_DOMAIN,
                 "invoke_cc_api",
                 {
@@ -562,15 +565,19 @@ class YaleLockCoordinator(DataUpdateCoordinator):
                     "parameters": [slot],
                 },
                 blocking=True,
-                return_response=True,
             )
             
-            if response and "userCode" in response:
-                code = str(response["userCode"])
-                _LOGGER.debug("Slot %s code from invoke_cc_api: %s", slot, "***" if code else "None")
-                return code or ""
+            # Wait for the value to be updated in the node cache
+            await asyncio.sleep(0.5)
             
-            _LOGGER.warning("No code returned from invoke_cc_api for slot %s", slot)
+            # Now read from the node's cached value
+            code = await self._get_zwave_value(CC_USER_CODE, "userCode", slot)
+            if code is not None:
+                code_str = str(code)
+                _LOGGER.debug("Slot %s code from cache: %s", slot, "***" if code_str else "None")
+                return code_str or ""
+            
+            _LOGGER.warning("No code in cache for slot %s after query", slot)
             return ""
             
         except Exception as err:

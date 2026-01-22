@@ -20,7 +20,55 @@ Use `lock.smart_door_lock_manager` for the Lovelace card!
 
 ---
 
-## [1.8.1.2] - 2026-01-22
+## [1.8.1.3] - 2026-01-22
+
+### 🔧 CRITICAL REVERT - v1.8.1.2 Was Broken!
+
+**User feedback**: *"what have you done it was working !!!"*
+
+I apologize! v1.8.1.2 broke the working code retrieval. The error was clear:
+```
+An action which does not return responses can't be called with return_response=True
+```
+
+### The Issue
+
+`invoke_cc_api` for `get` methods **CANNOT** use `return_response=True`. The service doesn't support it.
+
+### The Fix - Reverted to v1.8.1.1 Approach
+
+**v1.8.1.1 WAS CORRECT**:
+```python
+# 1. Trigger the query (no return_response)
+await self.hass.services.async_call(
+    ZWAVE_JS_DOMAIN,
+    "invoke_cc_api",
+    {
+        "entity_id": self.lock_entity_id,
+        "command_class": CC_USER_CODE,
+        "method_name": "get",
+        "parameters": [slot],
+    },
+    blocking=True,
+)
+
+# 2. Wait for cache update
+await asyncio.sleep(0.5)
+
+# 3. Read from node's cached value
+status = await self._get_zwave_value(CC_USER_CODE, "userIdStatus", slot)
+```
+
+This is the proven, working approach from v1.8.1.1. Sorry for the confusion!
+
+### Changed
+- Reverted `_get_user_code_status()` to trigger-wait-read pattern (v1.8.1.1)
+- Reverted `_get_user_code()` to trigger-wait-read pattern (v1.8.1.1)
+- Removed incorrect `return_response=True` usage
+
+---
+
+## [1.8.1.2] - 2026-01-22 ❌ BROKEN - DO NOT USE
 
 ### 🎯 ACTUAL FIX - return_response=True DOES Work!
 
