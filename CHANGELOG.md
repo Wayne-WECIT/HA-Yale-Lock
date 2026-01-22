@@ -46,6 +46,147 @@ Use `lock.smart_door_lock_manager` for the Lovelace card!
 
 ---
 
+## [1.8.2.35] - 2026-01-22
+
+### 🔄 Revert - Vanilla HTMLElement (ES6 Imports Not Supported)
+
+**Issue**: LitElement refactor (v1.8.2.34) failed with ES6 import errors in Home Assistant's environment.
+
+### The Problem
+
+- `TypeError: Failed to resolve module specifier "@lit/reactive-element"`
+- Home Assistant's custom card environment doesn't support ES6 module imports from external URLs
+- LitElement requires module imports which aren't available in HA's card loader
+
+### The Solution
+
+**Reverted to vanilla HTMLElement**:
+- Restored the vanilla JavaScript implementation from v1.8.2.33
+- Removed all LitElement dependencies and ES6 imports
+- Kept the `_formValues` approach for form state management
+- Card works in Home Assistant's standard environment
+
+### Changed
+
+- **Frontend (`yale-lock-manager-card.js`)**:
+  - Reverted from LitElement back to vanilla HTMLElement
+  - Removed ES6 module imports
+  - Kept `_formValues` object for independent form state storage
+  - Maintained uncontrolled input pattern
+
+### What's Fixed
+
+- ✅ Card loads without import errors
+- ✅ Form state management still works with `_formValues`
+- ✅ Compatible with Home Assistant's card loading system
+
+---
+
+## [1.8.2.34] - 2026-01-22
+
+### 🔄 Attempted Refactor - LitElement with Reactive Properties
+
+**User request**: "i want you to do option 2 if that is what HA uses lets not try to reinvent the wheel if that is what should be done"
+
+### The Attempt
+
+Attempted to refactor the card to use **LitElement with reactive properties**, following Home Assistant's standard pattern for custom cards.
+
+### The Problem
+
+- ES6 module imports not supported in Home Assistant's custom card environment
+- `TypeError: Failed to resolve module specifier "@lit/reactive-element"`
+- Home Assistant doesn't support external module imports for custom cards
+- This version was **reverted** in v1.8.2.35
+
+### What Was Tried
+
+- Converted card to LitElement base class
+- Used `@property` decorators for reactive properties (`hass`, `config`, `expandedSlot`, etc.)
+- Implemented `requestUpdate()` for controlled re-renders
+- Attempted to use Home Assistant's standard reactive pattern
+
+### Result
+
+- ❌ Failed due to ES6 import limitations
+- Reverted to vanilla HTMLElement in v1.8.2.35
+
+---
+
+## [1.8.2.33] - 2026-01-22
+
+### 🔧 Improvement - Prevent Form Values from Being Overwritten
+
+**User feedback**: Form fields still reverting despite v1.8.2.32 changes.
+
+### The Issue
+
+Even with `_formValues` storage, form fields were still being overwritten in some scenarios:
+- `_syncFormValuesFromEntity` was being called when it shouldn't
+- `refresh()` method was syncing form values unnecessarily
+- Entity state updates were overwriting user edits
+
+### The Solution
+
+**Stricter form value protection**:
+- `_syncFormValuesFromEntity` only syncs if `_formValues[slot]` doesn't exist (unless `force=true`)
+- `refresh()` method no longer calls `_syncFormValuesFromEntity` to preserve user edits
+- `saveUser` and override logic explicitly confirm form values in `_formValues` after successful save
+- Form values are preserved against subsequent entity state updates
+
+### Changed
+
+- **Frontend (`yale-lock-manager-card.js`)**:
+  - Modified `_syncFormValuesFromEntity` to only sync if `_formValues[slot]` doesn't exist (unless `force=true`)
+  - Removed `_syncFormValuesFromEntity` call from `refresh()` method
+  - Added explicit `_setFormValue` calls after successful saves to reinforce form state
+  - Defensive form value storage to prevent overwrites
+
+### What's Fixed
+
+- ✅ Form values preserved during refresh operations
+- ✅ User edits not overwritten by entity state updates
+- ✅ More robust form state management
+
+---
+
+## [1.8.2.32] - 2026-01-22
+
+### 🔧 Improvement - Independent Form Value Storage
+
+**User feedback**: "pin initially - 23432445 pin updated - 23432449 get a confirmed then the page refreshes and the editable pin is back to 23432445"
+
+### The Issue
+
+Form fields (especially PIN) were reverting to old values after save, despite backend confirming the new value. This was a persistent issue across multiple iterations.
+
+### The Solution
+
+**Independent `_formValues` object**:
+- Store form field values independently per slot in `_formValues` object
+- Format: `{ slot: { name, code, type, cachedStatus, schedule, usageLimit } }`
+- `_getFormValue()` prioritizes `_formValues` over entity state for editable fields
+- `_syncFormValuesFromEntity()` only syncs when slot is first expanded or when forced
+- Form fields read from `_formValues`, not entity state
+
+### Changed
+
+- **Frontend (`yale-lock-manager-card.js`)**:
+  - Introduced `_formValues` object to store form field values independently
+  - `set hass()` always calls `render()`, but form fields read from `_formValues`
+  - `_syncFormValuesFromEntity` modified to only sync if `_formValues[slot]` doesn't exist or `force=true`
+  - `_getFormValue` updated to prioritize `_formValues` over entity state
+  - `saveUser` and `pushCode` updated to explicitly set values in `_formValues` after successful operations
+
+### What's Fixed
+
+- ✅ Form field values stored independently of entity state
+- ✅ Editable fields prioritize `_formValues` over entity state
+- ✅ Form values preserved during entity state updates
+- ✅ Better separation between form state and entity state
+
+---
+
 ## [1.8.2.36] - 2026-01-22
 
 ### 🎨 New Feature - Custom Panel Dashboard
