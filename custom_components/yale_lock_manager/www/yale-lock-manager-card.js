@@ -480,12 +480,6 @@ class YaleLockManagerCard extends HTMLElement {
               font-size: 0.85em;
             ">${statusText}</span>
           </td>
-          <td>
-            <label class="toggle-switch" onclick="event.stopPropagation()">
-              <input type="checkbox" onchange="card.toggleUser(${user.slot}, this.checked)" ${user.enabled ? 'checked' : ''}>
-              <span class="slider"></span>
-            </label>
-          </td>
           <td>${user.synced_to_lock ? '✓' : '⚠️'}</td>
           <td>
             <button 
@@ -496,7 +490,7 @@ class YaleLockManagerCard extends HTMLElement {
         </tr>
         ${isExpanded ? `
           <tr class="expanded-row">
-            <td colspan="7">
+            <td colspan="6">
               <div class="expanded-content">
                 <h3>Slot ${user.slot} Settings</h3>
                 
@@ -513,6 +507,61 @@ class YaleLockManagerCard extends HTMLElement {
                     <option value="pin" ${!isFob ? 'selected' : ''}>PIN Code</option>
                     <option value="fob" ${isFob ? 'selected' : ''}>FOB/RFID Card</option>
                   </select>
+                </div>
+                
+                <div class="form-group">
+                  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                    <div>
+                      <label>📝 Cached Status (editable):</label>
+                      <select id="cached-status-${user.slot}" onchange="card.changeStatus(${user.slot}, this.value)" style="width: 100%;">
+                        ${(() => {
+                          // Determine cached status: use lock_status if set, otherwise derive from enabled
+                          let cachedStatus = user.lock_status;
+                          if (cachedStatus === null || cachedStatus === undefined) {
+                            cachedStatus = user.enabled ? 1 : 2; // Default to Enabled or Disabled based on enabled flag
+                          }
+                          return `
+                            <option value="0" ${cachedStatus === 0 ? 'selected' : ''}>Available</option>
+                            <option value="1" ${cachedStatus === 1 ? 'selected' : ''}>Enabled</option>
+                            <option value="2" ${cachedStatus === 2 ? 'selected' : ''}>Disabled</option>
+                          `;
+                        })()}
+                      </select>
+                      <p style="color: var(--secondary-text-color); font-size: 0.75em; margin: 4px 0 0 0;">Status stored locally</p>
+                    </div>
+                    <div>
+                      <label>🔒 Lock Status (from lock):</label>
+                      <select id="lock-status-${user.slot}" disabled style="width: 100%; background: var(--card-background-color); border: 1px solid var(--divider-color); color: var(--secondary-text-color);">
+                        <option value="0" ${user.lock_status === 0 ? 'selected' : ''}>Available</option>
+                        <option value="1" ${user.lock_status === 1 ? 'selected' : ''}>Enabled</option>
+                        <option value="2" ${user.lock_status === 2 ? 'selected' : ''}>Disabled</option>
+                      </select>
+                      <p style="color: var(--secondary-text-color); font-size: 0.75em; margin: 4px 0 0 0;">Status from physical lock</p>
+                    </div>
+                  </div>
+                  ${(() => {
+                    // Compare cached status with lock status
+                    let cachedStatus = user.lock_status;
+                    if (cachedStatus === null || cachedStatus === undefined) {
+                      cachedStatus = user.enabled ? 1 : 2;
+                    }
+                    const lockStatus = user.lock_status;
+                    
+                    if (lockStatus !== null && lockStatus !== undefined && cachedStatus !== lockStatus) {
+                      return `
+                        <div style="margin-top: 8px; padding: 8px; background: #ff980015; border-left: 4px solid #ff9800; border-radius: 4px;">
+                          <span style="color: #ff9800; font-size: 0.85em;">⚠️ Status doesn't match - Click "Push" to sync</span>
+                        </div>
+                      `;
+                    } else if (lockStatus !== null && lockStatus !== undefined && cachedStatus === lockStatus) {
+                      return `
+                        <div style="margin-top: 8px; padding: 8px; background: #4caf5015; border-left: 4px solid #4caf50; border-radius: 4px;">
+                          <span style="color: #4caf50; font-size: 0.85em;">✅ Status matches - Synced</span>
+                        </div>
+                      `;
+                    }
+                    return '';
+                  })()}
                 </div>
                 
                 <div id="code-field-${user.slot}" class="${isFob ? 'hidden' : ''}">
@@ -652,7 +701,6 @@ class YaleLockManagerCard extends HTMLElement {
               <th>Name</th>
               <th>Type</th>
               <th>Status</th>
-              <th>Enabled</th>
               <th>Synced</th>
               <th>Action</th>
             </tr>
@@ -791,6 +839,7 @@ class YaleLockManagerCard extends HTMLElement {
         name: `name-${slot}`,
         code: `code-${slot}`,
         type: `type-${slot}`,
+        cachedStatus: `cached-status-${slot}`,
         scheduleStart: `start-${slot}`,
         scheduleEnd: `end-${slot}`,
         usageLimit: `limit-${slot}`,
@@ -813,16 +862,22 @@ class YaleLockManagerCard extends HTMLElement {
     }, 0);
   }
 
-  async toggleUser(slot, checked) {
-    const service = checked ? 'enable_user' : 'disable_user';
+  async changeStatus(slot, statusValue) {
+    const status = parseInt(statusValue, 10);
+    const statusNames = { 0: 'Available', 1: 'Enabled', 2: 'Disabled' };
+    
     try {
-      await this._hass.callService('yale_lock_manager', service, {
+      // Call service to update backend
+      await this._hass.callService('yale_lock_manager', 'set_user_status', {
         entity_id: this._config.entity,
-        slot: parseInt(slot, 10)
+        slot: parseInt(slot, 10),
+        status: status
       });
-      this.showStatus(slot, `User ${checked ? 'enabled' : 'disabled'}`, 'success');
+      
+      // Refresh to show updated sync status
+      setTimeout(() => this.render(), 300);
     } catch (error) {
-      this.showStatus(slot, `Failed: ${error.message}`, 'error');
+      this.showStatus(slot, `Failed to set status: ${error.message}`, 'error');
     }
   }
 

@@ -684,14 +684,16 @@ class YaleLockCoordinator(DataUpdateCoordinator):
             usage_count = existing_user.get("usage_count", 0)
             lock_code = existing_user.get("lock_code", "")  # Preserve lock_code
             lock_enabled = existing_user.get("lock_enabled", False)  # Preserve lock_enabled
-            lock_status = existing_user.get("lock_status", USER_STATUS_AVAILABLE)  # Preserve lock_status
+            lock_status = existing_user.get("lock_status", USER_STATUS_AVAILABLE)  # Preserve cached status
+            lock_status_from_lock = existing_user.get("lock_status_from_lock")  # Preserve lock status from lock
         else:
             schedule = {"start": None, "end": None}
             usage_limit = None
             usage_count = 0
             lock_code = ""  # No lock_code for new users
             lock_enabled = False
-            lock_status = USER_STATUS_AVAILABLE  # New users start as Available
+            lock_status = USER_STATUS_AVAILABLE  # New users start as Available (cached status)
+            lock_status_from_lock = None  # No lock status for new users
 
         # Calculate sync status: compare cached code with lock code (for PINs)
         if code_type == CODE_TYPE_PIN:
@@ -802,6 +804,29 @@ class YaleLockCoordinator(DataUpdateCoordinator):
             self._user_data["users"][str(slot)]["synced_to_lock"] = False  # Needs push
             await self.async_save_user_data()
             await self.async_request_refresh()
+
+    async def async_set_user_status(self, slot: int, status: int) -> None:
+        """Set user status (0=Available, 1=Enabled, 2=Disabled)."""
+        slot_str = str(slot)
+        if slot_str not in self._user_data["users"]:
+            raise ValueError(f"User slot {slot} not found")
+        
+        user_data = self._user_data["users"][slot_str]
+        user_data["lock_status"] = status  # Store cached status (editable)
+        user_data["enabled"] = (status == USER_STATUS_ENABLED)  # For backward compatibility
+        
+        # Check if status matches lock status
+        lock_status = user_data.get("lock_status_from_lock")
+        if lock_status is not None:
+            user_data["synced_to_lock"] = (status == lock_status)
+        else:
+            user_data["synced_to_lock"] = False  # Unknown lock status, assume not synced
+        
+        await self.async_save_user_data()
+        await self.async_request_refresh()
+        
+        _LOGGER.info("Set cached status for slot %s: %s (lock_status=%s, synced=%s)", 
+                     slot, status, lock_status, user_data["synced_to_lock"])
 
     async def async_set_user_schedule(
         self,
@@ -953,18 +978,22 @@ class YaleLockCoordinator(DataUpdateCoordinator):
                 # Update existing - store lock_code and check sync status
                 user_data = self._user_data["users"][slot_str]
                 user_data["lock_code"] = code if code else ""  # Store PIN from lock
-                user_data["lock_status"] = status  # Store full status (0=Available, 1=Enabled, 2=Disabled)
+                user_data["lock_status_from_lock"] = status  # Store status from lock (read-only)
+                # Preserve cached status if it exists, otherwise set it to match lock
+                if "lock_status" not in user_data or user_data.get("lock_status") is None:
+                    user_data["lock_status"] = status  # Initialize cached status from lock
                 user_data["lock_enabled"] = status == USER_STATUS_ENABLED  # Store enabled status from lock (for compatibility)
                 
-                # Check if cached code matches lock code (for PINs only)
+                # Check if cached code and status match lock (for PINs only)
                 if user_data.get("code_type") == CODE_TYPE_PIN:
                     cached_code = user_data.get("code", "")
                     lock_code = user_data.get("lock_code", "")
-                    user_data["synced_to_lock"] = (cached_code == lock_code and 
-                                                  user_data.get("enabled") == user_data.get("lock_enabled"))
+                    cached_status = user_data.get("lock_status", status)
+                    user_data["synced_to_lock"] = (cached_code == lock_code and cached_status == status)
                 else:
-                    # For FOBs, just check enabled status
-                    user_data["synced_to_lock"] = (user_data.get("enabled") == user_data.get("lock_enabled"))
+                    # For FOBs, just check status
+                    cached_status = user_data.get("lock_status", status)
+                    user_data["synced_to_lock"] = (cached_status == status)
                 
                 _LOGGER.info("Slot %s updated - Cached: %s, Lock: %s, Synced: %s", 
                            slot, "***" if user_data.get("code") else "None", 
@@ -1040,38 +1069,40 @@ class YaleLockCoordinator(DataUpdateCoordinator):
         else:
             lock_code = ""
         
-        # Update lock_code and lock_status in user data
+        # Update lock_code and lock_status_from_lock in user data (read-only from lock)
         user_data["lock_code"] = lock_code
-        user_data["lock_status"] = lock_status
+        user_data["lock_status_from_lock"] = lock_status  # Status from lock (read-only)
         user_data["lock_enabled"] = lock_status == USER_STATUS_ENABLED
+        
+        # Get cached status (what user has set locally)
+        cached_status = user_data.get("lock_status", USER_STATUS_ENABLED)
         
         # Compare cached values with lock values to determine sync status
         cached_code = user_data.get("code", "")
-        cached_enabled = user_data.get("enabled", False)
         
         if user_data.get("code_type") == CODE_TYPE_PIN:
-            # For PINs: compare code and enabled status
+            # For PINs: compare code and status
             codes_match = (cached_code == lock_code)
-            enabled_match = (cached_enabled == user_data.get("lock_enabled", False))
-            user_data["synced_to_lock"] = codes_match and enabled_match
+            status_match = (cached_status == lock_status)
+            user_data["synced_to_lock"] = codes_match and status_match
             
             _LOGGER.info(
-                "Slot %s sync check - Cached: %s, Lock: %s, Enabled match: %s, Synced: %s",
+                "Slot %s sync check - Cached: %s, Lock: %s, Status match: %s, Synced: %s",
                 slot,
                 "***" if cached_code else "None",
                 "***" if lock_code else "None",
-                enabled_match,
+                status_match,
                 user_data["synced_to_lock"]
             )
         else:
-            # For FOBs: just compare enabled status
-            enabled_match = (cached_enabled == user_data.get("lock_enabled", False))
-            user_data["synced_to_lock"] = enabled_match
+            # For FOBs: just compare status
+            status_match = (cached_status == lock_status)
+            user_data["synced_to_lock"] = status_match
             
             _LOGGER.info(
-                "Slot %s sync check (FOB) - Enabled match: %s, Synced: %s",
+                "Slot %s sync check (FOB) - Status match: %s, Synced: %s",
                 slot,
-                enabled_match,
+                status_match,
                 user_data["synced_to_lock"]
             )
         

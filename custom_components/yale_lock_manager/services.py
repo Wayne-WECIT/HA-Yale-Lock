@@ -34,6 +34,10 @@ from .const import (
     SERVICE_SET_USER_CODE,
     SERVICE_SET_USER_SCHEDULE,
     SERVICE_CHECK_SYNC_STATUS,
+    SERVICE_SET_USER_STATUS,
+    USER_STATUS_AVAILABLE,
+    USER_STATUS_DISABLED,
+    USER_STATUS_ENABLED,
 )
 from .coordinator import YaleLockCoordinator
 
@@ -92,6 +96,14 @@ CHECK_SYNC_STATUS_SCHEMA = vol.Schema(
     {
         vol.Optional("entity_id"): cv.entity_id,
         vol.Required(ATTR_SLOT): vol.All(vol.Coerce(int), vol.Range(min=1, max=MAX_USER_SLOTS)),
+    }
+)
+
+SET_USER_STATUS_SCHEMA = vol.Schema(
+    {
+        vol.Optional("entity_id"): cv.entity_id,
+        vol.Required(ATTR_SLOT): vol.All(vol.Coerce(int), vol.Range(min=1, max=MAX_USER_SLOTS)),
+        vol.Required(ATTR_STATUS): vol.In([USER_STATUS_AVAILABLE, USER_STATUS_ENABLED, USER_STATUS_DISABLED]),
     }
 )
 
@@ -236,6 +248,19 @@ async def async_setup_services(hass: HomeAssistant) -> None:
         except Exception as err:
             _LOGGER.error("Error checking sync status: %s", err)
             raise HomeAssistantError(f"Failed to check sync status: {err}") from err
+
+    async def handle_set_user_status(call: ServiceCall) -> None:
+        """Handle set user status service call."""
+        coordinator = get_coordinator()
+        slot = call.data[ATTR_SLOT]
+        status = call.data[ATTR_STATUS]
+
+        try:
+            await coordinator.async_set_user_status(slot, status)
+            _LOGGER.info("Set status for slot %s: %s", slot, status)
+        except Exception as err:
+            _LOGGER.error("Error setting user status: %s", err)
+            raise HomeAssistantError(f"Failed to set user status: {err}") from err
 
     async def handle_enable_user(call: ServiceCall) -> None:
         """Handle enable user service call."""
