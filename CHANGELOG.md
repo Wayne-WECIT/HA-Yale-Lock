@@ -20,6 +20,68 @@ Use `lock.smart_door_lock_manager` for the Lovelace card!
 
 ---
 
+## [1.8.2.39] - 2026-01-22
+
+### 🐛 Bug Fix - Lock Code Field Updates After Push
+
+**Issue**: After successfully pushing a code to the lock, the lock code field wasn't updating in the UI when the slot was expanded, or it was updating but destroying form inputs.
+
+### The Fix
+
+- **Card & Panel**: Fixed `pushCode()` to not call `render()` when slot is expanded
+- **Card & Panel**: Use `_updateNonEditableParts()` to update only the lock code field after push
+- Preserves form inputs while updating read-only lock fields
+
+### Changed
+
+- **Frontend (`yale-lock-manager-card.js` & `yale-lock-manager-panel.js`)**:
+  - Modified `pushCode()` to check if slot is expanded before calling `render()`
+  - If slot is expanded: call `_updateNonEditableParts()` to update lock fields only
+  - If slot not expanded: safe to call `render()` normally
+
+### What's Fixed
+
+- ✅ Lock code field now updates correctly after successful push verification
+- ✅ Form inputs preserved when updating lock fields after push
+- ✅ Lock PIN field shows the verified code from the lock
+- ✅ Lock status field updates with verified status
+
+---
+
+## [1.8.2.38] - 2026-01-22
+
+### 🐛 CRITICAL FIX - Stop Re-rendering When Slot is Expanded
+
+**Issue**: `set hass()` was calling `render()` on every entity state update, which destroyed and recreated all DOM elements, wiping out form inputs while the user was typing.
+
+### The Fix
+
+**Conditional rendering based on expanded slot**:
+- When **no slot is expanded**: Normal `render()` (safe)
+- When **slot is expanded**: Only update non-editable parts via `_updateNonEditableParts()`
+
+### Changed
+
+- **Frontend (`yale-lock-manager-card.js` & `yale-lock-manager-panel.js`)**:
+  - Modified `set hass()` to check if slot is expanded before rendering
+  - Added `_updateNonEditableParts()` method to update only:
+    - Status badges in table
+    - Sync indicators
+    - Lock PIN/Status fields (read-only)
+    - Battery/door status in header
+    - User count
+  - Form inputs are **never touched** when slot is expanded
+
+### What's Fixed
+
+- ✅ Form fields no longer revert while typing
+- ✅ User input preserved during entity state updates
+- ✅ Lock fields still update correctly (read-only fields)
+- ✅ Status indicators update in real-time
+- ✅ Card and panel both work correctly
+
+---
+
 ## [1.8.2.37] - 2026-01-22
 
 ### 🐛 Bug Fix - via_device Warning
