@@ -2,6 +2,56 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.8.2.43] - 2026-01-25
+
+### 🔄 Refactor - Entity State as Source of Truth
+
+**User feedback**: "after every button push should you rerender the values for that slot from the cached data? and after the status/pin change has been pushed to the lock then pull the pin and status from the lock and store in the lock cache and rerender the values again. what you are doing isnt working maybe you need to think and do a new approche like above"
+
+### The Solution
+
+Completely refactored the UI update logic to use **entity state as the single source of truth**. After every operation (save, push, refresh), the UI now polls for entity state updates and re-renders slot values directly from the cached entity state.
+
+### Features
+
+- **New `_updateSlotFromEntityState(slot)` Method**: Centralized method that updates a slot's form fields from entity state. Handles both expanded (direct field updates) and collapsed (full render) slots.
+- **Polling-Based Updates**: After save/push operations, the UI polls for entity state updates (up to 4.5 seconds) before refreshing, ensuring data consistency.
+- **Simplified Logic**: Removed complex `_formValues` syncing and form value preservation logic. Entity state is now the authoritative source.
+
+### Changed
+
+- **Frontend (`yale-lock-manager-card.js` & `yale-lock-manager-panel.js`)**:
+  - **New Method**: Added `_updateSlotFromEntityState(slot)` that:
+    - Updates cached fields (name, code, status) from entity state
+    - Updates lock fields (read-only) from entity state
+    - Updates `_formValues` to match entity state
+    - Updates sync indicators and status badges
+    - Clears unsaved changes warnings
+    - Handles both expanded and collapsed slots appropriately
+  - **`saveUser()` Method**:
+    - After successful save, polls for entity state update (checks if `name` and `code` match saved values)
+    - Once entity state is confirmed updated, calls `_updateSlotFromEntityState(slot)` to refresh UI
+    - Applied to both normal save and override protection flow
+  - **`pushCode()` Method**:
+    - After successful push, polls for entity state update (checks if `lock_code` has been updated)
+    - Once entity state is confirmed updated, calls `_updateSlotFromEntityState(slot)` to refresh UI
+  - **Refresh Complete Handler**:
+    - Polls for entity state update (checks if user data exists)
+    - Once entity state is confirmed updated, refreshes UI (full render if no slot expanded, or updates expanded slot)
+  - **`refresh()` Method**:
+    - Removed conflicting `setTimeout(() => this.render(), 500)` call
+    - UI refresh is now solely handled by the complete event handler
+
+### What's Fixed
+
+- ✅ Form fields now correctly update from entity state after save operations
+- ✅ Lock PIN and status fields correctly update after push operations
+- ✅ UI correctly refreshes after full refresh from lock
+- ✅ Simplified, more reliable update logic using entity state as source of truth
+- ✅ Consistent behavior across all operations (save, push, refresh)
+
+---
+
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 

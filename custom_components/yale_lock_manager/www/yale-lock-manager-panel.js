@@ -114,14 +114,34 @@ class YaleLockManagerPanel extends HTMLElement {
       );
       this.renderStatusMessage(0); // Explicitly render
       
-      // Refresh the UI to show new data
+      // Refresh the UI to show new data - poll for entity state update
       setTimeout(() => {
-        if (this._expandedSlot === null) {
-          this.render(); // Full refresh to show new data
-        } else {
-          this._updateNonEditableParts(); // Update non-editable parts only
-        }
-      }, 1000); // Wait a bit for entity state to update
+        // Poll for entity state update
+        let attempts = 0;
+        const maxAttempts = 15; // Wait up to 4.5 seconds
+        const checkInterval = setInterval(() => {
+          attempts++;
+          const stateObj = this._hass?.states[this._config?.entity];
+          const users = stateObj?.attributes?.users || {};
+          
+          // Check if we have updated user data
+          const totalUsers = stateObj?.attributes?.total_users || 0;
+          const hasUserData = Object.keys(users).length > 0;
+          
+          // If we have user data or we've tried enough times, refresh
+          if (hasUserData || attempts >= maxAttempts) {
+            clearInterval(checkInterval);
+            
+            // Refresh all slots from entity state
+            if (this._expandedSlot === null) {
+              this.render(); // Full refresh to show new data
+            } else {
+              // Update the expanded slot from entity state
+              this._updateSlotFromEntityState(this._expandedSlot);
+            }
+          }
+        }, 300); // Check every 300ms
+      }, 500); // Start polling after 500ms
       
       // Clear progress after a delay
       setTimeout(() => {
@@ -189,6 +209,47 @@ class YaleLockManagerPanel extends HTMLElement {
     }
   }
   
+  _updateSlotFromEntityState(slot) {
+    /**
+     * Update a slot's form fields from entity state (source of truth).
+     * This is called after save/push operations to refresh the UI with latest data.
+     */
+    const user = this.getUserData().find(u => u.slot === slot);
+    if (!user) return;
+    
+    if (this._expandedSlot === slot) {
+      // Slot is expanded - update form fields directly (don't destroy DOM)
+      const nameField = this.querySelector(`#name-${slot}`);
+      const codeField = this.querySelector(`#code-${slot}`);
+      const statusField = this.querySelector(`#cached-status-${slot}`);
+      const lockCodeField = this.querySelector(`#lock-code-${slot}`);
+      const lockStatusField = this.querySelector(`#lock-status-${slot}`);
+      
+      // Update cached fields from entity state
+      if (nameField) nameField.value = user.name || '';
+      if (codeField) codeField.value = user.code || '';
+      if (statusField) {
+        const cachedStatus = user.lock_status !== null && user.lock_status !== undefined 
+          ? user.lock_status 
+          : (user.enabled ? 1 : 2);
+        statusField.value = cachedStatus.toString();
+      }
+      
+      // Update lock fields (read-only) from entity state
+      if (lockCodeField) lockCodeField.value = user.lock_code || '';
+      if (lockStatusField) {
+        const lockStatus = user.lock_status_from_lock ?? user.lock_status;
+        lockStatusField.value = lockStatus !== null && lockStatus !== undefined ? lockStatus.toString() : '0';
+      }
+      
+      // Update sync indicators and status badges
+      this._updateNonEditableParts();
+    } else {
+      // Slot not expanded - safe to do full render
+      this.render();
+    }
+  }
+
   _updateNonEditableParts() {
     // Update only non-editable parts when slot is expanded
     if (!this._hass || !this._config?.entity) return;
@@ -1179,36 +1240,25 @@ class YaleLockManagerPanel extends HTMLElement {
         this.showStatus(slot, '✅ All complete! Code pushed and verified successfully!', 'success');
         this.renderStatusMessage(slot);
         
-        // Wait for entity state to update with pulled lock data, then update UI
+        // Backend has already pulled from lock and updated entity state
+        // Wait for entity state to update, then re-render slot from cached data
         setTimeout(() => {
-          // Poll for entity state update
+          // Poll for entity state update (check if lock_code has been updated)
           let attempts = 0;
-          const maxAttempts = 10;
+          const maxAttempts = 15; // Wait up to 4.5 seconds
           const checkInterval = setInterval(() => {
             attempts++;
             const updatedUser = this.getUserData().find(u => u.slot === slot);
-            const lockCodeField = this.querySelector(`#lock-code-${slot}`);
-            const lockStatusField = this.querySelector(`#lock-status-${slot}`);
             
-            if (updatedUser && lockCodeField && updatedUser.lock_code !== undefined) {
-              // Entity state has updated, update the fields
-              lockCodeField.value = updatedUser.lock_code || '';
-              if (lockStatusField) {
-                const lockStatus = updatedUser.lock_status_from_lock ?? updatedUser.lock_status;
-                lockStatusField.value = lockStatus !== null && lockStatus !== undefined ? lockStatus.toString() : '0';
-              }
+            // Check if lock_code has been updated (backend pulls this after push)
+            if (updatedUser && updatedUser.lock_code !== undefined && updatedUser.lock_code !== null) {
               clearInterval(checkInterval);
-              
-              // Update other lock fields too
-              if (this._expandedSlot === slot) {
-                this._updateNonEditableParts();
-              }
+              // Entity state updated with lock data - re-render slot from cached data
+              this._updateSlotFromEntityState(slot);
             } else if (attempts >= maxAttempts) {
-              // Timeout - force update anyway
+              // Timeout - update anyway
               clearInterval(checkInterval);
-              if (this._expandedSlot === slot) {
-                this._updateNonEditableParts();
-              }
+              this._updateSlotFromEntityState(slot);
             }
           }, 300); // Check every 300ms
         }, 500);
@@ -1324,27 +1374,41 @@ class YaleLockManagerPanel extends HTMLElement {
         this.showStatus(slot, '✅ User saved successfully!', 'success');
       }
       
-      // With uncontrolled pattern, field values persist in DOM
-      // Don't re-render - only update status messages and lock fields (read-only)
-      // Editable fields stay as user typed them
+      // Wait for entity state to update, then re-render slot from cached data
       setTimeout(() => {
-        // Update status message container only
-        const statusContainer = this.querySelector(`#status-${slot}`);
-        if (statusContainer && this._statusMessages[slot]) {
-          statusContainer.innerHTML = this.renderStatusMessage(slot);
-        }
-        // Update lock fields (read-only) - these can be updated
-        const lockCodeField = this.querySelector(`#lock-code-${slot}`);
-        const lockStatusField = this.querySelector(`#lock-status-${slot}`);
-        const newUser = this.getUserData().find(u => u.slot === slot);
-        if (newUser) {
-          if (lockCodeField) lockCodeField.value = newUser.lock_code || '';
-          if (lockStatusField) {
-            const lockStatus = newUser.lock_status_from_lock ?? newUser.lock_status;
-            lockStatusField.value = lockStatus !== null && lockStatus !== undefined ? lockStatus.toString() : '0';
+        // Poll for entity state update
+        let attempts = 0;
+        const maxAttempts = 15; // Wait up to 4.5 seconds
+        const checkInterval = setInterval(() => {
+          attempts++;
+          const updatedUser = this.getUserData().find(u => u.slot === slot);
+          
+          // Check if entity state has our saved values
+          if (updatedUser && updatedUser.name === name && updatedUser.code === code) {
+            clearInterval(checkInterval);
+            // Entity state updated - re-render slot from cached data
+            this._updateSlotFromEntityState(slot);
+            
+            // Show success message
+            const codesMatch = codeType === 'pin' ? (code === (updatedUser.lock_code || '')) : true;
+            const statusMatch = updatedUser.lock_status_from_lock !== null && updatedUser.lock_status_from_lock !== undefined
+              ? (cachedStatus === updatedUser.lock_status_from_lock)
+              : false;
+            const isSynced = codesMatch && statusMatch;
+            
+            if (!isSynced && codeType === 'pin') {
+              this.showStatus(slot, '✅ User saved! ⚠️ Push required to sync with lock.', 'warning');
+            } else {
+              this.showStatus(slot, '✅ User saved successfully!', 'success');
+            }
+          } else if (attempts >= maxAttempts) {
+            // Timeout - update anyway
+            clearInterval(checkInterval);
+            this._updateSlotFromEntityState(slot);
+            this.showStatus(slot, '✅ User saved successfully!', 'success');
           }
-        }
-      }, 500);
+        }, 300); // Check every 300ms
+      }, 500); // Start polling after 500ms
       
     } catch (error) {
       if (error.message && error.message.includes('occupied by an unknown code')) {
@@ -1360,7 +1424,28 @@ class YaleLockManagerPanel extends HTMLElement {
               status: cachedStatus
             });
             this.showStatus(slot, '✅ User saved successfully!', 'success');
-            setTimeout(() => this.render(), 500);
+            
+            // Wait for entity state to update, then re-render slot from cached data
+            setTimeout(() => {
+              // Poll for entity state update
+              let attempts = 0;
+              const maxAttempts = 15;
+              const checkInterval = setInterval(() => {
+                attempts++;
+                const updatedUser = this.getUserData().find(u => u.slot === slot);
+                
+                // Check if entity state has our saved values
+                if (updatedUser && updatedUser.name === name && updatedUser.code === code) {
+                  clearInterval(checkInterval);
+                  // Entity state updated - re-render slot from cached data
+                  this._updateSlotFromEntityState(slot);
+                } else if (attempts >= maxAttempts) {
+                  // Timeout - update anyway
+                  clearInterval(checkInterval);
+                  this._updateSlotFromEntityState(slot);
+                }
+              }, 300);
+            }, 500);
           } catch (retryError) {
             this.showStatus(slot, `Failed: ${retryError.message}`, 'error');
           }
