@@ -36,6 +36,7 @@ from .const import (
     EVENT_ACCESS,
     EVENT_CODE_EXPIRED,
     EVENT_LOCKED,
+    EVENT_REFRESH_PROGRESS,
     EVENT_UNLOCKED,
     EVENT_USAGE_LIMIT_REACHED,
     MAX_USER_SLOTS,
@@ -1023,12 +1024,33 @@ class YaleLockCoordinator(DataUpdateCoordinator):
     async def async_pull_codes_from_lock(self) -> None:
         """Pull all codes from the lock and update our data."""
         _LOGGER.info("=== REFRESH: Pulling codes from lock - scanning all %s slots ===", MAX_USER_SLOTS)
+        
+        # Fire start event
+        self._fire_event(EVENT_REFRESH_PROGRESS, {
+            "action": "start",
+            "total_slots": MAX_USER_SLOTS,
+            "current_slot": 0,
+            "codes_found": 0,
+            "codes_new": 0,
+            "codes_updated": 0,
+        })
+        
         codes_found = 0
         codes_updated = 0
         codes_new = 0
 
         for slot in range(1, MAX_USER_SLOTS + 1):
             _LOGGER.debug("Checking slot %s...", slot)
+            
+            # Fire progress event before processing slot
+            self._fire_event(EVENT_REFRESH_PROGRESS, {
+                "action": "progress",
+                "total_slots": MAX_USER_SLOTS,
+                "current_slot": slot,
+                "codes_found": codes_found,
+                "codes_new": codes_new,
+                "codes_updated": codes_updated,
+            })
             
             # Use _get_user_code_data to get both status and code in one call
             data = await self._get_user_code_data(slot)
@@ -1116,6 +1138,16 @@ class YaleLockCoordinator(DataUpdateCoordinator):
             codes_new, 
             codes_updated
         )
+
+        # Fire complete event
+        self._fire_event(EVENT_REFRESH_PROGRESS, {
+            "action": "complete",
+            "total_slots": MAX_USER_SLOTS,
+            "current_slot": MAX_USER_SLOTS,
+            "codes_found": codes_found,
+            "codes_new": codes_new,
+            "codes_updated": codes_updated,
+        })
 
         await self.async_save_user_data()
         await self.async_request_refresh()

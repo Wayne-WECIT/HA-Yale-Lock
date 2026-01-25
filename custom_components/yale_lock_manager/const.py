@@ -2,7 +2,7 @@
 from typing import Final
 
 DOMAIN: Final = "yale_lock_manager"
-VERSION: Final = "1.8.2.39"
+VERSION: Final = "1.8.2.40"
 
 # Z-Wave JS Domain
 ZWAVE_JS_DOMAIN: Final = "zwave_js"
@@ -68,6 +68,7 @@ EVENT_UNLOCKED: Final = f"{DOMAIN}_unlocked"
 EVENT_CODE_EXPIRED: Final = f"{DOMAIN}_code_expired"
 EVENT_USAGE_LIMIT_REACHED: Final = f"{DOMAIN}_usage_limit_reached"
 EVENT_JAMMED: Final = f"{DOMAIN}_jammed"
+EVENT_REFRESH_PROGRESS: Final = f"{DOMAIN}_refresh_progress"
 
 # Services
 SERVICE_SET_USER_CODE: Final = "set_user_code"

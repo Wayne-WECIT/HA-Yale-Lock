@@ -19,10 +19,18 @@ class YaleLockManagerPanel extends HTMLElement {
     this._showClearCacheConfirm = false;
     this._initializedFields = {}; // Track which fields have been initialized (uncontrolled pattern)
     // Format: { slot: { name: true, code: true, ... } }
+    this._refreshProgressListener = null; // Event listener for refresh progress
+    this._refreshProgress = null; // Current refresh progress data
   }
 
   set hass(hass) {
     this._hass = hass;
+    
+    // Subscribe to refresh progress events when hass is first set
+    if (hass && !this._refreshProgressListener && hass.connection) {
+      this._subscribeToRefreshProgress();
+    }
+    
     // Auto-find entity if not set
     if (!this._config?.entity) {
       this._findLockEntity();
@@ -34,6 +42,105 @@ class YaleLockManagerPanel extends HTMLElement {
         // Slot is expanded - only update non-editable parts
         this._updateNonEditableParts();
       }
+    }
+  }
+  
+  connectedCallback() {
+    // Subscribe to events when component is connected
+    if (this._hass && this._hass.connection && !this._refreshProgressListener) {
+      this._subscribeToRefreshProgress();
+    }
+  }
+  
+  disconnectedCallback() {
+    // Unsubscribe from events when component is disconnected
+    if (this._refreshProgressListener) {
+      this._refreshProgressListener();
+      this._refreshProgressListener = null;
+    }
+  }
+  
+  _subscribeToRefreshProgress() {
+    if (!this._hass || !this._hass.connection) return;
+    
+    // Subscribe to refresh progress events
+    this._refreshProgressListener = this._hass.connection.subscribeEvents(
+      (event) => this._handleRefreshProgress(event),
+      "yale_lock_manager_refresh_progress"
+    );
+  }
+  
+  _handleRefreshProgress(event) {
+    const data = event.detail;
+    this._refreshProgress = data;
+    
+    // Update the progress display
+    this._updateRefreshProgress();
+    
+    // Also update status message for slot 0
+    if (data.action === "start") {
+      this.showStatus(0, `⏳ Starting refresh - scanning ${data.total_slots} slots...`, 'info');
+    } else if (data.action === "progress") {
+      const percent = Math.round((data.current_slot / data.total_slots) * 100);
+      this.showStatus(0, 
+        `⏳ Scanning slot ${data.current_slot}/${data.total_slots} (${percent}%)... ` +
+        `Found: ${data.codes_found} (${data.codes_new} new, ${data.codes_updated} updated)`, 
+        'info'
+      );
+    } else if (data.action === "complete") {
+      this.showStatus(0, 
+        `✅ Refresh complete! Found ${data.codes_found} codes (${data.codes_new} new, ${data.codes_updated} updated)`, 
+        'success'
+      );
+      // Clear progress after a delay
+      setTimeout(() => {
+        this._refreshProgress = null;
+        this._updateRefreshProgress();
+      }, 5000);
+    }
+  }
+  
+  _updateRefreshProgress() {
+    if (!this._refreshProgress) return;
+    
+    const progressContainer = this.querySelector('#refresh-progress');
+    if (!progressContainer) return;
+    
+    if (this._refreshProgress.action === "progress") {
+      const percent = (this._refreshProgress.current_slot / this._refreshProgress.total_slots) * 100;
+      progressContainer.innerHTML = `
+        <div style="margin: 8px 0;">
+          <div style="background: var(--divider-color, #e0e0e0); height: 8px; border-radius: 4px; overflow: hidden;">
+            <div style="background: var(--primary-color, #03a9f4); height: 100%; width: ${percent}%; transition: width 0.3s ease;"></div>
+          </div>
+          <div style="font-size: 0.85em; color: var(--secondary-text-color, #757575); margin-top: 4px; text-align: center;">
+            Slot ${this._refreshProgress.current_slot} of ${this._refreshProgress.total_slots}
+          </div>
+        </div>
+      `;
+      progressContainer.style.display = 'block';
+    } else if (this._refreshProgress.action === "complete" || this._refreshProgress.action === "start") {
+      // Keep progress bar visible during start and complete
+      if (this._refreshProgress.action === "start") {
+        progressContainer.innerHTML = `
+          <div style="margin: 8px 0;">
+            <div style="background: var(--divider-color, #e0e0e0); height: 8px; border-radius: 4px; overflow: hidden;">
+              <div style="background: var(--primary-color, #03a9f4); height: 100%; width: 0%; transition: width 0.3s ease;"></div>
+            </div>
+          </div>
+        `;
+      } else {
+        progressContainer.innerHTML = `
+          <div style="margin: 8px 0;">
+            <div style="background: var(--divider-color, #e0e0e0); height: 8px; border-radius: 4px; overflow: hidden;">
+              <div style="background: var(--primary-color, #03a9f4); height: 100%; width: 100%; transition: width 0.3s ease;"></div>
+            </div>
+          </div>
+        `;
+      }
+      progressContainer.style.display = 'block';
+    } else {
+      progressContainer.style.display = 'none';
     }
   }
   
@@ -189,6 +296,12 @@ class YaleLockManagerPanel extends HTMLElement {
             <button class="secondary" onclick="panel.refresh()">Refresh</button>
           </div>
         </div>
+        
+        <!-- Global status container for refresh progress -->
+        <div id="status-0" style="margin: 8px 0;"></div>
+        
+        <!-- Refresh progress bar -->
+        <div id="refresh-progress" style="display: none;"></div>
         
         <div style="display: flex; justify-content: space-between; margin-bottom: 16px; align-items: center;">
           <span style="font-size: 1.1em; font-weight: 500;">👥 ${enabledUsers} / ${totalUsers} active users</span>
@@ -915,16 +1028,27 @@ class YaleLockManagerPanel extends HTMLElement {
 
   async refresh() {
     try {
-      this.showStatus(0, '⏳ Refreshing codes from lock... This may take a moment.', 'info');
+      // Clear previous progress
+      this._refreshProgress = null;
+      this._updateRefreshProgress();
       
+      // Don't show initial message - events will handle progress updates
       await this._hass.callService('yale_lock_manager', 'pull_codes_from_lock', {
         entity_id: this._config.entity
       });
       
-      this.showStatus(0, '✅ Refreshed from lock successfully!', 'success');
+      // Success message is handled by the complete event
       // Don't re-initialize fields - preserve user input (uncontrolled pattern)
-      setTimeout(() => this.render(), 500);
+      setTimeout(() => {
+        if (this._expandedSlot === null) {
+          this.render();
+        } else {
+          this._updateNonEditableParts();
+        }
+      }, 500);
     } catch (error) {
+      this._refreshProgress = null;
+      this._updateRefreshProgress();
       this.showStatus(0, `❌ Refresh failed: ${error.message}`, 'error');
     }
   }

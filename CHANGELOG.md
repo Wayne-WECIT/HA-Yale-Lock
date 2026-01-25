@@ -20,6 +20,52 @@ Use `lock.smart_door_lock_manager` for the Lovelace card!
 
 ---
 
+## [1.8.2.40] - 2026-01-22
+
+### ✨ New Feature - Real-Time Refresh Progress Events
+
+**User feedback**: "we currently dont haveanything that tells you what is happening after we push the refresh button i think we shoul dhave somethign that shows the user that things are happening rather thatn a nothign your thoughts?"
+
+### The Solution
+
+Implemented **real-time progress events** that show exactly what's happening during the refresh operation. The backend fires progress events as each slot is processed, and the frontend displays a live progress bar and status updates.
+
+### Features
+
+- **Progress Bar**: Visual progress bar showing 0-100% completion
+- **Real-Time Updates**: Status updates as each slot (1-20) is processed
+- **Live Statistics**: Shows codes found, new codes, and updated codes in real-time
+- **Event-Driven**: Uses Home Assistant event bus for reliable communication
+
+### Changed
+
+- **Backend (`coordinator.py`)**:
+  - Added `EVENT_REFRESH_PROGRESS` event constant
+  - Modified `async_pull_codes_from_lock()` to fire progress events:
+    - "start" event at the beginning with total slots
+    - "progress" event after each slot is processed (includes current slot, codes found, new, updated)
+    - "complete" event at the end with final statistics
+
+- **Frontend (`yale-lock-manager-card.js` & `yale-lock-manager-panel.js`)**:
+  - Added event subscription via `hass.connection.subscribeEvents()`
+  - Added `_handleRefreshProgress()` to process progress events
+  - Added `_updateRefreshProgress()` to update progress bar UI
+  - Added `status-0` container for global status messages
+  - Added `refresh-progress` div for progress bar display
+  - Progress bar appears below header, between lock controls and user count
+  - Real-time updates show: "Scanning slot X/20 (XX%)... Found: N (X new, Y updated)"
+
+### What's Added
+
+- ✅ Real-time progress bar during refresh operations
+- ✅ Live status updates showing current slot being processed
+- ✅ Running totals of codes found, new, and updated
+- ✅ Visual feedback so users know the refresh is working
+- ✅ Progress bar auto-hides after completion
+- ✅ Works in both card and panel interfaces
+
+---
+
 ## [1.8.2.39] - 2026-01-22
 
 ### 🐛 Bug Fix - Lock Code Field Updates After Push
