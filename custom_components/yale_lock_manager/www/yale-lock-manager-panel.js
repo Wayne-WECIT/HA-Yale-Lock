@@ -113,6 +113,16 @@ class YaleLockManagerPanel extends HTMLElement {
         'success'
       );
       this.renderStatusMessage(0); // Explicitly render
+      
+      // Refresh the UI to show new data
+      setTimeout(() => {
+        if (this._expandedSlot === null) {
+          this.render(); // Full refresh to show new data
+        } else {
+          this._updateNonEditableParts(); // Update non-editable parts only
+        }
+      }, 1000); // Wait a bit for entity state to update
+      
       // Clear progress after a delay
       setTimeout(() => {
         this._refreshProgress = null;
@@ -1126,28 +1136,86 @@ class YaleLockManagerPanel extends HTMLElement {
     
     this.showStatus(slot, `Push "${user.name}" to the lock now?`, 'confirm', async () => {
       try {
+        // Step 1: Pushing code to lock
         this.showStatus(slot, '⏳ Pushing code to lock...', 'info');
+        this.renderStatusMessage(slot);
         
-        await this._hass.callService('yale_lock_manager', 'push_code_to_lock', {
+        // Start the push (this is async, but backend does all steps)
+        const pushPromise = this._hass.callService('yale_lock_manager', 'push_code_to_lock', {
           entity_id: this._config.entity,
           slot: parseInt(slot, 10)
         });
         
-        this.showStatus(slot, '✅ Code pushed successfully!', 'success');
+        // Step 2: Wait a bit, then show "waiting for lock to process"
+        setTimeout(() => {
+          if (this._statusMessages[slot]?.message?.includes('Pushing code to lock')) {
+            this.showStatus(slot, '⏳ Waiting for lock to process...', 'info');
+            this.renderStatusMessage(slot);
+          }
+        }, 1000);
+        
+        // Step 3: Show "rereading code from lock" (backend does this ~2 seconds after push)
+        setTimeout(() => {
+          if (this._statusMessages[slot]?.message?.includes('Waiting for lock to process') || 
+              this._statusMessages[slot]?.message?.includes('Pushing code to lock')) {
+            this.showStatus(slot, '⏳ Rereading code from lock...', 'info');
+            this.renderStatusMessage(slot);
+          }
+        }, 2500);
+        
+        // Step 4: Show "storing current lock code" (backend does this after verification)
+        setTimeout(() => {
+          if (this._statusMessages[slot]?.message?.includes('Rereading code from lock') ||
+              this._statusMessages[slot]?.message?.includes('Waiting for lock to process')) {
+            this.showStatus(slot, '⏳ Storing current lock code...', 'info');
+            this.renderStatusMessage(slot);
+          }
+        }, 4000);
+        
+        // Wait for push to complete
+        await pushPromise;
+        
+        // Step 5: All complete!
+        this.showStatus(slot, '✅ All complete! Code pushed and verified successfully!', 'success');
+        this.renderStatusMessage(slot);
         
         // Wait for entity state to update with pulled lock data, then update UI
-        // Don't call render() if slot is expanded - it will destroy form inputs
         setTimeout(() => {
-          if (this._expandedSlot === slot) {
-            // Slot is expanded - only update non-editable parts (lock fields)
-            this._updateNonEditableParts();
-          } else {
-            // Slot not expanded - safe to render
-            this.render();
-          }
-        }, 1500);
+          // Poll for entity state update
+          let attempts = 0;
+          const maxAttempts = 10;
+          const checkInterval = setInterval(() => {
+            attempts++;
+            const updatedUser = this.getUserData().find(u => u.slot === slot);
+            const lockCodeField = this.querySelector(`#lock-code-${slot}`);
+            const lockStatusField = this.querySelector(`#lock-status-${slot}`);
+            
+            if (updatedUser && lockCodeField && updatedUser.lock_code !== undefined) {
+              // Entity state has updated, update the fields
+              lockCodeField.value = updatedUser.lock_code || '';
+              if (lockStatusField) {
+                const lockStatus = updatedUser.lock_status_from_lock ?? updatedUser.lock_status;
+                lockStatusField.value = lockStatus !== null && lockStatus !== undefined ? lockStatus.toString() : '0';
+              }
+              clearInterval(checkInterval);
+              
+              // Update other lock fields too
+              if (this._expandedSlot === slot) {
+                this._updateNonEditableParts();
+              }
+            } else if (attempts >= maxAttempts) {
+              // Timeout - force update anyway
+              clearInterval(checkInterval);
+              if (this._expandedSlot === slot) {
+                this._updateNonEditableParts();
+              }
+            }
+          }, 300); // Check every 300ms
+        }, 500);
+        
       } catch (error) {
         this.showStatus(slot, `❌ Push failed: ${error.message}`, 'error');
+        this.renderStatusMessage(slot);
       }
     });
   }

@@ -20,6 +20,83 @@ Use `lock.smart_door_lock_manager` for the Lovelace card!
 
 ---
 
+## [1.8.2.42] - 2026-01-25
+
+### 🐛 Bug Fixes - Multiple UI and Data Sync Issues
+
+**User feedback**: Multiple issues reported:
+1. "after the refresh has completed we need to refresh the page so that the data becomes visible"
+2. "if the cached pin/status is changed to it needs to be monitored to see the change if it is noted tell the user that they need to commit the changes by clicking update user"
+3. "after the cached pin is changed and update user is clicked, then push is clicked the status of the process update but stays on 'Code pushed successfully' however the lock pin is not updated to the new pin on the lock"
+4. "if the page is refreshed the cached pin reverts to the old pin why is that, i thought update user set the cached pin into storage"
+5. "after the push is clicked and it is showing the messages do we have one that states things like rereading code from lock storing current lock code etc"
+
+### The Issues
+
+1. **Refresh complete not updating UI**: After refresh completed, the UI wasn't being refreshed to show new data
+2. **No unsaved changes monitoring**: Users could change cached PIN/status without being warned to save
+3. **Lock PIN not updating after push**: After push, the lock PIN field wasn't updating even though backend verified the code
+4. **Cached PIN reverting after page refresh**: Form values weren't being synced from entity state after save, causing old values to appear on refresh
+5. **Insufficient push status messages**: Push process didn't show detailed progress (rereading, storing, etc.)
+
+### The Fixes
+
+**1. Refresh Complete UI Update**:
+- Added UI refresh after refresh complete event fires
+- Waits 1 second for entity state to update, then refreshes UI
+- Works for both expanded and collapsed slots
+
+**2. Unsaved Changes Monitoring**:
+- Added `_checkForUnsavedChanges()` method to detect changes to cached PIN/status
+- Shows warning: "⚠️ You have unsaved changes. Click 'Update User' to save them."
+- Monitors changes in real-time as user types
+- Warning disappears when changes are saved
+
+**3. Lock PIN Update After Push**:
+- Added polling mechanism to check for entity state updates after push
+- Updates lock PIN and lock status fields when entity state updates
+- Polls every 300ms for up to 3 seconds
+- Falls back to `_updateNonEditableParts()` if polling times out
+
+**4. Form Value Sync After Save**:
+- After save succeeds, explicitly syncs `_formValues` from updated entity state
+- Updates form fields with saved values to prevent reverts
+- Clears unsaved changes warning after successful save
+- Applied to both normal save and override save flows
+
+**5. Enhanced Push Status Messages**:
+- Added detailed progress messages during push:
+  - "⏳ Pushing code to lock..."
+  - "⏳ Waiting for lock to process..." (after 1s)
+  - "⏳ Rereading code from lock..." (after 2.5s)
+  - "⏳ Storing current lock code..." (after 4s)
+  - "✅ All complete! Code pushed and verified successfully!" (when done)
+- Messages timed to match backend processing steps
+- Users know exactly what's happening and when it's safe to leave
+
+### Changed
+
+- **Frontend (`yale-lock-manager-card.js` & `yale-lock-manager-panel.js`)**:
+  - Added `_unsavedChanges` tracking object
+  - Added `_checkForUnsavedChanges()` method
+  - Updated `attachEventListeners()` to monitor cached PIN/status changes
+  - Added unsaved warning div in expanded slot UI
+  - Updated `saveUser()` to sync form values after save
+  - Updated `pushCode()` with detailed status messages and polling for lock PIN update
+  - Updated `toggleExpand()` to check for unsaved changes
+  - Updated refresh complete handler to refresh UI
+
+### What's Fixed
+
+- ✅ UI refreshes automatically after refresh completes
+- ✅ Users are warned about unsaved changes in real-time
+- ✅ Lock PIN field updates correctly after push
+- ✅ Cached PIN persists after page refresh (no more reverts)
+- ✅ Detailed push progress messages keep users informed
+- ✅ Users know when push is complete and safe to leave slot
+
+---
+
 ## [1.8.2.41] - 2026-01-25
 
 ### 🐛 Bug Fix - Refresh Progress Events Not Showing
