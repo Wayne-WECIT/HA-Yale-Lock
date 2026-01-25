@@ -20,7 +20,7 @@ Use `lock.smart_door_lock_manager` for the Lovelace card!
 
 ---
 
-## [1.8.2.40] - 2026-01-22
+## [1.8.2.40] - 2026-01-25
 
 ### ✨ New Feature - Real-Time Refresh Progress Events
 
