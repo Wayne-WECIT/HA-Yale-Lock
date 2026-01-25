@@ -1061,10 +1061,16 @@ class YaleLockManagerCard extends HTMLElement {
         // The push function already does this, but we need to wait for entity state to update
         this.showStatus(slot, '✅ Code pushed successfully!', 'success');
         
-        // Wait for entity state to update with pulled lock data, then refresh UI
-        // Form values stay the same, only lock fields update
+        // Wait for entity state to update with pulled lock data, then update UI
+        // Don't call render() if slot is expanded - it will destroy form inputs
         setTimeout(() => {
-          this.render();
+          if (this._expandedSlot === slot) {
+            // Slot is expanded - only update non-editable parts (lock fields)
+            this._updateNonEditableParts();
+          } else {
+            // Slot not expanded - safe to render
+            this.render();
+          }
         }, 1500);
       } catch (error) {
         this.showStatus(slot, `❌ Push failed: ${error.message}`, 'error');

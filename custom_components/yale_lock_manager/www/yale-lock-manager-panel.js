@@ -970,7 +970,18 @@ class YaleLockManagerPanel extends HTMLElement {
         });
         
         this.showStatus(slot, '✅ Code pushed successfully!', 'success');
-        setTimeout(() => this.render(), 1500);
+        
+        // Wait for entity state to update with pulled lock data, then update UI
+        // Don't call render() if slot is expanded - it will destroy form inputs
+        setTimeout(() => {
+          if (this._expandedSlot === slot) {
+            // Slot is expanded - only update non-editable parts (lock fields)
+            this._updateNonEditableParts();
+          } else {
+            // Slot not expanded - safe to render
+            this.render();
+          }
+        }, 1500);
       } catch (error) {
         this.showStatus(slot, `❌ Push failed: ${error.message}`, 'error');
       }
