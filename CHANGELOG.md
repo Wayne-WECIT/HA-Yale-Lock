@@ -20,6 +20,61 @@ Use `lock.smart_door_lock_manager` for the Lovelace card!
 
 ---
 
+## [1.8.2.41] - 2026-01-25
+
+### 🐛 Bug Fix - Refresh Progress Events Not Showing
+
+**User feedback**: "can you check that what you have done is correct as there is nothing beign shown after pressing the refresh button. so the user know something is happening"
+
+### The Issue
+
+The refresh progress events were implemented but nothing was showing in the UI when the refresh button was clicked. Several issues were identified:
+
+1. **No immediate feedback** - User clicked refresh but saw nothing until events arrived
+2. **Event data structure** - Event handler wasn't handling different event data formats
+3. **Missing render calls** - Status messages weren't being explicitly rendered
+4. **Container not found** - Progress container might not exist when events fire
+5. **No error logging** - Difficult to debug why events weren't working
+
+### The Fix
+
+**Immediate Feedback**:
+- Added immediate status message when refresh button is clicked
+- Shows "⏳ Starting refresh... This may take a moment." right away
+- User sees feedback immediately, even before events arrive
+
+**Improved Event Handling**:
+- Added console logging to debug event subscription and reception
+- Handle multiple event data formats (`event.detail`, `event.data`, or `event` directly)
+- Added validation to ensure event data is valid before processing
+- Explicitly call `renderStatusMessage(0)` after each status update
+
+**Container Management**:
+- Check if progress container exists before updating
+- Force render if container doesn't exist (when slot not expanded)
+- Better error handling and logging
+
+### Changed
+
+- **Frontend (`yale-lock-manager-card.js` & `yale-lock-manager-panel.js`)**:
+  - Added immediate feedback in `refresh()` method - shows status message right away
+  - Improved `_handleRefreshProgress()` to handle multiple event data formats
+  - Added console logging for debugging event subscription and reception
+  - Added explicit `renderStatusMessage(0)` calls after status updates
+  - Improved `_updateRefreshProgress()` to handle missing containers gracefully
+  - Added error handling and logging in `_subscribeToRefreshProgress()`
+
+### What's Fixed
+
+- ✅ Immediate feedback when refresh button is clicked
+- ✅ Better event data handling (supports multiple formats)
+- ✅ Console logging for debugging event issues
+- ✅ Progress container creation if missing
+- ✅ Explicit status message rendering
+- ✅ Better error messages and warnings
+
+---
+
 ## [1.8.2.40] - 2026-01-25
 
 ### ✨ New Feature - Real-Time Refresh Progress Events

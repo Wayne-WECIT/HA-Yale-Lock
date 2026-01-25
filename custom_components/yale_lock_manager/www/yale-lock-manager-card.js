@@ -67,17 +67,35 @@ class YaleLockManagerCard extends HTMLElement {
   }
   
   _subscribeToRefreshProgress() {
-    if (!this._hass || !this._hass.connection) return;
+    if (!this._hass || !this._hass.connection) {
+      console.warn('[Yale Lock Manager] Cannot subscribe to events: hass.connection not available');
+      return;
+    }
     
-    // Subscribe to refresh progress events
-    this._refreshProgressListener = this._hass.connection.subscribeEvents(
-      (event) => this._handleRefreshProgress(event),
-      "yale_lock_manager_refresh_progress"
-    );
+    try {
+      // Subscribe to refresh progress events
+      this._refreshProgressListener = this._hass.connection.subscribeEvents(
+        (event) => {
+          console.log('[Yale Lock Manager] Refresh progress event received:', event);
+          this._handleRefreshProgress(event);
+        },
+        "yale_lock_manager_refresh_progress"
+      );
+      console.log('[Yale Lock Manager] Subscribed to refresh progress events');
+    } catch (error) {
+      console.error('[Yale Lock Manager] Failed to subscribe to refresh progress events:', error);
+    }
   }
   
   _handleRefreshProgress(event) {
-    const data = event.detail;
+    console.log('[Yale Lock Manager] Handling refresh progress event:', event);
+    // Try both event.detail and event.data (different event structures)
+    const data = event.detail || event.data || event;
+    if (!data || !data.action) {
+      console.error('[Yale Lock Manager] Invalid refresh progress event data:', event);
+      return;
+    }
+    
     this._refreshProgress = data;
     
     // Update the progress display
@@ -86,6 +104,7 @@ class YaleLockManagerCard extends HTMLElement {
     // Also update status message for slot 0
     if (data.action === "start") {
       this.showStatus(0, `⏳ Starting refresh - scanning ${data.total_slots} slots...`, 'info');
+      this.renderStatusMessage(0); // Explicitly render
     } else if (data.action === "progress") {
       const percent = Math.round((data.current_slot / data.total_slots) * 100);
       this.showStatus(0, 
@@ -93,11 +112,13 @@ class YaleLockManagerCard extends HTMLElement {
         `Found: ${data.codes_found} (${data.codes_new} new, ${data.codes_updated} updated)`, 
         'info'
       );
+      this.renderStatusMessage(0); // Explicitly render
     } else if (data.action === "complete") {
       this.showStatus(0, 
         `✅ Refresh complete! Found ${data.codes_found} codes (${data.codes_new} new, ${data.codes_updated} updated)`, 
         'success'
       );
+      this.renderStatusMessage(0); // Explicitly render
       // Clear progress after a delay
       setTimeout(() => {
         this._refreshProgress = null;
@@ -109,8 +130,22 @@ class YaleLockManagerCard extends HTMLElement {
   _updateRefreshProgress() {
     if (!this._refreshProgress || !this.shadowRoot) return;
     
-    const progressContainer = this.shadowRoot.querySelector('#refresh-progress');
-    if (!progressContainer) return;
+    let progressContainer = this.shadowRoot.querySelector('#refresh-progress');
+    if (!progressContainer) {
+      console.warn('[Yale Lock Manager] Progress container not found, ensuring render...');
+      // Force a render to create containers if they don't exist
+      if (this._expandedSlot === null) {
+        this.render();
+        // Try again after render
+        progressContainer = this.shadowRoot.querySelector('#refresh-progress');
+        if (!progressContainer) {
+          console.error('[Yale Lock Manager] Progress container still not found after render');
+          return;
+        }
+      } else {
+        return;
+      }
+    }
     
     if (this._refreshProgress.action === "progress") {
       const percent = (this._refreshProgress.current_slot / this._refreshProgress.total_slots) * 100;
@@ -1111,7 +1146,11 @@ class YaleLockManagerCard extends HTMLElement {
       this._refreshProgress = null;
       this._updateRefreshProgress();
       
-      // Don't show initial message - events will handle progress updates
+      // IMMEDIATE FEEDBACK - show status right away so user knows something is happening
+      this.showStatus(0, '⏳ Starting refresh... This may take a moment.', 'info');
+      this.renderStatusMessage(0);
+      
+      // Events will handle progress updates, but we show immediate feedback first
       await this._hass.callService('yale_lock_manager', 'pull_codes_from_lock', {
         entity_id: this._config.entity
       });
