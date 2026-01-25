@@ -2,6 +2,58 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.8.2.44] - 2026-01-25
+
+### 🔄 Refactor - Simplified Value Refresh with Focus Protection
+
+**User feedback**: "nothing is working what i have been asking you, regarding the refreshing of values" and "when updating the pin or the status will the hass auto refreshes cause the values from being enter to be cleared/changed to the cached values?"
+
+### The Solution
+
+Replaced complex polling-based value refresh with a simpler, more reliable approach that directly updates the UI after operations complete. Added critical focus protection to prevent overwriting user input while typing.
+
+### Features
+
+- **Focus Protection**: Editable fields (name, code, status) are only updated if they don't have focus, preventing overwriting user input while typing
+- **Simplified Updates**: Removed complex polling logic - now uses simple delays after operations complete
+- **Enhanced `_updateSlotFromEntityState()`**: 
+  - Checks `document.activeElement` before updating editable fields
+  - Always updates lock fields (read-only) - safe to update anytime
+  - Updates schedule and usage limit fields if they exist
+  - Adds console logging for debugging
+
+### Changed
+
+- **Frontend (`yale-lock-manager-card.js` & `yale-lock-manager-panel.js`)**:
+  - **`_updateSlotFromEntityState()` Method**:
+    - Added focus checks: `if (document.activeElement !== field)` before updating editable fields
+    - Always updates lock fields (read-only) regardless of focus
+    - Updates schedule and usage limit fields with focus protection
+    - Added console logging for debugging missing elements
+  - **`saveUser()` Method**:
+    - Removed polling logic (15 attempts, 300ms intervals)
+    - Now uses simple 2-second delay after save completes
+    - Calls `_updateSlotFromEntityState(slot)` directly
+    - Applied to both normal save and override protection flow
+  - **`pushCode()` Method**:
+    - Removed polling logic (15 attempts, 300ms intervals)
+    - Now uses simple 2.5-second delay after push completes
+    - Calls `_updateSlotFromEntityState(slot)` directly
+  - **Refresh Complete Handler**:
+    - Removed polling logic
+    - Now uses simple 2-second delay
+    - Refreshes UI directly from entity state
+
+### What's Fixed
+
+- ✅ Form fields no longer overwrite user input while typing (focus protection)
+- ✅ Simplified, more reliable update logic (no complex polling)
+- ✅ Faster updates (no waiting for polling intervals)
+- ✅ Better debugging (console logging for missing elements)
+- ✅ Consistent behavior across all operations (save, push, refresh)
+
+---
+
 ## [1.8.2.43] - 2026-01-25
 
 ### 🔄 Refactor - Entity State as Source of Truth

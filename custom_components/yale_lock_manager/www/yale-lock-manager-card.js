@@ -121,34 +121,16 @@ class YaleLockManagerCard extends HTMLElement {
       );
       this.renderStatusMessage(0); // Explicitly render
       
-      // Refresh the UI to show new data - poll for entity state update
+      // Refresh the UI to show new data after entity state updates
       setTimeout(() => {
-        // Poll for entity state update
-        let attempts = 0;
-        const maxAttempts = 15; // Wait up to 4.5 seconds
-        const checkInterval = setInterval(() => {
-          attempts++;
-          const stateObj = this._hass?.states[this._config?.entity];
-          const users = stateObj?.attributes?.users || {};
-          
-          // Check if we have updated user data
-          const totalUsers = stateObj?.attributes?.total_users || 0;
-          const hasUserData = Object.keys(users).length > 0;
-          
-          // If we have user data or we've tried enough times, refresh
-          if (hasUserData || attempts >= maxAttempts) {
-            clearInterval(checkInterval);
-            
-            // Refresh all slots from entity state
-            if (this._expandedSlot === null) {
-              this.render(); // Full refresh to show new data
-            } else {
-              // Update the expanded slot from entity state
-              this._updateSlotFromEntityState(this._expandedSlot);
-            }
-          }
-        }, 300); // Check every 300ms
-      }, 500); // Start polling after 500ms
+        // Refresh all slots from entity state
+        if (this._expandedSlot === null) {
+          this.render(); // Full refresh to show new data
+        } else {
+          // Update the expanded slot from entity state (with focus protection)
+          this._updateSlotFromEntityState(this._expandedSlot);
+        }
+      }, 2000); // 2 seconds should be enough for backend to complete and entity state to update
       
       // Clear progress after a delay
       setTimeout(() => {
@@ -220,9 +202,13 @@ class YaleLockManagerCard extends HTMLElement {
     /**
      * Update a slot's form fields from entity state (source of truth).
      * This is called after save/push operations to refresh the UI with latest data.
+     * CRITICAL: Only updates editable fields if they don't have focus (prevents overwriting user input).
      */
     const user = this.getUserData().find(u => u.slot === slot);
-    if (!user) return;
+    if (!user) {
+      console.warn(`[Yale Lock Manager] User not found for slot ${slot}`);
+      return;
+    }
     
     if (this._expandedSlot === slot) {
       // Slot is expanded - update form fields directly (don't destroy DOM)
@@ -232,21 +218,77 @@ class YaleLockManagerCard extends HTMLElement {
       const lockCodeField = this.shadowRoot.querySelector(`#lock-code-${slot}`);
       const lockStatusField = this.shadowRoot.querySelector(`#lock-status-${slot}`);
       
-      // Update cached fields from entity state
-      if (nameField) nameField.value = user.name || '';
-      if (codeField) codeField.value = user.code || '';
-      if (statusField) {
-        const cachedStatus = user.lock_status !== null && user.lock_status !== undefined 
-          ? user.lock_status 
-          : (user.enabled ? 1 : 2);
-        statusField.value = cachedStatus.toString();
+      // CRITICAL: Only update editable fields if they don't have focus
+      // This prevents overwriting user input while they're typing
+      if (nameField) {
+        if (document.activeElement !== nameField) {
+          nameField.value = user.name || '';
+        } else {
+          console.log(`[Yale Lock Manager] Skipping name field update for slot ${slot} - field has focus`);
+        }
       }
       
-      // Update lock fields (read-only) from entity state
-      if (lockCodeField) lockCodeField.value = user.lock_code || '';
+      if (codeField) {
+        if (document.activeElement !== codeField) {
+          codeField.value = user.code || '';
+        } else {
+          console.log(`[Yale Lock Manager] Skipping code field update for slot ${slot} - field has focus`);
+        }
+      }
+      
+      if (statusField) {
+        if (document.activeElement !== statusField) {
+          const cachedStatus = user.lock_status !== null && user.lock_status !== undefined 
+            ? user.lock_status 
+            : (user.enabled ? 1 : 2);
+          statusField.value = cachedStatus.toString();
+        } else {
+          console.log(`[Yale Lock Manager] Skipping status field update for slot ${slot} - field has focus`);
+        }
+      }
+      
+      // Always update lock fields (read-only) - safe to update anytime
+      if (lockCodeField) {
+        lockCodeField.value = user.lock_code || '';
+      } else {
+        console.warn(`[Yale Lock Manager] Lock code field not found for slot ${slot}`);
+      }
+      
       if (lockStatusField) {
         const lockStatus = user.lock_status_from_lock ?? user.lock_status;
         lockStatusField.value = lockStatus !== null && lockStatus !== undefined ? lockStatus.toString() : '0';
+      } else {
+        console.warn(`[Yale Lock Manager] Lock status field not found for slot ${slot}`);
+      }
+      
+      // Update schedule and usage limit fields if they exist
+      const scheduleToggle = this.shadowRoot.getElementById(`schedule-toggle-${slot}`);
+      const startInput = this.shadowRoot.getElementById(`start-${slot}`);
+      const endInput = this.shadowRoot.getElementById(`end-${slot}`);
+      const limitToggle = this.shadowRoot.getElementById(`limit-toggle-${slot}`);
+      const limitInput = this.shadowRoot.getElementById(`limit-${slot}`);
+      
+      if (user.schedule && user.schedule.start && user.schedule.end) {
+        if (scheduleToggle && !scheduleToggle.checked) {
+          scheduleToggle.checked = true;
+          this.toggleSchedule(slot, true);
+        }
+        if (startInput && document.activeElement !== startInput) {
+          startInput.value = user.schedule.start;
+        }
+        if (endInput && document.activeElement !== endInput) {
+          endInput.value = user.schedule.end;
+        }
+      }
+      
+      if (user.usage_limit !== null && user.usage_limit !== undefined) {
+        if (limitToggle && !limitToggle.checked) {
+          limitToggle.checked = true;
+          this.toggleLimit(slot, true);
+        }
+        if (limitInput && document.activeElement !== limitInput) {
+          limitInput.value = user.usage_limit.toString();
+        }
       }
       
       // Update _formValues to match entity state (source of truth)
@@ -1402,25 +1444,10 @@ class YaleLockManagerCard extends HTMLElement {
         // Backend has already pulled from lock and updated entity state
         // Wait for entity state to update, then re-render slot from cached data
         setTimeout(() => {
-          // Poll for entity state update (check if lock_code has been updated)
-          let attempts = 0;
-          const maxAttempts = 15; // Wait up to 4.5 seconds
-          const checkInterval = setInterval(() => {
-            attempts++;
-            const updatedUser = this.getUserData().find(u => u.slot === slot);
-            
-            // Check if lock_code has been updated (backend pulls this after push)
-            if (updatedUser && updatedUser.lock_code !== undefined && updatedUser.lock_code !== null) {
-              clearInterval(checkInterval);
-              // Entity state updated with lock data - re-render slot from cached data
-              this._updateSlotFromEntityState(slot);
-            } else if (attempts >= maxAttempts) {
-              // Timeout - update anyway
-              clearInterval(checkInterval);
-              this._updateSlotFromEntityState(slot);
-            }
-          }, 300); // Check every 300ms
-        }, 500);
+          // Update slot from entity state (with focus protection)
+          // Backend already pulled from lock and updated lock_code and lock_status_from_lock
+          this._updateSlotFromEntityState(slot);
+        }, 2500); // 2.5 seconds should be enough for backend to pull from lock and update entity state
         
       } catch (error) {
         this.showStatus(slot, `❌ Push failed: ${error.message}`, 'error');
@@ -1545,41 +1572,29 @@ class YaleLockManagerCard extends HTMLElement {
       // Clear unsaved changes flag
       delete this._unsavedChanges[slot];
       
-      // Wait for entity state to update, then re-render slot from cached data
+      // Wait for backend to complete and entity state to update, then re-render slot from cached data
       setTimeout(() => {
-        // Poll for entity state update
-        let attempts = 0;
-        const maxAttempts = 15; // Wait up to 4.5 seconds
-        const checkInterval = setInterval(() => {
-          attempts++;
-          const updatedUser = this.getUserData().find(u => u.slot === slot);
+        // Update slot from entity state (with focus protection)
+        this._updateSlotFromEntityState(slot);
+        
+        // Show success message based on sync status
+        const updatedUser = this.getUserData().find(u => u.slot === slot);
+        if (updatedUser) {
+          const codesMatch = codeType === 'pin' ? (code === (updatedUser.lock_code || '')) : true;
+          const statusMatch = updatedUser.lock_status_from_lock !== null && updatedUser.lock_status_from_lock !== undefined
+            ? (cachedStatus === updatedUser.lock_status_from_lock)
+            : false;
+          const isSynced = codesMatch && statusMatch;
           
-          // Check if entity state has our saved values
-          if (updatedUser && updatedUser.name === name && updatedUser.code === code) {
-            clearInterval(checkInterval);
-            // Entity state updated - re-render slot from cached data
-            this._updateSlotFromEntityState(slot);
-            
-            // Show success message
-            const codesMatch = codeType === 'pin' ? (code === (updatedUser.lock_code || '')) : true;
-            const statusMatch = updatedUser.lock_status_from_lock !== null && updatedUser.lock_status_from_lock !== undefined
-              ? (cachedStatus === updatedUser.lock_status_from_lock)
-              : false;
-            const isSynced = codesMatch && statusMatch;
-            
-            if (!isSynced && codeType === 'pin') {
-              this.showStatus(slot, '✅ User saved! ⚠️ Push required to sync with lock.', 'warning');
-            } else {
-              this.showStatus(slot, '✅ User saved successfully!', 'success');
-            }
-          } else if (attempts >= maxAttempts) {
-            // Timeout - update anyway
-            clearInterval(checkInterval);
-            this._updateSlotFromEntityState(slot);
+          if (!isSynced && codeType === 'pin') {
+            this.showStatus(slot, '✅ User saved! ⚠️ Push required to sync with lock.', 'warning');
+          } else {
             this.showStatus(slot, '✅ User saved successfully!', 'success');
           }
-        }, 300); // Check every 300ms
-      }, 500); // Start polling after 500ms
+        } else {
+          this.showStatus(slot, '✅ User saved successfully!', 'success');
+        }
+      }, 2000); // 2 seconds should be enough for backend to complete and entity state to update
       
     } catch (error) {
       if (error.message && error.message.includes('occupied by an unknown code')) {
@@ -1614,41 +1629,29 @@ class YaleLockManagerCard extends HTMLElement {
             // Clear unsaved changes flag
             delete this._unsavedChanges[slot];
             
-            // Wait for entity state to update, then re-render slot from cached data
+            // Wait for backend to complete and entity state to update, then re-render slot from cached data
             setTimeout(() => {
-              // Poll for entity state update
-              let attempts = 0;
-              const maxAttempts = 15;
-              const checkInterval = setInterval(() => {
-                attempts++;
-                const updatedUser = this.getUserData().find(u => u.slot === slot);
+              // Update slot from entity state (with focus protection)
+              this._updateSlotFromEntityState(slot);
+              
+              // Show success message based on sync status
+              const updatedUser = this.getUserData().find(u => u.slot === slot);
+              if (updatedUser) {
+                const codesMatch = codeType === 'pin' ? (code === (updatedUser.lock_code || '')) : true;
+                const statusMatch = updatedUser.lock_status_from_lock !== null && updatedUser.lock_status_from_lock !== undefined
+                  ? (cachedStatus === updatedUser.lock_status_from_lock)
+                  : false;
+                const isSynced = codesMatch && statusMatch;
                 
-                // Check if entity state has our saved values
-                if (updatedUser && updatedUser.name === name && updatedUser.code === code) {
-                  clearInterval(checkInterval);
-                  // Entity state updated - re-render slot from cached data
-                  this._updateSlotFromEntityState(slot);
-                  
-                  // Show success message
-                  const codesMatch = codeType === 'pin' ? (code === (updatedUser.lock_code || '')) : true;
-                  const statusMatch = updatedUser.lock_status_from_lock !== null && updatedUser.lock_status_from_lock !== undefined
-                    ? (cachedStatus === updatedUser.lock_status_from_lock)
-                    : false;
-                  const isSynced = codesMatch && statusMatch;
-                  
-                  if (!isSynced && codeType === 'pin') {
-                    this.showStatus(slot, '✅ User saved! ⚠️ Push required to sync with lock.', 'warning');
-                  } else {
-                    this.showStatus(slot, '✅ User saved successfully!', 'success');
-                  }
-                } else if (attempts >= maxAttempts) {
-                  // Timeout - update anyway
-                  clearInterval(checkInterval);
-                  this._updateSlotFromEntityState(slot);
+                if (!isSynced && codeType === 'pin') {
+                  this.showStatus(slot, '✅ User saved! ⚠️ Push required to sync with lock.', 'warning');
+                } else {
                   this.showStatus(slot, '✅ User saved successfully!', 'success');
                 }
-              }, 300);
-            }, 500);
+              } else {
+                this.showStatus(slot, '✅ User saved successfully!', 'success');
+              }
+            }, 2000); // 2 seconds should be enough for backend to complete and entity state to update
           } catch (retryError) {
             this.showStatus(slot, `Failed: ${retryError.message}`, 'error');
           }
