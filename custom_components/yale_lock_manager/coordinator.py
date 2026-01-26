@@ -967,7 +967,7 @@ class YaleLockCoordinator(DataUpdateCoordinator):
                                     user_data["synced_to_lock"] = False
                                     user_data["sync_failure_reason"] = "lock_does_not_support_status_changes"
                                     # Don't raise - continue gracefully
-                                    break  # Exit the code modification try block
+                                    # Status limitation handled - will continue to save data below
                             else:
                                 # No data returned - mark as limitation
                                 _LOGGER.warning(
@@ -984,7 +984,7 @@ class YaleLockCoordinator(DataUpdateCoordinator):
                                 user_data["synced_to_lock"] = False
                                 user_data["sync_failure_reason"] = "lock_does_not_support_status_changes"
                                 # Don't raise - continue gracefully
-                                break  # Exit the code modification try block
+                                # Status limitation handled - will continue to save data below
                                 
                         except Exception as mod_err:
                             # Code modification exception - mark as limitation
