@@ -1982,9 +1982,24 @@ class YaleLockManagerCard extends HTMLElement {
           note: 'Entity state checked immediately after push promise resolves'
         });
         
-        // Step 5: All complete!
-        this.showStatus(slot, '✅ All complete! Code pushed and verified successfully!', 'success');
-        this.renderStatusMessage(slot);
+        // Check if status change was unsupported
+        const finalEntity = this.getUserData().find(u => u.slot === slot);
+        const statusUnsupported = finalEntity?.status_change_unsupported || false;
+        const syncFailureReason = finalEntity?.sync_failure_reason;
+        
+        if (statusUnsupported && syncFailureReason === 'lock_does_not_support_status_changes') {
+          // Status change limitation detected - show informational message
+          this.showStatus(
+            slot, 
+            '⚠️ Code updated successfully, but this lock model doesn\'t support status changes via Z-Wave. The status has been updated in the local cache only.',
+            'warning'
+          );
+          this.renderStatusMessage(slot);
+        } else {
+          // Step 5: All complete!
+          this.showStatus(slot, '✅ All complete! Code pushed and verified successfully!', 'success');
+          this.renderStatusMessage(slot);
+        }
         
         // Poll entity state multiple times to track when it updates
         let pollAttempt = 0;

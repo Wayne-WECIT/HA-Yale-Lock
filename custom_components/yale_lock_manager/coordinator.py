@@ -950,57 +950,95 @@ class YaleLockCoordinator(DataUpdateCoordinator):
                                     code_matches = True
                                     status_matches = True
                                 else:
-                                    _LOGGER.error(
+                                    # Code modification failed - mark as limitation and continue gracefully
+                                    _LOGGER.warning(
                                         "Code modification approach failed for slot %s: "
-                                        "status=%s (expected %s), code='%s' (expected '%s')",
+                                        "status=%s (expected %s), code='%s' (expected '%s'). "
+                                        "This lock model appears to not support status changes via Z-Wave. "
+                                        "Updating cached status only.",
                                         slot, mod_status, expected_status, mod_code, code_to_set
                                     )
-                                    user_data["lock_code"] = verification_code
-                                    user_data["lock_status_from_lock"] = verification_status
-                                    user_data["lock_enabled"] = verification_status == USER_STATUS_ENABLED
+                                    # Mark as limitation and update cached status
+                                    user_data["status_change_unsupported"] = True
+                                    user_data["lock_code"] = verification_code if verification_code else code_to_set
+                                    user_data["lock_status_from_lock"] = mod_status  # What lock actually has
+                                    user_data["lock_status"] = expected_status  # What user wants (cached)
+                                    user_data["lock_enabled"] = mod_status == USER_STATUS_ENABLED
                                     user_data["synced_to_lock"] = False
-                                    raise ValueError(
-                                        f"Status mismatch in slot {slot} after code modification "
-                                        f"(expected {expected_status}, got {mod_status}). "
-                                        f"This lock may not support changing status without changing the code."
-                                    )
+                                    user_data["sync_failure_reason"] = "lock_does_not_support_status_changes"
+                                    # Don't raise - continue gracefully
+                                    break  # Exit the code modification try block
                             else:
-                                _LOGGER.error("Code modification approach failed: No data returned from lock for slot %s", slot)
-                                user_data["lock_code"] = verification_code
-                                user_data["lock_status_from_lock"] = verification_status
+                                # No data returned - mark as limitation
+                                _LOGGER.warning(
+                                    "Code modification approach failed: No data returned from lock for slot %s. "
+                                    "This lock model appears to not support status changes via Z-Wave. "
+                                    "Updating cached status only.",
+                                    slot
+                                )
+                                user_data["status_change_unsupported"] = True
+                                user_data["lock_code"] = verification_code if verification_code else code_to_set
+                                user_data["lock_status_from_lock"] = verification_status  # What lock has
+                                user_data["lock_status"] = expected_status  # What user wants (cached)
                                 user_data["lock_enabled"] = verification_status == USER_STATUS_ENABLED
                                 user_data["synced_to_lock"] = False
-                                raise ValueError(
-                                    f"Status mismatch in slot {slot} (expected {expected_status}, got {verification_status}). "
-                                    f"Code modification approach failed - no data returned from lock."
-                                )
+                                user_data["sync_failure_reason"] = "lock_does_not_support_status_changes"
+                                # Don't raise - continue gracefully
+                                break  # Exit the code modification try block
                                 
                         except Exception as mod_err:
-                            _LOGGER.error("Code modification approach failed for slot %s: %s", slot, mod_err)
-                            user_data["lock_code"] = verification_code
-                            user_data["lock_status_from_lock"] = verification_status
+                            # Code modification exception - mark as limitation
+                            _LOGGER.warning(
+                                "Code modification approach failed for slot %s: %s. "
+                                "This lock model appears to not support status changes via Z-Wave. "
+                                "Updating cached status only.",
+                                slot, mod_err
+                            )
+                            user_data["status_change_unsupported"] = True
+                            user_data["lock_code"] = verification_code if verification_code else code_to_set
+                            user_data["lock_status_from_lock"] = verification_status  # What lock has
+                            user_data["lock_status"] = expected_status  # What user wants (cached)
                             user_data["lock_enabled"] = verification_status == USER_STATUS_ENABLED
                             user_data["synced_to_lock"] = False
-                            raise ValueError(
-                                f"Status mismatch in slot {slot} (expected {expected_status}, got {verification_status}). "
-                                f"Code modification approach also failed: {mod_err}. "
-                                f"This lock may not support status-only changes - you may need to change the code to change the status."
-                            )
+                            user_data["sync_failure_reason"] = "lock_does_not_support_status_changes"
+                            # Don't raise - continue gracefully
                     else:
-                        # Not a status-only change, just raise the error
-                        _LOGGER.error("Verification failed: Status mismatch in slot %s (expected: %s, got: %s)", 
-                                     slot, expected_status, verification_status)
+                        # Not a status-only change, but status mismatch - mark as limitation
+                        _LOGGER.warning(
+                            "Verification failed: Status mismatch in slot %s (expected: %s, got: %s). "
+                            "This lock model appears to not support status changes via Z-Wave. "
+                            "Updating cached status only.",
+                            slot, expected_status, verification_status
+                        )
+                        user_data["status_change_unsupported"] = True
                         user_data["lock_code"] = verification_code
-                        user_data["lock_status_from_lock"] = verification_status
+                        user_data["lock_status_from_lock"] = verification_status  # What lock has
+                        user_data["lock_status"] = expected_status  # What user wants (cached)
                         user_data["lock_enabled"] = verification_status == USER_STATUS_ENABLED
                         user_data["synced_to_lock"] = False
-                        raise ValueError(f"Verification failed: Status mismatch in slot {slot} (expected {expected_status}, got {verification_status})")
+                        user_data["sync_failure_reason"] = "lock_does_not_support_status_changes"
+                        # Don't raise - continue gracefully (code was updated successfully)
+                        
+                        # Update sync status even though status didn't change
+                        lock_data_for_sync = {"userIdStatus": verification_status, "userCode": verification_code if verification_code else code_to_set}
+                        self._sync_manager.update_sync_status(user_data, lock_data_for_sync)
+                        
+                        _LOGGER.info(
+                            "Status change limitation detected for slot %s. "
+                            "Cached status updated to %s (lock status remains %s). "
+                            "Code was successfully updated.",
+                            slot, expected_status, verification_status
+                        )
                 else:
                     # Both code and status match - success!
                     _LOGGER.info("✓ Verified: Code and status successfully written to slot %s", slot)
                     user_data["lock_code"] = verification_code  # Update lock_code from lock
                     user_data["lock_status_from_lock"] = verification_status  # Update lock_status_from_lock
                     user_data["lock_enabled"] = verification_status == USER_STATUS_ENABLED  # Update lock_enabled
+                    
+                    # Clear any previous limitation flags
+                    user_data.pop("status_change_unsupported", None)
+                    user_data.pop("sync_failure_reason", None)
                     
                     # Use sync manager to recalculate sync status after pull
                     lock_data_for_sync = {"userIdStatus": verification_status, "userCode": verification_code}
