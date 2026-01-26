@@ -892,73 +892,99 @@ class YaleLockCoordinator(DataUpdateCoordinator):
                     user_data["synced_to_lock"] = False
                     raise ValueError(f"Verification failed: Code mismatch in slot {slot} after {max_retries} attempts")
                 elif not status_matches:
-                    # Status mismatch - try clear-and-reset approach for status-only changes
+                    # Status mismatch - try code modification approach for status-only changes
                     if is_status_only_change:
                         _LOGGER.warning(
                             "Status mismatch after %s attempts for slot %s (expected: %s, got: %s). "
-                            "Trying clear-and-reset approach...",
+                            "Lock may ignore status changes when code is unchanged. Trying code modification approach...",
                             max_retries, slot, expected_status, verification_status
                         )
                         
                         try:
-                            # Step 1: Clear the code by setting status=0 (Available)
-                            _LOGGER.info("Step 1: Clearing code for slot %s (setting status=0)", slot)
-                            await self._zwave_client.set_user_code(slot, code_to_set, USER_STATUS_AVAILABLE)
-                            await asyncio.sleep(2.0)  # Wait for lock to process
+                            # Try modifying the code format to force the lock to process the status change
+                            # Strategy: Add a leading zero, then remove it with the new status
+                            modified_code = None
                             
-                            # Step 2: Set code again with desired status
-                            _LOGGER.info("Step 2: Re-setting code for slot %s with status=%s", slot, expected_status)
-                            await self._zwave_client.set_user_code(slot, code_to_set, expected_status)
-                            await asyncio.sleep(initial_wait)  # Wait for lock to process
+                            # Try 1: Add leading zero if code is numeric
+                            if code_to_set.isdigit():
+                                modified_code = "0" + code_to_set
+                                _LOGGER.info("Step 1: Setting modified code for slot %s (added leading zero: '%s') with status=%s", 
+                                           slot, modified_code, expected_status)
+                                await self._zwave_client.set_user_code(slot, modified_code, expected_status)
+                                await asyncio.sleep(3.0)  # Wait for lock to process
+                                
+                                # Step 2: Set original code with desired status
+                                _LOGGER.info("Step 2: Setting original code for slot %s ('%s') with status=%s", 
+                                           slot, code_to_set, expected_status)
+                                await self._zwave_client.set_user_code(slot, code_to_set, expected_status)
+                                await asyncio.sleep(initial_wait)  # Wait for lock to process
+                            else:
+                                # Code is not purely numeric, try appending/removing a character
+                                modified_code = code_to_set + "0"
+                                _LOGGER.info("Step 1: Setting modified code for slot %s (appended zero: '%s') with status=%s", 
+                                           slot, modified_code, expected_status)
+                                await self._zwave_client.set_user_code(slot, modified_code, expected_status)
+                                await asyncio.sleep(3.0)  # Wait for lock to process
+                                
+                                # Step 2: Set original code with desired status
+                                _LOGGER.info("Step 2: Setting original code for slot %s ('%s') with status=%s", 
+                                           slot, code_to_set, expected_status)
+                                await self._zwave_client.set_user_code(slot, code_to_set, expected_status)
+                                await asyncio.sleep(initial_wait)  # Wait for lock to process
                             
                             # Step 3: Verify the status change
                             _LOGGER.info("Step 3: Verifying status change for slot %s", slot)
-                            reset_verification_data = await self._zwave_client.get_user_code_data(slot)
+                            mod_verification_data = await self._zwave_client.get_user_code_data(slot)
                             
-                            if reset_verification_data:
-                                reset_status = reset_verification_data.get("userIdStatus")
-                                reset_code = reset_verification_data.get("userCode", "")
-                                if reset_code:
-                                    reset_code = str(reset_code)
+                            if mod_verification_data:
+                                mod_status = mod_verification_data.get("userIdStatus")
+                                mod_code = mod_verification_data.get("userCode", "")
+                                if mod_code:
+                                    mod_code = str(mod_code)
                                 
-                                if reset_status == expected_status and reset_code == code_to_set:
-                                    _LOGGER.info("✓ Clear-and-reset approach succeeded for slot %s!", slot)
-                                    verification_data = reset_verification_data
-                                    verification_code = reset_code
-                                    verification_status = reset_status
+                                if mod_status == expected_status and mod_code == code_to_set:
+                                    _LOGGER.info("✓ Code modification approach succeeded for slot %s!", slot)
+                                    verification_data = mod_verification_data
+                                    verification_code = mod_code
+                                    verification_status = mod_status
                                     code_matches = True
                                     status_matches = True
                                 else:
                                     _LOGGER.error(
-                                        "Clear-and-reset approach failed for slot %s: "
+                                        "Code modification approach failed for slot %s: "
                                         "status=%s (expected %s), code='%s' (expected '%s')",
-                                        slot, reset_status, expected_status, reset_code, code_to_set
+                                        slot, mod_status, expected_status, mod_code, code_to_set
                                     )
                                     user_data["lock_code"] = verification_code
                                     user_data["lock_status_from_lock"] = verification_status
                                     user_data["lock_enabled"] = verification_status == USER_STATUS_ENABLED
                                     user_data["synced_to_lock"] = False
                                     raise ValueError(
-                                        f"Status mismatch in slot {slot} after clear-and-reset "
-                                        f"(expected {expected_status}, got {reset_status})"
+                                        f"Status mismatch in slot {slot} after code modification "
+                                        f"(expected {expected_status}, got {mod_status}). "
+                                        f"This lock may not support changing status without changing the code."
                                     )
                             else:
-                                _LOGGER.error("Clear-and-reset approach failed: No data returned from lock for slot %s", slot)
+                                _LOGGER.error("Code modification approach failed: No data returned from lock for slot %s", slot)
                                 user_data["lock_code"] = verification_code
                                 user_data["lock_status_from_lock"] = verification_status
                                 user_data["lock_enabled"] = verification_status == USER_STATUS_ENABLED
                                 user_data["synced_to_lock"] = False
-                                raise ValueError(f"Status mismatch in slot {slot} (expected {expected_status}, got {verification_status})")
+                                raise ValueError(
+                                    f"Status mismatch in slot {slot} (expected {expected_status}, got {verification_status}). "
+                                    f"Code modification approach failed - no data returned from lock."
+                                )
                                 
-                        except Exception as reset_err:
-                            _LOGGER.error("Clear-and-reset approach failed for slot %s: %s", slot, reset_err)
+                        except Exception as mod_err:
+                            _LOGGER.error("Code modification approach failed for slot %s: %s", slot, mod_err)
                             user_data["lock_code"] = verification_code
                             user_data["lock_status_from_lock"] = verification_status
                             user_data["lock_enabled"] = verification_status == USER_STATUS_ENABLED
                             user_data["synced_to_lock"] = False
                             raise ValueError(
                                 f"Status mismatch in slot {slot} (expected {expected_status}, got {verification_status}). "
-                                f"Clear-and-reset approach also failed: {reset_err}"
+                                f"Code modification approach also failed: {mod_err}. "
+                                f"This lock may not support status-only changes - you may need to change the code to change the status."
                             )
                     else:
                         # Not a status-only change, just raise the error
