@@ -2,6 +2,55 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.8.2.45] - 2026-01-25
+
+### 🐛 Bug Fixes - Refresh Complete & Save User PIN Revert
+
+**User feedback**: 
+1. "after the refresh has completed the page still looks like this. nothing is updated. even after waiting a few seconds"
+2. "pin changed from 1789733 to 1789736, update user clicked and cached pin reverts back to 1789733"
+
+### The Issues
+
+1. **Refresh Complete Not Updating**: After refresh completes, the UI shows "Refresh complete! Found 6 codes" but the table still shows all users as "Disabled" with warning icons. The 2-second delay wasn't enough - `async_request_refresh()` is async and entity state might not be updated when `render()` is called.
+
+2. **Save User PIN Revert**: User changes cached PIN (e.g., from 1789733 to 1789736), clicks "Update User", but the cached PIN reverts back to the old value (1789733). This happened because `_updateSlotFromEntityState()` was called before entity state had been updated with the new saved value, overwriting the user's input with stale data.
+
+### The Fixes
+
+**1. Refresh Complete Handler**:
+- Replaced fixed 2-second delay with polling that checks if entity state has actually updated
+- Polls every 300ms (up to 6 seconds) checking if `users` data exists in entity state
+- Only calls `render()` or `_updateSlotFromEntityState()` once entity state is confirmed updated
+
+**2. Save User Method**:
+- Replaced fixed 2-second delay with polling that checks if entity state reflects the saved values
+- Polls every 300ms (up to 5.1 seconds) checking if `updatedUser.name === name && updatedUser.code === code`
+- Only calls `_updateSlotFromEntityState()` once entity state actually contains the saved values
+- Applied to both normal save and override protection flow
+
+### Changed
+
+- **Frontend (`yale-lock-manager-card.js` & `yale-lock-manager-panel.js`)**:
+  - **Refresh Complete Handler**:
+    - Replaced `setTimeout(..., 2000)` with polling loop
+    - Checks `Object.keys(users).length > 0 || totalUsers > 0` before refreshing
+    - Timeout fallback after 20 attempts (6 seconds)
+  - **`saveUser()` Method**:
+    - Replaced `setTimeout(..., 2000)` with polling loop
+    - Checks `updatedUser.name === name && updatedUser.code === code` before updating UI
+    - Timeout fallback after 17 attempts (5.1 seconds)
+    - Applied to both normal save flow and override protection flow
+
+### What's Fixed
+
+- ✅ Refresh complete now correctly updates the UI after entity state is confirmed updated
+- ✅ Cached PIN no longer reverts after "Update User" - waits for entity state to reflect saved values
+- ✅ No more stale data overwriting user input
+- ✅ More reliable updates - only refreshes when entity state actually changes
+
+---
+
 ## [1.8.2.44] - 2026-01-25
 
 ### 🔄 Refactor - Simplified Value Refresh with Focus Protection

@@ -114,16 +114,28 @@ class YaleLockManagerPanel extends HTMLElement {
       );
       this.renderStatusMessage(0); // Explicitly render
       
-      // Refresh the UI to show new data after entity state updates
-      setTimeout(() => {
-        // Refresh all slots from entity state
-        if (this._expandedSlot === null) {
-          this.render(); // Full refresh to show new data
-        } else {
-          // Update the expanded slot from entity state (with focus protection)
-          this._updateSlotFromEntityState(this._expandedSlot);
+      // Wait for entity state to actually update before refreshing UI
+      let attempts = 0;
+      const maxAttempts = 20; // Wait up to 6 seconds (20 * 300ms)
+      const checkInterval = setInterval(() => {
+        attempts++;
+        const stateObj = this._hass?.states[this._config?.entity];
+        const users = stateObj?.attributes?.users || {};
+        const totalUsers = stateObj?.attributes?.total_users || 0;
+        
+        // Check if entity state has been updated (has user data)
+        if (Object.keys(users).length > 0 || totalUsers > 0 || attempts >= maxAttempts) {
+          clearInterval(checkInterval);
+          
+          // Entity state updated - refresh UI
+          if (this._expandedSlot === null) {
+            this.render(); // Full refresh to show new data
+          } else {
+            // Update the expanded slot from entity state (with focus protection)
+            this._updateSlotFromEntityState(this._expandedSlot);
+          }
         }
-      }, 2000); // 2 seconds should be enough for backend to complete and entity state to update
+      }, 300); // Check every 300ms
       
       // Clear progress after a delay
       setTimeout(() => {
@@ -1401,14 +1413,21 @@ class YaleLockManagerPanel extends HTMLElement {
         this.showStatus(slot, '✅ User saved successfully!', 'success');
       }
       
-      // Wait for backend to complete and entity state to update, then re-render slot from cached data
-      setTimeout(() => {
-        // Update slot from entity state (with focus protection)
-        this._updateSlotFromEntityState(slot);
-        
-        // Show success message based on sync status
+      // Wait for entity state to actually reflect the saved values before updating UI
+      let attempts = 0;
+      const maxAttempts = 17; // Wait up to 5.1 seconds (17 * 300ms)
+      const checkInterval = setInterval(() => {
+        attempts++;
         const updatedUser = this.getUserData().find(u => u.slot === slot);
-        if (updatedUser) {
+        
+        // Check if entity state has our saved values (name and code match)
+        if (updatedUser && updatedUser.name === name && updatedUser.code === code) {
+          clearInterval(checkInterval);
+          
+          // Entity state updated with saved values - now safe to update UI
+          this._updateSlotFromEntityState(slot);
+          
+          // Show success message based on sync status
           const codesMatch = codeType === 'pin' ? (code === (updatedUser.lock_code || '')) : true;
           const statusMatch = updatedUser.lock_status_from_lock !== null && updatedUser.lock_status_from_lock !== undefined
             ? (cachedStatus === updatedUser.lock_status_from_lock)
@@ -1420,10 +1439,13 @@ class YaleLockManagerPanel extends HTMLElement {
           } else {
             this.showStatus(slot, '✅ User saved successfully!', 'success');
           }
-        } else {
+        } else if (attempts >= maxAttempts) {
+          // Timeout - update anyway (entity state might be slow)
+          clearInterval(checkInterval);
+          this._updateSlotFromEntityState(slot);
           this.showStatus(slot, '✅ User saved successfully!', 'success');
         }
-      }, 2000); // 2 seconds should be enough for backend to complete and entity state to update
+      }, 300); // Check every 300ms
       
     } catch (error) {
       if (error.message && error.message.includes('occupied by an unknown code')) {
@@ -1440,14 +1462,21 @@ class YaleLockManagerPanel extends HTMLElement {
             });
             this.showStatus(slot, '✅ User saved successfully!', 'success');
             
-            // Wait for backend to complete and entity state to update, then re-render slot from cached data
-            setTimeout(() => {
-              // Update slot from entity state (with focus protection)
-              this._updateSlotFromEntityState(slot);
-              
-              // Show success message based on sync status
+            // Wait for entity state to actually reflect the saved values before updating UI
+            let attempts = 0;
+            const maxAttempts = 17; // Wait up to 5.1 seconds (17 * 300ms)
+            const checkInterval = setInterval(() => {
+              attempts++;
               const updatedUser = this.getUserData().find(u => u.slot === slot);
-              if (updatedUser) {
+              
+              // Check if entity state has our saved values (name and code match)
+              if (updatedUser && updatedUser.name === name && updatedUser.code === code) {
+                clearInterval(checkInterval);
+                
+                // Entity state updated with saved values - now safe to update UI
+                this._updateSlotFromEntityState(slot);
+                
+                // Show success message based on sync status
                 const codesMatch = codeType === 'pin' ? (code === (updatedUser.lock_code || '')) : true;
                 const statusMatch = updatedUser.lock_status_from_lock !== null && updatedUser.lock_status_from_lock !== undefined
                   ? (cachedStatus === updatedUser.lock_status_from_lock)
@@ -1459,10 +1488,13 @@ class YaleLockManagerPanel extends HTMLElement {
                 } else {
                   this.showStatus(slot, '✅ User saved successfully!', 'success');
                 }
-              } else {
+              } else if (attempts >= maxAttempts) {
+                // Timeout - update anyway (entity state might be slow)
+                clearInterval(checkInterval);
+                this._updateSlotFromEntityState(slot);
                 this.showStatus(slot, '✅ User saved successfully!', 'success');
               }
-            }, 2000); // 2 seconds should be enough for backend to complete and entity state to update
+            }, 300); // Check every 300ms
           } catch (retryError) {
             this.showStatus(slot, `Failed: ${retryError.message}`, 'error');
           }
