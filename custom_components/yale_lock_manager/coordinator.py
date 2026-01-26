@@ -1196,14 +1196,14 @@ class YaleLockCoordinator(DataUpdateCoordinator):
         if self._lock_entity:
             _LOGGER.debug("[REFRESH DEBUG] Scheduling entity state write in 0.2 seconds...")
             
-            @callback
-            def _write_state_callback(_now):
+            def _write_state_callback():
                 """Callback to write entity state after delay."""
                 _LOGGER.debug("[REFRESH DEBUG] Writing entity state to notify frontend...")
                 self._lock_entity.async_write_ha_state()
                 _LOGGER.debug("[REFRESH DEBUG] Entity state written")
             
-            self.hass.async_call_later(0.2, _write_state_callback)
+            # Use hass.loop.call_later() to schedule the callback
+            self.hass.loop.call_later(0.2, _write_state_callback)
             _LOGGER.debug("[REFRESH DEBUG] Entity state write scheduled")
 
     async def async_check_sync_status(self, slot: int) -> None:
