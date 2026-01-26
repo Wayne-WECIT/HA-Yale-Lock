@@ -244,9 +244,14 @@ class YaleLockManagerCard extends HTMLElement {
           // Save updated values to localStorage
           this._saveFormValuesToStorage();
           
-          if (this._debugMode) {
-            console.log('[Yale Lock Manager] [REFRESH DEBUG] Updated localStorage with', Object.keys(newUsers).length, 'users from entity state');
-          }
+          // Log after refresh
+          const afterRefreshCached = JSON.parse(JSON.stringify(this._formValues));
+          this._addDebugLog('After Refresh', null, {
+            cached_slots: Object.keys(afterRefreshCached).length,
+            entity_slots: Object.keys(newUsers).length
+          });
+          
+          console.log('[Yale Lock Manager] Updated localStorage with', Object.keys(newUsers).length, 'users from entity state');
           
           // Entity state updated - refresh UI
           if (this._expandedSlot === null) {
