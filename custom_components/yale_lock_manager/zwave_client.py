@@ -144,10 +144,41 @@ class ZWaveClient:
         
         According to Z-Wave User Code CC specification, the set method parameters are:
         [userId, userIdStatus, userCode]
+        
+        Parameters must be:
+        - userId: INTEGER (slot number)
+        - userIdStatus: INTEGER (0, 1, or 2)
+        - userCode: STRING (PIN code)
         """
         try:
+            # Validate and convert types explicitly
+            userId = int(slot)
+            userIdStatus = int(status)
+            userCode = str(code)
+            
+            # Validate status is in valid range (0, 1, or 2)
+            if userIdStatus not in (USER_STATUS_AVAILABLE, USER_STATUS_ENABLED, USER_STATUS_DISABLED):
+                raise ValueError(f"Invalid status value: {userIdStatus}. Must be 0, 1, or 2")
+            
+            # Log parameter types and values for debugging
+            _LOGGER.info(
+                "set_user_code called: slot=%s (type=%s), code='%s' (type=%s), status=%s (type=%s)",
+                userId, type(userId).__name__,
+                userCode, type(userCode).__name__,
+                userIdStatus, type(userIdStatus).__name__
+            )
+            
+            # Build parameters array with explicit types
+            parameters = [userId, userIdStatus, userCode]
+            _LOGGER.info(
+                "Parameters array: %s (types: [%s, %s, %s])",
+                parameters,
+                type(parameters[0]).__name__,
+                type(parameters[1]).__name__,
+                type(parameters[2]).__name__
+            )
+            
             self._logger.info_operation("Setting user code on lock", slot, status=status, code="***")
-            _LOGGER.info("set_user_code called: slot=%s, code='%s', status=%s", slot, code, status)
             
             # Z-Wave User Code CC set parameters: [userId, userIdStatus, userCode]
             await self._hass.services.async_call(
@@ -157,7 +188,7 @@ class ZWaveClient:
                     "entity_id": self._lock_entity_id,
                     "command_class": CC_USER_CODE,
                     "method_name": "set",
-                    "parameters": [slot, status, code],  # Correct order: userId, userIdStatus, userCode
+                    "parameters": parameters,  # [userId (int), userIdStatus (int), userCode (str)]
                 },
                 blocking=True,
             )

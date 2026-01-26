@@ -714,10 +714,17 @@ class YaleLockCoordinator(DataUpdateCoordinator):
         enabled = user_data["enabled"]
 
         # Determine status based on enabled flag and schedule
+        # Ensure status is explicitly an integer (0, 1, or 2)
         if enabled and self._is_code_valid(slot):
-            status = USER_STATUS_ENABLED
+            status = int(USER_STATUS_ENABLED)  # Explicitly convert to int
         else:
-            status = USER_STATUS_DISABLED
+            status = int(USER_STATUS_DISABLED)  # Explicitly convert to int
+        
+        # Validate status is in valid range
+        if status not in (USER_STATUS_AVAILABLE, USER_STATUS_ENABLED, USER_STATUS_DISABLED):
+            raise ValueError(f"Invalid status value: {status}. Must be 0, 1, or 2")
+        
+        _LOGGER.info("Status determined for slot %s: %s (type=%s)", slot, status, type(status).__name__)
 
         # CRITICAL: GET the current code from the lock first
         # The lock may store codes in a different format (e.g., with leading zeros)
