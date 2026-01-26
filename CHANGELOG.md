@@ -2,6 +2,44 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.8.2.49] - 2026-01-26
+
+### 🐛 Bug Fixes - disconnectedCallback Error & Entity State Change Detection
+
+**User feedback**: Logs show `TypeError: this._refreshProgressListener is not a function` and refresh completes but UI doesn't update.
+
+### The Problems
+
+1. **disconnectedCallback Error**: The `disconnectedCallback()` method was calling `this._refreshProgressListener()` without checking if it's actually a function, causing a TypeError when the component is disconnected.
+
+2. **Entity State Change Detection**: The `set hass()` method was comparing object references (`!==`) instead of actual content. Home Assistant may return the same object reference even when data changes, causing the change detection to fail.
+
+### The Fixes
+
+**1. Fixed disconnectedCallback**:
+- Added type check: `typeof this._refreshProgressListener === 'function'` before calling it
+- Prevents TypeError when component is disconnected
+
+**2. Fixed Entity State Change Detection**:
+- Changed from reference comparison to content comparison using `JSON.stringify()`
+- Now compares the actual user data content, not object references
+- Ensures `set hass()` correctly detects when entity state changes
+
+### Changed
+
+- **Frontend (`yale-lock-manager-card.js` & `yale-lock-manager-panel.js`)**:
+  - **`disconnectedCallback()`**: Added type check before calling unsubscribe function
+  - **`set hass()`**: Changed entity change detection from reference comparison to content comparison using JSON.stringify
+
+### What's Fixed
+
+- ✅ No more TypeError in disconnectedCallback
+- ✅ Entity state changes are now correctly detected
+- ✅ UI should update when entity state changes after refresh
+- ✅ More reliable change detection using content comparison
+
+---
+
 ## [1.8.2.48] - 2026-01-25
 
 ### 🔧 Comprehensive Refresh Fix & Refactoring

@@ -36,16 +36,22 @@ class YaleLockManagerCard extends HTMLElement {
 
   set hass(hass) {
     const oldHass = this._hass;
-    const entityChanged = oldHass && hass && 
-      oldHass.states[this._config?.entity]?.attributes?.users !== 
-      hass.states[this._config?.entity]?.attributes?.users;
     
-    if (this._debugMode && entityChanged) {
-      const oldUsers = oldHass?.states[this._config?.entity]?.attributes?.users || {};
-      const newUsers = hass?.states[this._config?.entity]?.attributes?.users || {};
-      console.log('[Yale Lock Manager] [REFRESH DEBUG] set hass() called - entity state changed');
-      console.log('[Yale Lock Manager] [REFRESH DEBUG] Old users count:', Object.keys(oldUsers).length);
-      console.log('[Yale Lock Manager] [REFRESH DEBUG] New users count:', Object.keys(newUsers).length);
+    // Compare actual user data content, not object references
+    const oldUsers = oldHass?.states[this._config?.entity]?.attributes?.users || {};
+    const newUsers = hass?.states[this._config?.entity]?.attributes?.users || {};
+    const oldUsersJson = JSON.stringify(oldUsers);
+    const newUsersJson = JSON.stringify(newUsers);
+    const entityChanged = oldHass && hass && oldUsersJson !== newUsersJson;
+    
+    if (this._debugMode) {
+      if (entityChanged) {
+        console.log('[Yale Lock Manager] [REFRESH DEBUG] set hass() called - entity state changed');
+        console.log('[Yale Lock Manager] [REFRESH DEBUG] Old users count:', Object.keys(oldUsers).length);
+        console.log('[Yale Lock Manager] [REFRESH DEBUG] New users count:', Object.keys(newUsers).length);
+      } else {
+        console.log('[Yale Lock Manager] [REFRESH DEBUG] set hass() called - entity state unchanged');
+      }
     }
     
     this._hass = hass;
@@ -81,7 +87,7 @@ class YaleLockManagerCard extends HTMLElement {
   
   disconnectedCallback() {
     // Unsubscribe from events when component is disconnected
-    if (this._refreshProgressListener) {
+    if (this._refreshProgressListener && typeof this._refreshProgressListener === 'function') {
       this._refreshProgressListener();
       this._refreshProgressListener = null;
     }
