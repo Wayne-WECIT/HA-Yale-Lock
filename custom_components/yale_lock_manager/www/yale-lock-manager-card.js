@@ -1789,6 +1789,14 @@ class YaleLockManagerCard extends HTMLElement {
 
   async refresh() {
     try {
+      // Log before refresh
+      const beforeRefreshCached = JSON.parse(JSON.stringify(this._formValues));
+      const beforeRefreshEntity = this.getUserData();
+      this._addDebugLog('Before Refresh', null, {
+        cached_slots: Object.keys(beforeRefreshCached).length,
+        entity_slots: beforeRefreshEntity.filter(u => u.name || u.code).length
+      });
+      
       // Store snapshot of current user data BEFORE refresh
       this._storeRefreshSnapshot();
       
