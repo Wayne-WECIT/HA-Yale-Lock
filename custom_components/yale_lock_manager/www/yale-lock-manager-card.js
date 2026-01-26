@@ -124,14 +124,20 @@ class YaleLockManagerCard extends HTMLElement {
   }
   
   _handleRefreshProgress(event) {
-    if (this._debugMode) {
-      console.log('[Yale Lock Manager] [REFRESH DEBUG] _handleRefreshProgress() called with event:', event);
-    }
     // Try both event.detail and event.data (different event structures)
     const data = event.detail || event.data || event;
     if (!data || !data.action) {
       console.error('[Yale Lock Manager] Invalid refresh progress event data:', event);
       return;
+    }
+    
+    // Always log complete events for debugging
+    if (data.action === "complete") {
+      console.log('[Yale Lock Manager] Refresh complete event received:', data);
+    }
+    
+    if (this._debugMode) {
+      console.log('[Yale Lock Manager] [REFRESH DEBUG] _handleRefreshProgress() called with event:', event);
     }
     
     this._refreshProgress = data;
@@ -214,40 +220,31 @@ class YaleLockManagerCard extends HTMLElement {
             }
           });
           
-          // Merge entity state with localStorage
+          // Update localStorage with entity state data (after refresh, entity state is source of truth)
           Object.keys(newUsers).forEach(slot => {
             const user = newUsers[slot];
             // Only update localStorage if slot is not currently being edited
             if (this._expandedSlot !== parseInt(slot, 10)) {
-              // Merge: keep localStorage values for editable fields, update from entity for read-only
-              if (!this._formValues[slot]) {
-                this._formValues[slot] = {};
-              }
-              // Only update editable fields if they don't exist in localStorage
-              if (!this._formValues[slot].name) {
-                this._formValues[slot].name = user.name || '';
-              }
-              if (!this._formValues[slot].code) {
-                this._formValues[slot].code = user.code || '';
-              }
-              if (this._formValues[slot].cachedStatus === undefined) {
-                this._formValues[slot].cachedStatus = user.lock_status !== null && user.lock_status !== undefined 
+              // After refresh, update localStorage with entity state data
+              // This ensures localStorage has the latest data from the lock
+              this._formValues[slot] = {
+                name: user.name || '',
+                code: user.code || '',
+                type: user.code_type || 'pin',
+                cachedStatus: user.lock_status !== null && user.lock_status !== undefined 
                   ? user.lock_status 
-                  : (user.enabled ? 1 : 2);
-              }
-              if (!this._formValues[slot].type) {
-                this._formValues[slot].type = user.code_type || 'pin';
-              }
-              if (!this._formValues[slot].schedule) {
-                this._formValues[slot].schedule = user.schedule || { start: null, end: null };
-              }
-              if (this._formValues[slot].usageLimit === undefined) {
-                this._formValues[slot].usageLimit = user.usage_limit || null;
-              }
+                  : (user.enabled ? 1 : 2),
+                schedule: user.schedule || { start: null, end: null },
+                usageLimit: user.usage_limit || null
+              };
             }
           });
-          // Save merged values to localStorage
+          // Save updated values to localStorage
           this._saveFormValuesToStorage();
+          
+          if (this._debugMode) {
+            console.log('[Yale Lock Manager] [REFRESH DEBUG] Updated localStorage with', Object.keys(newUsers).length, 'users from entity state');
+          }
           
           // Entity state updated - refresh UI
           if (this._expandedSlot === null) {
