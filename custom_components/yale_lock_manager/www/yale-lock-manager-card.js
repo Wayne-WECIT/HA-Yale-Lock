@@ -1938,51 +1938,87 @@ class YaleLockManagerCard extends HTMLElement {
         // Wait for push to complete
         await pushPromise;
         
-        // Log after push successful
+        // Log after push successful (immediate check)
         const afterPushCached = { ...(this._formValues[slot] || {}) };
         const afterPushEntity = this.getUserData().find(u => u.slot === slot);
-        this._addDebugLog('Push Successful', slot, {
+        this._addDebugLog('Push Successful (Immediate)', slot, {
           cached_code: afterPushCached.code || '',
           entity_code: afterPushEntity?.code || '',
           entity_lock_code: afterPushEntity?.lock_code || '',
-          synced: afterPushEntity?.synced_to_lock || false
+          synced: afterPushEntity?.synced_to_lock || false,
+          note: 'Entity state checked immediately after push promise resolves'
         });
         
         // Step 5: All complete!
         this.showStatus(slot, '✅ All complete! Code pushed and verified successfully!', 'success');
         this.renderStatusMessage(slot);
         
-        // Backend has already pulled from lock and updated entity state
-        // Wait for entity state to update, then re-render slot from cached data
-        // CRITICAL: Preserve the cached PIN that was just pushed - don't overwrite it with entity.code
-        setTimeout(() => {
-          // Update slot from entity state (with focus protection)
-          // Backend already pulled from lock and updated lock_code and lock_status_from_lock
-          // preserveCachedCode=true prevents overwriting the cached PIN with potentially stale entity.code
-          this._updateSlotFromEntityState(slot, true);
+        // Poll entity state multiple times to track when it updates
+        let pollAttempt = 0;
+        const maxPollAttempts = 10;
+        const pollInterval = 500; // Check every 500ms
+        
+        const pollEntityState = () => {
+          pollAttempt++;
+          const currentEntity = this.getUserData().find(u => u.slot === slot);
+          const currentCached = this._formValues[slot] || {};
           
-          // Update the lock_code field to show what's actually on the lock
-          const afterPullEntity = this.getUserData().find(u => u.slot === slot);
-          if (afterPullEntity?.lock_code) {
-            // Update _formValues to reflect that the cached code matches the lock code
-            // This ensures sync status is correct
-            const currentCached = this._formValues[slot] || {};
-            if (currentCached.code && currentCached.code === afterPullEntity.lock_code) {
-              // Cached code matches lock code - ensure localStorage is updated
+          this._addDebugLog(`Entity State Poll #${pollAttempt}`, slot, {
+            cached_code: currentCached.code || '',
+            entity_code: currentEntity?.code || '',
+            entity_lock_code: currentEntity?.lock_code || '',
+            lock_status: currentEntity?.lock_status,
+            lock_status_from_lock: currentEntity?.lock_status_from_lock,
+            synced: currentEntity?.synced_to_lock || false,
+            note: `Polling entity state ${pollAttempt}/${maxPollAttempts}`
+          });
+          
+          // Check if lock_code has been updated
+          const expectedCode = currentCached.code || '';
+          const actualLockCode = currentEntity?.lock_code || '';
+          
+          if (actualLockCode === expectedCode && expectedCode !== '') {
+            // Lock code matches - update UI and stop polling
+            this._addDebugLog('Lock Code Updated!', slot, {
+              cached_code: currentCached.code || '',
+              entity_lock_code: currentEntity?.lock_code || '',
+              match: true,
+              note: 'Entity state now shows correct lock_code'
+            });
+            
+            // Update slot from entity state (with focus protection)
+            this._updateSlotFromEntityState(slot, true);
+            
+            // Update localStorage
+            if (currentCached.code && currentCached.code === currentEntity.lock_code) {
               this._saveFormValuesToStorage();
             }
+            
+            return; // Stop polling
           }
           
-          // Log after pull confirmation
-          this._addDebugLog('Pull Confirmation (After Push)', slot, {
-            cached_code: (this._formValues[slot] || {}).code || '',
-            entity_code: afterPullEntity?.code || '',
-            entity_lock_code: afterPullEntity?.lock_code || '',
-            lock_status: afterPullEntity?.lock_status,
-            lock_status_from_lock: afterPullEntity?.lock_status_from_lock,
-            synced: afterPullEntity?.synced_to_lock || false
-          });
-        }, 2500); // 2.5 seconds should be enough for backend to pull from lock and update entity state
+          // Continue polling if not updated yet
+          if (pollAttempt < maxPollAttempts) {
+            setTimeout(pollEntityState, pollInterval);
+          } else {
+            // Max attempts reached - log final state
+            this._addDebugLog('Entity State Poll Complete (Max Attempts)', slot, {
+              cached_code: currentCached.code || '',
+              entity_code: currentEntity?.code || '',
+              entity_lock_code: currentEntity?.lock_code || '',
+              lock_status: currentEntity?.lock_status,
+              lock_status_from_lock: currentEntity?.lock_status_from_lock,
+              synced: currentEntity?.synced_to_lock || false,
+              note: 'Reached max poll attempts - entity state may not have updated'
+            });
+            
+            // Update UI anyway
+            this._updateSlotFromEntityState(slot, true);
+          }
+        };
+        
+        // Start polling after a short delay
+        setTimeout(pollEntityState, 500);
         
       } catch (error) {
         this.showStatus(slot, `❌ Push failed: ${error.message}`, 'error');
