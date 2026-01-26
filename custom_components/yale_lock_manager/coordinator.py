@@ -782,8 +782,20 @@ class YaleLockCoordinator(DataUpdateCoordinator):
                     # Log the actual lock_code value for debugging (unmasked in logs)
                     _LOGGER.info("Push verified - lock_code set to: %s (cached_code: %s)", 
                                 verification_code, user_data.get("code", ""))
+                    
+                    # Verify lock_code is actually set in user_data
+                    _LOGGER.info("After verification - user_data lock_code: %s", user_data.get("lock_code", "NOT SET"))
             
             await self.async_save_user_data()
+            _LOGGER.info("User data saved after push for slot %s", slot)
+            
+            # Verify the data is in storage
+            slot_str = str(slot)
+            stored_user = self._storage.get_user(slot)
+            if stored_user:
+                _LOGGER.info("After save - stored lock_code: %s", stored_user.get("lock_code", "NOT SET"))
+            else:
+                _LOGGER.warning("After save - user not found in storage for slot %s", slot)
             
             # CRITICAL: Update entity state directly without triggering a full pull
             # A full pull might overwrite lock_code with stale data or cause timing issues
@@ -791,10 +803,20 @@ class YaleLockCoordinator(DataUpdateCoordinator):
             if self.data:
                 self.data["last_user_update"] = datetime.now().isoformat()
             
+            # Verify what get_all_users() will return
+            all_users = self.get_all_users()
+            slot_user = all_users.get(slot_str)
+            if slot_user:
+                _LOGGER.info("Before entity write - get_all_users() lock_code: %s", slot_user.get("lock_code", "NOT SET"))
+            else:
+                _LOGGER.warning("Before entity write - user not found in get_all_users() for slot %s", slot)
+            
             # Force entity state update to reflect the new lock_code
             if self._lock_entity:
                 self._lock_entity.async_write_ha_state()
-                _LOGGER.debug("Entity state updated after push for slot %s", slot)
+                _LOGGER.info("Entity state written after push for slot %s", slot)
+            else:
+                _LOGGER.warning("Lock entity not registered - cannot update entity state")
             
         except Exception as err:
             _LOGGER.error("Failed to push code for slot %s: %s", slot, err)
