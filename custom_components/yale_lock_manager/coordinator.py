@@ -6,7 +6,10 @@ from datetime import datetime, timedelta
 import json
 import logging
 import re
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from .lock import YaleLockManagerLock
 
 from homeassistant.components.zwave_js import DOMAIN as ZWAVE_JS_DOMAIN
 from homeassistant.config_entries import ConfigEntry, ConfigEntryState
@@ -78,6 +81,9 @@ class YaleLockCoordinator(DataUpdateCoordinator):
         self._last_alarm_type: int | None = None
         self._last_alarm_level: int | None = None
 
+        # Reference to lock entity for state updates
+        self._lock_entity: YaleLockManagerLock | None = None
+
         super().__init__(
             hass,
             _LOGGER,
@@ -87,6 +93,11 @@ class YaleLockCoordinator(DataUpdateCoordinator):
 
         # Listen to Z-Wave JS events
         self._setup_listeners()
+
+    def register_lock_entity(self, entity: YaleLockManagerLock) -> None:
+        """Register the lock entity with the coordinator."""
+        self._lock_entity = entity
+        _LOGGER.debug("Lock entity registered with coordinator")
 
     def _setup_listeners(self) -> None:
         """Set up event listeners."""
@@ -1168,6 +1179,14 @@ class YaleLockCoordinator(DataUpdateCoordinator):
         _LOGGER.info("[REFRESH DEBUG] Requesting coordinator refresh (triggers _async_update_data)...")
         await self.async_request_refresh()
         _LOGGER.info("[REFRESH DEBUG] Coordinator refresh requested")
+        
+        # Explicitly write entity state to notify frontend of attribute changes
+        # CoordinatorEntity only writes state when coordinator.data changes,
+        # but extra_state_attributes reads from _user_data which is separate
+        if self._lock_entity:
+            _LOGGER.debug("[REFRESH DEBUG] Writing entity state to notify frontend...")
+            self._lock_entity.async_write_ha_state()
+            _LOGGER.debug("[REFRESH DEBUG] Entity state written")
 
     async def async_check_sync_status(self, slot: int) -> None:
         """Check sync status for a specific slot by querying the lock and comparing.

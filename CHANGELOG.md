@@ -2,6 +2,44 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.8.2.50] - 2026-01-26
+
+### 🐛 Bug Fix - Entity State Update After Refresh
+
+**User feedback**: "still no refresh" - Backend successfully pulls codes and `extra_state_attributes` returns correct data, but frontend UI doesn't update.
+
+### The Problem
+
+After `async_pull_codes_from_lock()` completes:
+- ✅ Backend successfully pulls 6 codes from lock
+- ✅ `extra_state_attributes` is called and returns 6 users  
+- ❌ Frontend UI doesn't update
+
+**Root Cause**: `CoordinatorEntity` only calls `async_write_ha_state()` when `coordinator.data` changes. However, `extra_state_attributes` reads from `coordinator.get_all_users()` which returns `_user_data["users"]` - a separate data structure. When `_user_data` changes, the entity doesn't automatically write its state, so Home Assistant doesn't notify the frontend.
+
+### The Solution
+
+1. **Entity Registration**: The lock entity registers itself with the coordinator when initialized
+2. **Explicit State Write**: After `async_pull_codes_from_lock()` completes, explicitly call `async_write_ha_state()` on the lock entity to force Home Assistant to notify the frontend
+
+### Changed
+
+- **Backend (`coordinator.py`)**:
+  - Added `_lock_entity` reference to store the lock entity
+  - Added `register_lock_entity()` method to register the entity
+  - After `async_pull_codes_from_lock()` completes, explicitly calls `async_write_ha_state()` on the entity
+- **Backend (`lock.py`)**:
+  - In `__init__()`, registers itself with the coordinator via `coordinator.register_lock_entity(self)`
+
+### What's Fixed
+
+- ✅ Frontend UI now updates automatically after refresh completes
+- ✅ No manual page refresh needed
+- ✅ Entity state is explicitly written when user data changes
+- ✅ Home Assistant properly notifies frontend of attribute changes
+
+---
+
 ## [1.8.2.49] - 2026-01-26
 
 ### 🐛 Bug Fixes - disconnectedCallback Error & Entity State Change Detection

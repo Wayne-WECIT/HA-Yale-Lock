@@ -41,6 +41,9 @@ class YaleLockManagerLock(CoordinatorEntity, LockEntity):
         """Initialize the lock."""
         super().__init__(coordinator)
         
+        # Register this entity with the coordinator so it can notify us of state changes
+        coordinator.register_lock_entity(self)
+        
         # Get the lock name from config entry
         lock_name = entry.data.get(CONF_LOCK_NAME, "Yale Lock")
         
