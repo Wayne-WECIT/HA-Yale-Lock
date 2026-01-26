@@ -340,11 +340,14 @@ class YaleLockManagerCard extends HTMLElement {
     }
   }
   
-  _updateSlotFromEntityState(slot) {
+  _updateSlotFromEntityState(slot, preserveCachedCode = false) {
     /**
      * Update a slot's form fields from entity state (source of truth).
      * This is called after save/push operations to refresh the UI with latest data.
      * CRITICAL: Only updates editable fields if they don't have focus (prevents overwriting user input).
+     * 
+     * @param {number} slot - The slot number to update
+     * @param {boolean} preserveCachedCode - If true, don't update the cached PIN field (used after push to preserve the pushed code)
      */
     const user = this.getUserData().find(u => u.slot === slot);
     if (!user) {
@@ -370,12 +373,16 @@ class YaleLockManagerCard extends HTMLElement {
         }
       }
       
-      if (codeField) {
+      // CRITICAL: After push, preserve the cached PIN that was just pushed
+      // Don't overwrite it with entity.code which might be stale
+      if (codeField && !preserveCachedCode) {
         if (document.activeElement !== codeField) {
           codeField.value = user.code || '';
         } else {
           console.log(`[Yale Lock Manager] Skipping code field update for slot ${slot} - field has focus`);
         }
+      } else if (preserveCachedCode) {
+        console.log(`[Yale Lock Manager] Preserving cached PIN for slot ${slot} after push operation`);
       }
       
       if (statusField) {
@@ -854,12 +861,13 @@ class YaleLockManagerCard extends HTMLElement {
     };
     
     // Get current cached values for this slot
+    // In debug mode, show actual codes (not masked)
     if (slot) {
       const cached = this._formValues[slot] || {};
       const entity = this.getUserData().find(u => u.slot === slot);
       entry.cached = {
         name: cached.name || '',
-        code: cached.code ? '***' : '',
+        code: cached.code || '', // Show actual code in debug
         type: cached.type || '',
         cachedStatus: cached.cachedStatus,
         schedule: cached.schedule,
@@ -867,8 +875,8 @@ class YaleLockManagerCard extends HTMLElement {
       };
       entry.entity = entity ? {
         name: entity.name || '',
-        code: entity.code ? '***' : '',
-        lock_code: entity.lock_code ? '***' : '',
+        code: entity.code || '', // Show actual code in debug
+        lock_code: entity.lock_code || '', // Show actual code in debug
         lock_status: entity.lock_status,
         lock_status_from_lock: entity.lock_status_from_lock,
         synced_to_lock: entity.synced_to_lock
@@ -887,8 +895,12 @@ class YaleLockManagerCard extends HTMLElement {
       this._updateDebugPanel();
     }
     
-    // Also log to console
-    console.log(`[Yale Lock Manager] [DEBUG] ${timestamp} - ${operation}${slot ? ` (Slot ${slot})` : ''}`, details);
+    // Also log to console (with actual codes for debugging)
+    console.log(`[Yale Lock Manager] [DEBUG] ${timestamp} - ${operation}${slot ? ` (Slot ${slot})` : ''}`, {
+      ...details,
+      cached: entry.cached,
+      entity: entry.entity
+    });
   }
 
   _updateDebugPanel() {
@@ -1617,10 +1629,10 @@ class YaleLockManagerCard extends HTMLElement {
           
           // Log PIN change
           if (codeField.value !== oldCode) {
-            this._addDebugLog('Cached PIN Changed', slot, {
-              old_code: oldCode ? '***' : '',
-              new_code: codeField.value ? '***' : ''
-            });
+          this._addDebugLog('Cached PIN Changed', slot, {
+            old_code: oldCode || '',
+            new_code: codeField.value || ''
+          });
           }
         });
       }
@@ -1734,11 +1746,11 @@ class YaleLockManagerCard extends HTMLElement {
       const entity = this.getUserData().find(u => u.slot === slot);
       this._addDebugLog('Slot Expanded', slot, {
         cached_name: cached.name || '',
-        cached_code: cached.code ? '***' : '',
+        cached_code: cached.code || '',
         cached_status: cached.cachedStatus,
         entity_name: entity?.name || '',
-        entity_code: entity?.code ? '***' : '',
-        entity_lock_code: entity?.lock_code ? '***' : ''
+        entity_code: entity?.code || '',
+        entity_lock_code: entity?.lock_code || ''
       });
     }
     
@@ -1880,9 +1892,9 @@ class YaleLockManagerCard extends HTMLElement {
     const beforeCached = { ...(this._formValues[slot] || {}) };
     const beforeEntity = this.getUserData().find(u => u.slot === slot);
     this._addDebugLog('Push Clicked', slot, {
-      cached_code: beforeCached.code ? '***' : '',
-      entity_code: beforeEntity?.code ? '***' : '',
-      entity_lock_code: beforeEntity?.lock_code ? '***' : ''
+      cached_code: beforeCached.code || '',
+      entity_code: beforeEntity?.code || '',
+      entity_lock_code: beforeEntity?.lock_code || ''
     });
     
     this.showStatus(slot, `Push "${user.name}" to the lock now?`, 'confirm', async () => {
@@ -1930,9 +1942,9 @@ class YaleLockManagerCard extends HTMLElement {
         const afterPushCached = { ...(this._formValues[slot] || {}) };
         const afterPushEntity = this.getUserData().find(u => u.slot === slot);
         this._addDebugLog('Push Successful', slot, {
-          cached_code: afterPushCached.code ? '***' : '',
-          entity_code: afterPushEntity?.code ? '***' : '',
-          entity_lock_code: afterPushEntity?.lock_code ? '***' : '',
+          cached_code: afterPushCached.code || '',
+          entity_code: afterPushEntity?.code || '',
+          entity_lock_code: afterPushEntity?.lock_code || '',
           synced: afterPushEntity?.synced_to_lock || false
         });
         
@@ -1942,16 +1954,30 @@ class YaleLockManagerCard extends HTMLElement {
         
         // Backend has already pulled from lock and updated entity state
         // Wait for entity state to update, then re-render slot from cached data
+        // CRITICAL: Preserve the cached PIN that was just pushed - don't overwrite it with entity.code
         setTimeout(() => {
           // Update slot from entity state (with focus protection)
           // Backend already pulled from lock and updated lock_code and lock_status_from_lock
-          this._updateSlotFromEntityState(slot);
+          // preserveCachedCode=true prevents overwriting the cached PIN with potentially stale entity.code
+          this._updateSlotFromEntityState(slot, true);
+          
+          // Update the lock_code field to show what's actually on the lock
+          const afterPullEntity = this.getUserData().find(u => u.slot === slot);
+          if (afterPullEntity?.lock_code) {
+            // Update _formValues to reflect that the cached code matches the lock code
+            // This ensures sync status is correct
+            const currentCached = this._formValues[slot] || {};
+            if (currentCached.code && currentCached.code === afterPullEntity.lock_code) {
+              // Cached code matches lock code - ensure localStorage is updated
+              this._saveFormValuesToStorage();
+            }
+          }
           
           // Log after pull confirmation
-          const afterPullEntity = this.getUserData().find(u => u.slot === slot);
           this._addDebugLog('Pull Confirmation (After Push)', slot, {
-            entity_code: afterPullEntity?.code ? '***' : '',
-            entity_lock_code: afterPullEntity?.lock_code ? '***' : '',
+            cached_code: (this._formValues[slot] || {}).code || '',
+            entity_code: afterPullEntity?.code || '',
+            entity_lock_code: afterPullEntity?.lock_code || '',
             lock_status: afterPullEntity?.lock_status,
             lock_status_from_lock: afterPullEntity?.lock_status_from_lock,
             synced: afterPullEntity?.synced_to_lock || false
@@ -1976,10 +2002,10 @@ class YaleLockManagerCard extends HTMLElement {
     const beforeCached = { ...(this._formValues[slot] || {}) };
     const beforeEntity = this.getUserData().find(u => u.slot === slot);
     this._addDebugLog('Update User Clicked', slot, {
-      before_cached_code: beforeCached.code ? '***' : '',
+      before_cached_code: beforeCached.code || '',
       before_cached_status: beforeCached.cachedStatus,
-      before_entity_lock_code: beforeEntity?.lock_code ? '***' : '',
-      new_code: code ? '***' : '',
+      before_entity_lock_code: beforeEntity?.lock_code || '',
+      new_code: code || '',
       new_status: cachedStatus
     });
     
@@ -2097,10 +2123,10 @@ class YaleLockManagerCard extends HTMLElement {
       const afterCached = { ...(this._formValues[slot] || {}) };
       const afterEntity = this.getUserData().find(u => u.slot === slot);
       this._addDebugLog('Update User Completed', slot, {
-        after_cached_code: afterCached.code ? '***' : '',
+        after_cached_code: afterCached.code || '',
         after_cached_status: afterCached.cachedStatus,
-        after_entity_code: afterEntity?.code ? '***' : '',
-        after_entity_lock_code: afterEntity?.lock_code ? '***' : '',
+        after_entity_code: afterEntity?.code || '',
+        after_entity_lock_code: afterEntity?.lock_code || '',
         synced: afterEntity?.synced_to_lock || false
       });
       
