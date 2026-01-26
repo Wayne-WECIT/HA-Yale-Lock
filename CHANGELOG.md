@@ -2,6 +2,45 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.8.2.51] - 2026-01-26
+
+### 🐛 Bug Fix - Frontend Update After Refresh (Timing Fix)
+
+**User feedback**: "still no refresh" - Backend successfully pulls codes, `extra_state_attributes` returns correct data, and `async_write_ha_state()` is called, but frontend UI still doesn't update.
+
+### The Problem
+
+After `async_pull_codes_from_lock()` completes:
+- ✅ Backend successfully pulls 6 codes from lock
+- ✅ `extra_state_attributes` is called and returns 6 users
+- ✅ `async_write_ha_state()` is called
+- ❌ Frontend UI still doesn't update
+
+**Root Cause**: `async_write_ha_state()` was called immediately after `async_request_refresh()`, but Home Assistant may not have processed the refresh yet. Additionally, Home Assistant may not notify the frontend when only attributes change (not the state itself). `CoordinatorEntity` only writes state when `coordinator.data` changes, but we were only updating `_user_data`, not `coordinator.data`.
+
+### The Solution
+
+1. **Add Delay**: Added a small delay (`await asyncio.sleep(0.1)`) after `async_request_refresh()` to ensure the refresh has been processed
+2. **Update coordinator.data**: Update `coordinator.data` with a timestamp (`last_user_update`) to trigger a state change notification, since `CoordinatorEntity` only writes state when `coordinator.data` changes
+3. **Schedule State Write**: Schedule `async_write_ha_state()` using `hass.async_call_later()` with a 0.2 second delay to ensure it happens after the refresh is fully processed
+
+### Changed
+
+- **Backend (`coordinator.py`)**:
+  - Added `await asyncio.sleep(0.1)` after `async_request_refresh()` to ensure refresh is processed
+  - Update `coordinator.data["last_user_update"]` with current timestamp to trigger state change
+  - Schedule `async_write_ha_state()` using `hass.async_call_later(0.2, callback)` instead of calling it immediately
+  - Added `@callback` decorator to the state write callback function
+
+### What's Fixed
+
+- ✅ Frontend UI should now update automatically after refresh completes
+- ✅ State change is properly triggered by updating `coordinator.data`
+- ✅ Timing issues resolved with delays and scheduled state write
+- ✅ Home Assistant properly processes the state change before notifying frontend
+
+---
+
 ## [1.8.2.50] - 2026-01-26
 
 ### 🐛 Bug Fix - Entity State Update After Refresh

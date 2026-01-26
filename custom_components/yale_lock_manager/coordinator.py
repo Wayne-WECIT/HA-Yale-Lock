@@ -1180,13 +1180,31 @@ class YaleLockCoordinator(DataUpdateCoordinator):
         await self.async_request_refresh()
         _LOGGER.info("[REFRESH DEBUG] Coordinator refresh requested")
         
-        # Explicitly write entity state to notify frontend of attribute changes
+        # Add a small delay to ensure the refresh has been processed
+        await asyncio.sleep(0.1)
+        _LOGGER.debug("[REFRESH DEBUG] Delay completed, updating coordinator.data to trigger state change...")
+        
+        # Update coordinator.data to trigger state change notification
         # CoordinatorEntity only writes state when coordinator.data changes,
         # but extra_state_attributes reads from _user_data which is separate
+        if self.data:
+            self.data["last_user_update"] = datetime.now().isoformat()
+            _LOGGER.debug("[REFRESH DEBUG] Updated coordinator.data with timestamp: %s", self.data["last_user_update"])
+        
+        # Schedule async_write_ha_state() to ensure it happens after the refresh is fully processed
+        # This ensures Home Assistant has time to process the state change
         if self._lock_entity:
-            _LOGGER.debug("[REFRESH DEBUG] Writing entity state to notify frontend...")
-            self._lock_entity.async_write_ha_state()
-            _LOGGER.debug("[REFRESH DEBUG] Entity state written")
+            _LOGGER.debug("[REFRESH DEBUG] Scheduling entity state write in 0.2 seconds...")
+            
+            @callback
+            def _write_state_callback(_now):
+                """Callback to write entity state after delay."""
+                _LOGGER.debug("[REFRESH DEBUG] Writing entity state to notify frontend...")
+                self._lock_entity.async_write_ha_state()
+                _LOGGER.debug("[REFRESH DEBUG] Entity state written")
+            
+            self.hass.async_call_later(0.2, _write_state_callback)
+            _LOGGER.debug("[REFRESH DEBUG] Entity state write scheduled")
 
     async def async_check_sync_status(self, slot: int) -> None:
         """Check sync status for a specific slot by querying the lock and comparing.
