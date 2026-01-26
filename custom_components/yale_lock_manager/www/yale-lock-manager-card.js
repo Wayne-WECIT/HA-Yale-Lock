@@ -163,6 +163,7 @@ class YaleLockManagerCard extends HTMLElement {
       );
       this.renderStatusMessage(0); // Explicitly render
     } else if (data.action === "complete") {
+      console.log('[Yale Lock Manager] ✅ Refresh complete event received - Found', data.codes_found, 'codes (', data.codes_new, 'new,', data.codes_updated, 'updated)');
       if (this._debugMode) {
         console.log('[Yale Lock Manager] [REFRESH DEBUG] Refresh complete event received');
         console.log('[Yale Lock Manager] [REFRESH DEBUG] Codes found:', data.codes_found, 'new:', data.codes_new, 'updated:', data.codes_updated);
@@ -174,9 +175,7 @@ class YaleLockManagerCard extends HTMLElement {
       this.renderStatusMessage(0); // Explicitly render
       
       // Wait for entity state to actually change (compare to snapshot)
-      if (this._debugMode) {
-        console.log('[Yale Lock Manager] [REFRESH DEBUG] Starting polling for entity state update...');
-      }
+      console.log('[Yale Lock Manager] Starting polling for entity state update...');
       let attempts = 0;
       const maxAttempts = 20; // Wait up to 6 seconds (20 * 300ms)
       const checkInterval = setInterval(() => {
@@ -184,28 +183,33 @@ class YaleLockManagerCard extends HTMLElement {
         const stateObj = this._hass?.states[this._config?.entity];
         const newUsers = stateObj?.attributes?.users || {};
         
-        if (this._debugMode && attempts === 1) {
-          this._logUserData(newUsers, 'First poll - Current');
-          this._logUserData(this._refreshSnapshot, 'First poll - Snapshot');
+        if (attempts === 1) {
+          console.log('[Yale Lock Manager] First poll - Current users:', Object.keys(newUsers).length, 'Snapshot users:', this._refreshSnapshot ? Object.keys(this._refreshSnapshot).length : 0);
+          if (this._debugMode) {
+            this._logUserData(newUsers, 'First poll - Current');
+            this._logUserData(this._refreshSnapshot, 'First poll - Snapshot');
+          }
         }
         
         // Check if data has actually changed by comparing to snapshot
         const comparison = this._compareUserData(this._refreshSnapshot, newUsers);
         
-        if (this._debugMode && attempts % 5 === 0) {
-          console.log(`[Yale Lock Manager] [REFRESH DEBUG] Poll attempt ${attempts}/${maxAttempts}, hasChanged:`, comparison.hasChanged);
-          if (comparison.details.length > 0) {
+        // Force update if we have users in entity state (even if comparison doesn't detect change)
+        const hasUsers = Object.keys(newUsers).length > 0;
+        const shouldUpdate = comparison.hasChanged || attempts >= maxAttempts || (hasUsers && attempts >= 3);
+        
+        if (attempts % 5 === 0 || attempts === 1) {
+          console.log(`[Yale Lock Manager] Poll attempt ${attempts}/${maxAttempts}, hasChanged:`, comparison.hasChanged, 'hasUsers:', hasUsers, 'shouldUpdate:', shouldUpdate);
+          if (comparison.details.length > 0 && this._debugMode) {
             console.log('[Yale Lock Manager] [REFRESH DEBUG] Change details:', comparison.details);
           }
         }
         
-        if (comparison.hasChanged || attempts >= maxAttempts) {
+        if (shouldUpdate) {
           clearInterval(checkInterval);
-          if (this._debugMode) {
-            console.log(`[Yale Lock Manager] [REFRESH DEBUG] Polling complete after ${attempts} attempts, hasChanged:`, comparison.hasChanged);
-            if (comparison.details.length > 0) {
-              console.log('[Yale Lock Manager] [REFRESH DEBUG] Final change details:', comparison.details);
-            }
+          console.log(`[Yale Lock Manager] Polling complete after ${attempts} attempts, hasChanged:`, comparison.hasChanged, 'hasUsers:', hasUsers);
+          if (this._debugMode && comparison.details.length > 0) {
+            console.log('[Yale Lock Manager] [REFRESH DEBUG] Final change details:', comparison.details);
           }
           this._refreshSnapshot = null; // Clear snapshot
           
