@@ -2,6 +2,113 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.8.2.48] - 2026-01-25
+
+### 🔧 Comprehensive Refresh Fix & Refactoring
+
+**User feedback**: "ok you need to look at all the code, that refresh is still not working. I want you now to look at everything and check everthing.. and look at refactoring at they may make the codebase simpleer to debug"
+
+### The Problem
+
+After comprehensive code review, identified multiple issues with the refresh flow:
+
+1. **Data Flow Confusion**: `async_pull_codes_from_lock()` updates `_user_data["users"]` in memory, but `_async_update_data()` doesn't read from it - it only fetches lock state, door/bolt/battery, config params. Entity's `extra_state_attributes` reads from `coordinator.get_all_users()` which returns `_user_data["users"]` directly, but there's no guarantee entity state updates when `_user_data["users"]` changes.
+
+2. **Snapshot Comparison Issues**: Complex polling logic with potential bugs in comparison (undefined vs null, missing fields, timing issues).
+
+3. **No Debugging Visibility**: No logging to understand what's happening during refresh.
+
+4. **Code Complexity**: Multiple places doing similar things, hard to debug.
+
+### The Solution
+
+Implemented comprehensive logging and refactoring:
+
+**1. Backend Logging** (`coordinator.py`):
+- Added detailed logging in `async_pull_codes_from_lock()`:
+  - Logs when each slot is processed
+  - Logs when `_user_data["users"]` is updated
+  - Logs when `async_save_user_data()` completes
+  - Logs when `async_request_refresh()` is called
+- Added logging in `_async_update_data()`:
+  - Logs when it's called
+  - Logs what data is returned
+- Added logging in `get_all_users()`:
+  - Logs when it's called and user count
+
+**2. Entity Logging** (`lock.py`):
+- Added logging in `extra_state_attributes`:
+  - Logs when it's called
+  - Logs the users data being returned
+  - Logs the count of users
+
+**3. Frontend Logging** (both card and panel):
+- Added `_debugMode` flag for detailed logging
+- Added logging in `refresh()`:
+  - Logs snapshot being stored
+  - Logs service call
+- Added logging in `_handleRefreshProgress()`:
+  - Logs each event received
+  - Logs comparison results
+  - Logs when UI refresh happens
+- Added logging in `set hass()`:
+  - Logs when it's called
+  - Logs entity state changes
+  - Logs what triggers render vs `_updateNonEditableParts()`
+
+**4. Refactored Refresh Logic**:
+- Extracted helper methods:
+  - `_storeRefreshSnapshot()` - Store snapshot
+  - `_compareUserData()` - Compare snapshot to current (returns change details)
+  - `_waitForEntityUpdate()` - Wait for entity state to update
+  - `_getUserDataHash()` - Get hash of user data for quick comparison
+  - `_logUserData()` - Log user data in readable format (debug mode only)
+- Simplified refresh complete handler to use helper methods
+- Better change detection with detailed change information
+
+### Changed
+
+- **Backend (`coordinator.py`)**:
+  - Added `[REFRESH DEBUG]` logging throughout refresh flow
+  - Logs user data state before/after save
+  - Logs when `async_request_refresh()` is called
+- **Entity (`lock.py`)**:
+  - Added `[REFRESH DEBUG]` logging in `extra_state_attributes`
+- **Frontend (`yale-lock-manager-card.js` & `yale-lock-manager-panel.js`)**:
+  - Added `_debugMode` flag (default: false)
+  - Added helper methods for refresh logic
+  - Refactored refresh complete handler to use helper methods
+  - Added comprehensive `[REFRESH DEBUG]` logging throughout
+
+### How to Use Debug Mode
+
+To enable debug logging, open browser console and run:
+```javascript
+// For card
+document.querySelector('yale-lock-manager-card')._debugMode = true;
+
+// For panel
+document.querySelector('yale-lock-manager-panel')._debugMode = true;
+```
+
+Then click "Refresh from lock" and watch the console for detailed logs showing:
+- When snapshot is stored
+- When backend updates user data
+- When entity state updates
+- When `set hass()` is called
+- Comparison results
+- When UI refresh happens
+
+### What's Fixed
+
+- ✅ Comprehensive logging throughout refresh flow for debugging
+- ✅ Refactored refresh logic into helper methods for easier maintenance
+- ✅ Better change detection with detailed change information
+- ✅ Debug mode for detailed troubleshooting
+- ✅ Clearer code structure and separation of concerns
+
+---
+
 ## [1.8.2.47] - 2026-01-25
 
 ### 🐛 Bug Fixes - Refresh Complete Data Change Detection

@@ -113,7 +113,9 @@ class YaleLockManagerLock(CoordinatorEntity, LockEntity):
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         """Return the state attributes."""
+        _LOGGER.debug("[REFRESH DEBUG] extra_state_attributes property called")
         if not self.coordinator.data:
+            _LOGGER.debug("[REFRESH DEBUG] extra_state_attributes: coordinator.data is None, returning empty dict")
             return {}
 
         attrs = {}
@@ -133,11 +135,15 @@ class YaleLockManagerLock(CoordinatorEntity, LockEntity):
         # Add user data for the card
         users = self.coordinator.get_all_users()
         enabled_users = [u for u in users.values() if u.get("enabled")]
-        attrs["total_users"] = len([u for u in users.values() if u.get("name")])
+        total_users = len([u for u in users.values() if u.get("name")])
+        attrs["total_users"] = total_users
         attrs["enabled_users"] = len(enabled_users)
         
         # Expose full user data for the Lovelace card
         attrs["users"] = users
+        
+        _LOGGER.info("[REFRESH DEBUG] extra_state_attributes: returning %s users (total_users=%s, enabled_users=%s)", 
+                     len(users), total_users, len(enabled_users))
 
         return attrs
 

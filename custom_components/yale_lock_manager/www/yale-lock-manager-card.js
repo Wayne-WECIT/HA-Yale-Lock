@@ -24,6 +24,7 @@ class YaleLockManagerCard extends HTMLElement {
     this._refreshProgress = null; // Current refresh progress data
     this._unsavedChanges = {}; // Track unsaved changes per slot
     this._refreshSnapshot = null; // Snapshot of user data before refresh
+    this._debugMode = false; // Debug mode flag for detailed logging
   }
 
   setConfig(config) {
@@ -35,6 +36,18 @@ class YaleLockManagerCard extends HTMLElement {
 
   set hass(hass) {
     const oldHass = this._hass;
+    const entityChanged = oldHass && hass && 
+      oldHass.states[this._config?.entity]?.attributes?.users !== 
+      hass.states[this._config?.entity]?.attributes?.users;
+    
+    if (this._debugMode && entityChanged) {
+      const oldUsers = oldHass?.states[this._config?.entity]?.attributes?.users || {};
+      const newUsers = hass?.states[this._config?.entity]?.attributes?.users || {};
+      console.log('[Yale Lock Manager] [REFRESH DEBUG] set hass() called - entity state changed');
+      console.log('[Yale Lock Manager] [REFRESH DEBUG] Old users count:', Object.keys(oldUsers).length);
+      console.log('[Yale Lock Manager] [REFRESH DEBUG] New users count:', Object.keys(newUsers).length);
+    }
+    
     this._hass = hass;
     
     // Subscribe to refresh progress events when hass is first set
@@ -46,9 +59,15 @@ class YaleLockManagerCard extends HTMLElement {
     // Only update if entity state actually changed and no slot is expanded
     if (this._expandedSlot === null) {
       // No slot expanded - safe to render
+      if (this._debugMode && entityChanged) {
+        console.log('[Yale Lock Manager] [REFRESH DEBUG] set hass() - calling render() (no slot expanded)');
+      }
     this.render();
     } else {
       // Slot is expanded - only update non-editable parts (status messages, lock fields)
+      if (this._debugMode && entityChanged) {
+        console.log('[Yale Lock Manager] [REFRESH DEBUG] set hass() - calling _updateNonEditableParts() (slot expanded)');
+      }
       this._updateNonEditableParts();
     }
   }
@@ -90,7 +109,9 @@ class YaleLockManagerCard extends HTMLElement {
   }
   
   _handleRefreshProgress(event) {
-    console.log('[Yale Lock Manager] Handling refresh progress event:', event);
+    if (this._debugMode) {
+      console.log('[Yale Lock Manager] [REFRESH DEBUG] _handleRefreshProgress() called with event:', event);
+    }
     // Try both event.detail and event.data (different event structures)
     const data = event.detail || event.data || event;
     if (!data || !data.action) {
@@ -105,6 +126,9 @@ class YaleLockManagerCard extends HTMLElement {
     
     // Also update status message for slot 0
     if (data.action === "start") {
+      if (this._debugMode) {
+        console.log('[Yale Lock Manager] [REFRESH DEBUG] Refresh started');
+      }
       this.showStatus(0, `⏳ Starting refresh - scanning ${data.total_slots} slots...`, 'info');
       this.renderStatusMessage(0); // Explicitly render
     } else if (data.action === "progress") {
@@ -116,6 +140,10 @@ class YaleLockManagerCard extends HTMLElement {
       );
       this.renderStatusMessage(0); // Explicitly render
     } else if (data.action === "complete") {
+      if (this._debugMode) {
+        console.log('[Yale Lock Manager] [REFRESH DEBUG] Refresh complete event received');
+        console.log('[Yale Lock Manager] [REFRESH DEBUG] Codes found:', data.codes_found, 'new:', data.codes_new, 'updated:', data.codes_updated);
+      }
       this.showStatus(0, 
         `✅ Refresh complete! Found ${data.codes_found} codes (${data.codes_new} new, ${data.codes_updated} updated)`, 
         'success'
@@ -123,6 +151,9 @@ class YaleLockManagerCard extends HTMLElement {
       this.renderStatusMessage(0); // Explicitly render
       
       // Wait for entity state to actually change (compare to snapshot)
+      if (this._debugMode) {
+        console.log('[Yale Lock Manager] [REFRESH DEBUG] Starting polling for entity state update...');
+      }
       let attempts = 0;
       const maxAttempts = 20; // Wait up to 6 seconds (20 * 300ms)
       const checkInterval = setInterval(() => {
@@ -130,45 +161,41 @@ class YaleLockManagerCard extends HTMLElement {
         const stateObj = this._hass?.states[this._config?.entity];
         const newUsers = stateObj?.attributes?.users || {};
         
-        // Check if data has actually changed by comparing to snapshot
-        let hasChanged = false;
-        if (this._refreshSnapshot) {
-          // Compare: check if any user's lock_status, lock_code, or lock_status_from_lock changed
-          for (const slot in newUsers) {
-            const newUser = newUsers[slot];
-            const oldUser = this._refreshSnapshot[slot];
-            
-            if (!oldUser || 
-                newUser.lock_status !== oldUser.lock_status ||
-                newUser.lock_code !== oldUser.lock_code ||
-                newUser.lock_status_from_lock !== oldUser.lock_status_from_lock ||
-                newUser.name !== oldUser.name ||
-                newUser.code !== oldUser.code) {
-              hasChanged = true;
-              break;
-            }
-          }
-          
-          // Also check if any users were added (new slots)
-          for (const slot in newUsers) {
-            if (!(slot in this._refreshSnapshot)) {
-              hasChanged = true;
-              break;
-            }
-          }
-        } else {
-          // No snapshot - check if we have user data
-          hasChanged = Object.keys(newUsers).length > 0;
+        if (this._debugMode && attempts === 1) {
+          this._logUserData(newUsers, 'First poll - Current');
+          this._logUserData(this._refreshSnapshot, 'First poll - Snapshot');
         }
         
-        if (hasChanged || attempts >= maxAttempts) {
+        // Check if data has actually changed by comparing to snapshot
+        const comparison = this._compareUserData(this._refreshSnapshot, newUsers);
+        
+        if (this._debugMode && attempts % 5 === 0) {
+          console.log(`[Yale Lock Manager] [REFRESH DEBUG] Poll attempt ${attempts}/${maxAttempts}, hasChanged:`, comparison.hasChanged);
+          if (comparison.details.length > 0) {
+            console.log('[Yale Lock Manager] [REFRESH DEBUG] Change details:', comparison.details);
+          }
+        }
+        
+        if (comparison.hasChanged || attempts >= maxAttempts) {
           clearInterval(checkInterval);
+          if (this._debugMode) {
+            console.log(`[Yale Lock Manager] [REFRESH DEBUG] Polling complete after ${attempts} attempts, hasChanged:`, comparison.hasChanged);
+            if (comparison.details.length > 0) {
+              console.log('[Yale Lock Manager] [REFRESH DEBUG] Final change details:', comparison.details);
+            }
+          }
           this._refreshSnapshot = null; // Clear snapshot
           
           // Entity state updated - refresh UI
           if (this._expandedSlot === null) {
+            if (this._debugMode) {
+              console.log('[Yale Lock Manager] [REFRESH DEBUG] Calling render() (no slot expanded)');
+            }
             this.render(); // Full refresh to show new data
           } else {
+            if (this._debugMode) {
+              console.log('[Yale Lock Manager] [REFRESH DEBUG] Calling _updateSlotFromEntityState() (slot expanded)');
+            }
             // Update the expanded slot from entity state (with focus protection)
             this._updateSlotFromEntityState(this._expandedSlot);
           }
@@ -573,6 +600,97 @@ class YaleLockManagerCard extends HTMLElement {
   }
 
   // ========== DATA HELPERS ==========
+
+  _storeRefreshSnapshot() {
+    /** Store snapshot of current user data before refresh starts. */
+    const stateObj = this._hass?.states[this._config?.entity];
+    const currentUsers = stateObj?.attributes?.users || {};
+    this._refreshSnapshot = JSON.parse(JSON.stringify(currentUsers)); // Deep copy
+    
+    if (this._debugMode) {
+      console.log('[Yale Lock Manager] [REFRESH DEBUG] _storeRefreshSnapshot() - stored', Object.keys(this._refreshSnapshot).length, 'users');
+    }
+    
+    return this._refreshSnapshot;
+  }
+
+  _compareUserData(snapshot, current) {
+    /** Compare snapshot to current user data and return change details. */
+    if (!snapshot) {
+      return { hasChanged: Object.keys(current).length > 0, details: ['No snapshot'] };
+    }
+    
+    const details = [];
+    let hasChanged = false;
+    
+    // Check for new users
+    for (const slot in current) {
+      if (!(slot in snapshot)) {
+        hasChanged = true;
+        details.push(`Slot ${slot}: new user added`);
+      }
+    }
+    
+    // Check for changed users
+    for (const slot in current) {
+      const newUser = current[slot];
+      const oldUser = snapshot[slot];
+      
+      if (!oldUser) {
+        continue; // Already handled as new user
+      }
+      
+      const changes = [];
+      if (newUser.lock_status !== oldUser.lock_status) {
+        changes.push(`lock_status: ${oldUser.lock_status} -> ${newUser.lock_status}`);
+      }
+      if (newUser.lock_code !== oldUser.lock_code) {
+        changes.push(`lock_code changed`);
+      }
+      if (newUser.lock_status_from_lock !== oldUser.lock_status_from_lock) {
+        changes.push(`lock_status_from_lock: ${oldUser.lock_status_from_lock} -> ${newUser.lock_status_from_lock}`);
+      }
+      if (newUser.name !== oldUser.name) {
+        changes.push(`name: ${oldUser.name} -> ${newUser.name}`);
+      }
+      if (newUser.code !== oldUser.code) {
+        changes.push(`code changed`);
+      }
+      
+      if (changes.length > 0) {
+        hasChanged = true;
+        details.push(`Slot ${slot}: ${changes.join(', ')}`);
+      }
+    }
+    
+    return { hasChanged, details };
+  }
+
+  _getUserDataHash(users) {
+    /** Get a simple hash of user data for quick comparison. */
+    const keys = Object.keys(users).sort();
+    const hash = keys.map(slot => {
+      const user = users[slot];
+      return `${slot}:${user.lock_status}:${user.lock_code}:${user.lock_status_from_lock}:${user.name}:${user.code}`;
+    }).join('|');
+    return hash;
+  }
+
+  _logUserData(users, label = 'User Data') {
+    /** Log user data in readable format (debug mode only). */
+    if (!this._debugMode) return;
+    
+    console.log(`[Yale Lock Manager] [REFRESH DEBUG] ${label}:`, Object.keys(users).length, 'users');
+    for (const slot in users) {
+      const user = users[slot];
+      console.log(`[Yale Lock Manager] [REFRESH DEBUG]   Slot ${slot}:`, {
+        name: user.name,
+        lock_status: user.lock_status,
+        lock_code: user.lock_code ? '***' : 'None',
+        lock_status_from_lock: user.lock_status_from_lock
+      });
+    }
+  }
 
   getUserData() {
     const stateObj = this._hass?.states[this._config?.entity];
@@ -1385,9 +1503,12 @@ class YaleLockManagerCard extends HTMLElement {
   async refresh() {
     try {
       // Store snapshot of current user data BEFORE refresh
-      const stateObj = this._hass?.states[this._config?.entity];
-      const currentUsers = stateObj?.attributes?.users || {};
-      this._refreshSnapshot = JSON.parse(JSON.stringify(currentUsers)); // Deep copy
+      this._storeRefreshSnapshot();
+      
+      if (this._debugMode) {
+        console.log('[Yale Lock Manager] [REFRESH DEBUG] refresh() called');
+        this._logUserData(this._refreshSnapshot, 'Snapshot');
+      }
       
       // Clear previous progress
       this._refreshProgress = null;
@@ -1397,14 +1518,25 @@ class YaleLockManagerCard extends HTMLElement {
       this.showStatus(0, '⏳ Starting refresh... This may take a moment.', 'info');
       this.renderStatusMessage(0);
       
+      if (this._debugMode) {
+        console.log('[Yale Lock Manager] [REFRESH DEBUG] Calling pull_codes_from_lock service...');
+      }
+      
       // Events will handle progress updates and UI refresh
       await this._hass.callService('yale_lock_manager', 'pull_codes_from_lock', {
         entity_id: this._config.entity
       });
       
+      if (this._debugMode) {
+        console.log('[Yale Lock Manager] [REFRESH DEBUG] pull_codes_from_lock service call completed');
+      }
+      
       // Success message and UI refresh are handled by the complete event
       // Don't call render() here - let the complete event handler do it
     } catch (error) {
+      if (this._debugMode) {
+        console.error('[Yale Lock Manager] [REFRESH DEBUG] refresh() error:', error);
+      }
       this._refreshProgress = null;
       this._refreshSnapshot = null; // Clear snapshot on error
       this._updateRefreshProgress();

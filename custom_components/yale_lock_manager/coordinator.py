@@ -256,6 +256,7 @@ class YaleLockCoordinator(DataUpdateCoordinator):
 
     async def _async_update_data(self) -> dict[str, Any]:
         """Fetch data from the lock."""
+        _LOGGER.info("[REFRESH DEBUG] _async_update_data() called")
         try:
             data = {}
 
@@ -402,10 +403,12 @@ class YaleLockCoordinator(DataUpdateCoordinator):
                 data["remote_relock_time"] = 10
 
             _LOGGER.info("Coordinator data updated successfully")
+            _LOGGER.debug("[REFRESH DEBUG] _async_update_data() returning data (note: user data is in _user_data, not in returned data)")
             return data
 
         except Exception as err:
             _LOGGER.error("Error in coordinator update: %s", err, exc_info=True)
+            _LOGGER.error("[REFRESH DEBUG] _async_update_data() failed with error: %s", err)
             raise UpdateFailed(f"Error communicating with lock: {err}") from err
 
     async def _get_zwave_value(
@@ -1138,6 +1141,15 @@ class YaleLockCoordinator(DataUpdateCoordinator):
             codes_new, 
             codes_updated
         )
+        
+        # Log user data state before save
+        total_users_in_memory = len(self._user_data["users"])
+        _LOGGER.info("[REFRESH DEBUG] User data in memory: %s users", total_users_in_memory)
+        for slot_str, user_data in self._user_data["users"].items():
+            _LOGGER.debug("[REFRESH DEBUG] Slot %s: name=%s, lock_status=%s, lock_code=%s", 
+                         slot_str, user_data.get("name"), 
+                         user_data.get("lock_status"), 
+                         "***" if user_data.get("lock_code") else "None")
 
         # Fire complete event
         self._fire_event(EVENT_REFRESH_PROGRESS, {
@@ -1149,8 +1161,13 @@ class YaleLockCoordinator(DataUpdateCoordinator):
             "codes_updated": codes_updated,
         })
 
+        _LOGGER.info("[REFRESH DEBUG] Saving user data to storage...")
         await self.async_save_user_data()
+        _LOGGER.info("[REFRESH DEBUG] User data saved to storage")
+        
+        _LOGGER.info("[REFRESH DEBUG] Requesting coordinator refresh (triggers _async_update_data)...")
         await self.async_request_refresh()
+        _LOGGER.info("[REFRESH DEBUG] Coordinator refresh requested")
 
     async def async_check_sync_status(self, slot: int) -> None:
         """Check sync status for a specific slot by querying the lock and comparing.
@@ -1260,4 +1277,6 @@ class YaleLockCoordinator(DataUpdateCoordinator):
 
     def get_all_users(self) -> dict[str, Any]:
         """Get all users."""
-        return self._user_data["users"]
+        users = self._user_data["users"]
+        _LOGGER.debug("[REFRESH DEBUG] get_all_users() called, returning %s users", len(users))
+        return users
