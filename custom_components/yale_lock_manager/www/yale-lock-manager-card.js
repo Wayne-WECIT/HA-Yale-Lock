@@ -1901,8 +1901,11 @@ class YaleLockManagerCard extends HTMLElement {
     const beforeEntity = this.getUserData().find(u => u.slot === slot);
     this._addDebugLog('Push Clicked', slot, {
       cached_code: beforeCached.code || '',
+      cached_status: beforeCached.cachedStatus || '',
+      expected_status: beforeCached.cachedStatus || '', // Status we're pushing
       entity_code: beforeEntity?.code || '',
-      entity_lock_code: beforeEntity?.lock_code || ''
+      entity_lock_code: beforeEntity?.lock_code || '',
+      entity_lock_status: beforeEntity?.lock_status_from_lock || null
     });
     
     this.showStatus(slot, `Push "${user.name}" to the lock now?`, 'confirm', async () => {
@@ -1943,16 +1946,38 @@ class YaleLockManagerCard extends HTMLElement {
           }
         }, 4000);
         
+        // Store cached values before push for error logging
+        const afterPushCached = { ...(this._formValues[slot] || {}) };
+        
         // Wait for push to complete
-        await pushPromise;
+        try {
+          await pushPromise;
+        } catch (error) {
+          // Check if error is due to status mismatch
+          const isStatusMismatch = error.message && error.message.includes('Status mismatch');
+          const errorEntity = this.getUserData().find(u => u.slot === slot);
+          this._addDebugLog('Push Failed', slot, {
+            error: error.message || 'Unknown error',
+            is_status_mismatch: isStatusMismatch,
+            cached_code: afterPushCached.code || '',
+            cached_status: afterPushCached.cachedStatus || '',
+            expected_status: afterPushCached.cachedStatus || '',
+            entity_lock_status: errorEntity?.lock_status_from_lock || null,
+            note: isStatusMismatch ? 'Status verification failed - lock did not accept status change' : 'Push failed for unknown reason'
+          });
+          throw error; // Re-throw to show error to user
+        }
         
         // Log after push successful (immediate check)
-        const afterPushCached = { ...(this._formValues[slot] || {}) };
         const afterPushEntity = this.getUserData().find(u => u.slot === slot);
         this._addDebugLog('Push Successful (Immediate)', slot, {
           cached_code: afterPushCached.code || '',
+          cached_status: afterPushCached.cachedStatus || '',
+          expected_status: afterPushCached.cachedStatus || '', // What we pushed
           entity_code: afterPushEntity?.code || '',
           entity_lock_code: afterPushEntity?.lock_code || '',
+          entity_lock_status: afterPushEntity?.lock_status_from_lock || null,
+          status_match: (afterPushCached.cachedStatus === afterPushEntity?.lock_status_from_lock),
           synced: afterPushEntity?.synced_to_lock || false,
           note: 'Entity state checked immediately after push promise resolves'
         });
@@ -1975,10 +2000,14 @@ class YaleLockManagerCard extends HTMLElement {
           
           this._addDebugLog(`Entity State Poll #${pollAttempt}`, slot, {
             cached_code: currentCached.code || '',
+            cached_status: currentCached.cachedStatus || '',
+            expected_status: currentCached.cachedStatus || '', // What we pushed
             entity_code: currentEntity?.code || '',
             entity_lock_code: currentEntity?.lock_code || '',
+            entity_lock_status: currentEntity?.lock_status_from_lock || null,
+            code_match: (currentCached.code === currentEntity?.lock_code),
+            status_match: (currentCached.cachedStatus === currentEntity?.lock_status_from_lock),
             lock_status: currentEntity?.lock_status,
-            lock_status_from_lock: currentEntity?.lock_status_from_lock,
             synced: currentEntity?.synced_to_lock || false,
             elapsed_seconds: elapsed,
             note: `Polling entity state ${pollAttempt}/${maxPollAttempts} (${elapsed}s elapsed)`
@@ -1990,12 +2019,17 @@ class YaleLockManagerCard extends HTMLElement {
           
           if (actualLockCode === expectedCode && expectedCode !== '') {
             // Lock code matches - update UI and stop polling
+            const statusMatches = (currentCached.cachedStatus === currentEntity?.lock_status_from_lock);
             this._addDebugLog('Lock Code Updated!', slot, {
               cached_code: currentCached.code || '',
+              cached_status: currentCached.cachedStatus || '',
+              expected_status: currentCached.cachedStatus || '',
               entity_lock_code: currentEntity?.lock_code || '',
-              match: true,
+              entity_lock_status: currentEntity?.lock_status_from_lock || null,
+              code_match: true,
+              status_match: statusMatches,
               elapsed_seconds: elapsed,
-              note: `Entity state now shows correct lock_code after ${elapsed}s`
+              note: `Entity state now shows correct lock_code after ${elapsed}s. Status match: ${statusMatches}`
             });
             
             // Update slot from entity state (with focus protection)

@@ -726,6 +726,9 @@ class YaleLockCoordinator(DataUpdateCoordinator):
             await self._zwave_client.set_user_code(slot, code, status)
             _LOGGER.info("Code write command sent to lock for slot %s, waiting for lock to process...", slot)
             
+            # Store expected status for verification
+            expected_status = status  # Store what we pushed
+            
             # Wait for lock to process the write
             # Some locks can take 5-10 seconds to write a code to memory
             # We'll wait 3 seconds initially, then verify with retries
@@ -747,14 +750,23 @@ class YaleLockCoordinator(DataUpdateCoordinator):
                         verification_code = str(verification_code)
                     else:
                         verification_code = ""
+                    verification_status = verification_data.get("userIdStatus")
                     
-                    # Check if we got the code we expect
-                    if verification_code == code:
-                        _LOGGER.info("✓ Verification successful on attempt %s - code matches!", attempt)
+                    # Check BOTH code and status
+                    code_matches = (verification_code == code)
+                    status_matches = (verification_status == expected_status)
+                    
+                    if code_matches and status_matches:
+                        _LOGGER.info("✓ Verification successful on attempt %s - code and status match!", attempt)
                         break  # Success - exit retry loop
                     else:
-                        _LOGGER.info("Verification attempt %s: Lock returned code '%s', expected '%s'", 
-                                    attempt, verification_code, code)
+                        if not code_matches:
+                            _LOGGER.info("Verification attempt %s: Code mismatch (expected: '%s', got: '%s')", 
+                                        attempt, code, verification_code)
+                        if not status_matches:
+                            _LOGGER.warning("Verification attempt %s: Status mismatch (expected: %s, got: %s)", 
+                                          attempt, expected_status, verification_status)
+                        
                         if attempt < max_retries:
                             _LOGGER.info("Lock may still be processing - waiting %s seconds before retry...", retry_delay)
                             await asyncio.sleep(retry_delay)
@@ -776,6 +788,10 @@ class YaleLockCoordinator(DataUpdateCoordinator):
                 else:
                     verification_code = ""
                 
+                # Check both code and status
+                code_matches = (verification_code == code) if verification_code else False
+                status_matches = (verification_status == expected_status)
+                
                 # Check if verification succeeded
                 if verification_status is None:
                     _LOGGER.warning("Could not verify slot %s - status read returned None", slot)
@@ -784,7 +800,7 @@ class YaleLockCoordinator(DataUpdateCoordinator):
                     _LOGGER.error("Verification failed: Slot %s is empty after push!", slot)
                     user_data["synced_to_lock"] = False
                     raise ValueError(f"Verification failed: Slot {slot} is empty after push")
-                elif verification_code and verification_code != code:
+                elif not code_matches:
                     # After retries, code still doesn't match - this is a real error
                     _LOGGER.error("Verification failed after %s attempts: Code mismatch in slot %s (expected: %s, got: %s)", 
                                 max_retries, slot, code, verification_code)
@@ -794,9 +810,18 @@ class YaleLockCoordinator(DataUpdateCoordinator):
                     user_data["lock_enabled"] = verification_status == USER_STATUS_ENABLED
                     user_data["synced_to_lock"] = False
                     raise ValueError(f"Verification failed: Code mismatch in slot {slot} after {max_retries} attempts")
+                elif not status_matches:
+                    # NEW: Status mismatch error
+                    _LOGGER.error("Verification failed: Status mismatch in slot %s (expected: %s, got: %s)", 
+                                 slot, expected_status, verification_status)
+                    user_data["lock_code"] = verification_code
+                    user_data["lock_status_from_lock"] = verification_status
+                    user_data["lock_enabled"] = verification_status == USER_STATUS_ENABLED
+                    user_data["synced_to_lock"] = False
+                    raise ValueError(f"Verification failed: Status mismatch in slot {slot} (expected {expected_status}, got {verification_status})")
                 else:
-                    # Verification succeeded! Update lock fields with pulled data
-                    _LOGGER.info("✓ Verified: Code successfully written to slot %s", slot)
+                    # Both code and status match - success!
+                    _LOGGER.info("✓ Verified: Code and status successfully written to slot %s", slot)
                     user_data["lock_code"] = verification_code  # Update lock_code from lock
                     user_data["lock_status_from_lock"] = verification_status  # Update lock_status_from_lock
                     user_data["lock_enabled"] = verification_status == USER_STATUS_ENABLED  # Update lock_enabled
