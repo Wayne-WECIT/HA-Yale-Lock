@@ -831,11 +831,15 @@ class YaleLockCoordinator(DataUpdateCoordinator):
             else:
                 _LOGGER.warning("After save - user not found in storage for slot %s", slot)
             
+            # Add a small delay to ensure storage write is complete
+            await asyncio.sleep(0.1)
+            
             # CRITICAL: Update entity state directly without triggering a full pull
             # A full pull might overwrite lock_code with stale data or cause timing issues
-            # Instead, update coordinator.data to trigger state change and write entity state
+            # Update coordinator.data to trigger state change notification
             if self.data:
                 self.data["last_user_update"] = datetime.now().isoformat()
+                _LOGGER.debug("Updated coordinator.data with timestamp: %s", self.data["last_user_update"])
             
             # Verify what get_all_users() will return
             all_users = self.get_all_users()
@@ -845,10 +849,21 @@ class YaleLockCoordinator(DataUpdateCoordinator):
             else:
                 _LOGGER.warning("Before entity write - user not found in get_all_users() for slot %s", slot)
             
-            # Force entity state update to reflect the new lock_code
+            # Schedule async_write_ha_state() to ensure it happens after the save is fully processed
+            # This ensures Home Assistant has time to process the state change
             if self._lock_entity:
-                self._lock_entity.async_write_ha_state()
-                _LOGGER.info("Entity state written after push for slot %s", slot)
+                _LOGGER.debug("Scheduling entity state write in 0.2 seconds after push...")
+                
+                @callback
+                def _write_state_callback():
+                    """Callback to write entity state after delay."""
+                    _LOGGER.debug("Writing entity state to notify frontend after push...")
+                    self._lock_entity.async_write_ha_state()
+                    _LOGGER.info("Entity state written after push for slot %s", slot)
+                
+                # Use hass.loop.call_later() to schedule the callback
+                self.hass.loop.call_later(0.2, _write_state_callback)
+                _LOGGER.debug("Entity state write scheduled after push")
             else:
                 _LOGGER.warning("Lock entity not registered - cannot update entity state")
             
