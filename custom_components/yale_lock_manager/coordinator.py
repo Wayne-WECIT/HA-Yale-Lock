@@ -778,9 +778,23 @@ class YaleLockCoordinator(DataUpdateCoordinator):
                         cached_code="***" if user_data.get("code") else "None",
                         lock_code="***" if verification_code else "None",
                     )
+                    
+                    # Log the actual lock_code value for debugging (unmasked in logs)
+                    _LOGGER.info("Push verified - lock_code set to: %s (cached_code: %s)", 
+                                verification_code, user_data.get("code", ""))
             
             await self.async_save_user_data()
-            await self.async_request_refresh()
+            
+            # CRITICAL: Update entity state directly without triggering a full pull
+            # A full pull might overwrite lock_code with stale data or cause timing issues
+            # Instead, update coordinator.data to trigger state change and write entity state
+            if self.data:
+                self.data["last_user_update"] = datetime.now().isoformat()
+            
+            # Force entity state update to reflect the new lock_code
+            if self._lock_entity:
+                self._lock_entity.async_write_ha_state()
+                _LOGGER.debug("Entity state updated after push for slot %s", slot)
             
         except Exception as err:
             _LOGGER.error("Failed to push code for slot %s: %s", slot, err)
