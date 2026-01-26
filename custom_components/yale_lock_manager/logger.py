@@ -29,11 +29,20 @@ class YaleLockLogger:
                 full_message += f" - {context}"
             self._logger.debug(full_message)
 
-    def debug(self, message: str, **kwargs: Any) -> None:
-        """Log debug message."""
+    def debug(self, message: str, *args: Any, **kwargs: Any) -> None:
+        """Log debug message.
+        
+        Supports both old-style formatting (message % args) and new-style (kwargs).
+        """
         if self._debug_mode or kwargs.pop("force", False):
+            # If args are provided, use old-style string formatting
+            if args:
+                formatted_message = message % args
+            else:
+                formatted_message = message
+            
             context = " ".join(f"{k}={v}" for k, v in kwargs.items())
-            full_message = message
+            full_message = formatted_message
             if context:
                 full_message += f" - {context}"
             self._logger.debug(full_message)
@@ -48,18 +57,36 @@ class YaleLockLogger:
             message += f" - {context}"
         self._logger.info(message)
 
-    def info(self, message: str, **kwargs: Any) -> None:
-        """Log info message."""
+    def info(self, message: str, *args: Any, **kwargs: Any) -> None:
+        """Log info message.
+        
+        Supports both old-style formatting (message % args) and new-style (kwargs).
+        """
+        # If args are provided, use old-style string formatting
+        if args:
+            formatted_message = message % args
+        else:
+            formatted_message = message
+        
         context = " ".join(f"{k}={v}" for k, v in kwargs.items())
-        full_message = message
+        full_message = formatted_message
         if context:
             full_message += f" - {context}"
         self._logger.info(full_message)
 
-    def warning(self, message: str, **kwargs: Any) -> None:
-        """Log warning message."""
+    def warning(self, message: str, *args: Any, **kwargs: Any) -> None:
+        """Log warning message.
+        
+        Supports both old-style formatting (message % args) and new-style (kwargs).
+        """
+        # If args are provided, use old-style string formatting
+        if args:
+            formatted_message = message % args
+        else:
+            formatted_message = message
+        
         context = " ".join(f"{k}={v}" for k, v in kwargs.items())
-        full_message = message
+        full_message = formatted_message
         if context:
             full_message += f" - {context}"
         self._logger.warning(full_message)
