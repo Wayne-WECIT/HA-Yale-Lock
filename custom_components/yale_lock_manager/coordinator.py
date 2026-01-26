@@ -719,11 +719,37 @@ class YaleLockCoordinator(DataUpdateCoordinator):
         else:
             status = USER_STATUS_DISABLED
 
+        # CRITICAL: GET the current code from the lock first
+        # The lock may store codes in a different format (e.g., with leading zeros)
+        # We must use the exact format the lock has stored when setting status
+        lock_code = None
+        try:
+            self._logger.info_operation("Getting current code from lock before setting status", slot)
+            lock_data = await self._zwave_client.get_user_code_data(slot)
+            if lock_data:
+                lock_code_raw = lock_data.get("userCode", "")
+                if lock_code_raw:
+                    lock_code = str(lock_code_raw)
+                    _LOGGER.info("Retrieved code from lock for slot %s: '%s' (cached: '%s')", slot, lock_code, code)
+                else:
+                    _LOGGER.warning("Lock returned empty code for slot %s - will use cached code", slot)
+            else:
+                _LOGGER.warning("Could not retrieve code from lock for slot %s - will use cached code", slot)
+        except Exception as err:
+            _LOGGER.warning("Failed to get code from lock for slot %s (will use cached code): %s", slot, err)
+        
+        # Use lock's code format if available, otherwise fallback to cached code
+        code_to_set = lock_code if lock_code else code
+        if lock_code and lock_code != code:
+            _LOGGER.info("Using lock's code format '%s' instead of cached '%s' for slot %s", lock_code, code, slot)
+        else:
+            _LOGGER.info("Using cached code '%s' for slot %s", code_to_set, slot)
+
         # Use Z-Wave client to set the code
         try:
-            self._logger.info_operation("Pushing code to lock", slot, code_type=code_type, status=status)
+            self._logger.info_operation("Pushing code to lock", slot, code_type=code_type, status=status, code_format="lock" if lock_code else "cached")
             
-            await self._zwave_client.set_user_code(slot, code, status)
+            await self._zwave_client.set_user_code(slot, code_to_set, status)
             _LOGGER.info("Code write command sent to lock for slot %s, waiting for lock to process...", slot)
             
             # Store expected status for verification
@@ -755,7 +781,8 @@ class YaleLockCoordinator(DataUpdateCoordinator):
                     verification_status = verification_data.get("userIdStatus")
                     
                     # Check BOTH code and status
-                    code_matches = (verification_code == code)
+                    # Compare against code_to_set (the code we actually sent to the lock)
+                    code_matches = (verification_code == code_to_set)
                     status_matches = (verification_status == expected_status)
                     
                     if code_matches and status_matches:
@@ -764,7 +791,7 @@ class YaleLockCoordinator(DataUpdateCoordinator):
                     else:
                         if not code_matches:
                             _LOGGER.info("Verification attempt %s: Code mismatch (expected: '%s', got: '%s')", 
-                                        attempt, code, verification_code)
+                                        attempt, code_to_set, verification_code)
                         if not status_matches:
                             _LOGGER.warning("Verification attempt %s: Status mismatch (expected: %s, got: %s)", 
                                           attempt, expected_status, verification_status)
@@ -792,7 +819,8 @@ class YaleLockCoordinator(DataUpdateCoordinator):
                     verification_code = ""
                 
                 # Check both code and status
-                code_matches = (verification_code == code) if verification_code else False
+                # Compare against code_to_set (the code we actually sent to the lock)
+                code_matches = (verification_code == code_to_set) if verification_code else False
                 status_matches = (verification_status == expected_status)
                 
                 # Check if verification succeeded
@@ -806,7 +834,7 @@ class YaleLockCoordinator(DataUpdateCoordinator):
                 elif not code_matches:
                     # After retries, code still doesn't match - this is a real error
                     _LOGGER.error("Verification failed after %s attempts: Code mismatch in slot %s (expected: %s, got: %s)", 
-                                max_retries, slot, code, verification_code)
+                                max_retries, slot, code_to_set, verification_code)
                     # Still update lock_code with what we got from the lock (might be old value)
                     user_data["lock_code"] = verification_code
                     user_data["lock_status_from_lock"] = verification_status

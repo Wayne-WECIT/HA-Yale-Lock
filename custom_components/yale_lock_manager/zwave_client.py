@@ -140,10 +140,16 @@ class ZWaveClient:
             return None
 
     async def set_user_code(self, slot: int, code: str, status: int) -> None:
-        """Set user code on the lock using invoke_cc_api."""
+        """Set user code on the lock using invoke_cc_api.
+        
+        According to Z-Wave User Code CC specification, the set method parameters are:
+        [userId, userCode, userIdStatus]
+        """
         try:
             self._logger.info_operation("Setting user code on lock", slot, status=status, code="***")
+            _LOGGER.info("set_user_code called: slot=%s, code='%s', status=%s", slot, code, status)
             
+            # Z-Wave User Code CC set parameters: [userId, userCode, userIdStatus]
             await self._hass.services.async_call(
                 ZWAVE_JS_DOMAIN,
                 "invoke_cc_api",
@@ -151,12 +157,13 @@ class ZWaveClient:
                     "entity_id": self._lock_entity_id,
                     "command_class": CC_USER_CODE,
                     "method_name": "set",
-                    "parameters": [slot, status, code],
+                    "parameters": [slot, code, status],  # Correct order: userId, userCode, userIdStatus
                 },
                 blocking=True,
             )
             
             self._logger.info_operation("User code set on lock", slot)
+            _LOGGER.info("set_user_code completed: slot=%s, status=%s", slot, status)
             
         except Exception as err:
             self._logger.error_zwave("set_user_code", err, slot=slot)
