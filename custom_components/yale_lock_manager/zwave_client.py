@@ -168,30 +168,99 @@ class ZWaveClient:
                 userIdStatus, type(userIdStatus).__name__
             )
             
-            # Build parameters array with explicit types
-            parameters = [userId, userIdStatus, userCode]
-            _LOGGER.info(
-                "Parameters array: %s (types: [%s, %s, %s])",
-                parameters,
-                type(parameters[0]).__name__,
-                type(parameters[1]).__name__,
-                type(parameters[2]).__name__
-            )
+            # Try alternative parameter formats based on ChatGPT example
+            # The example showed parameter order: userCode, userId, userCodeStatus
+            # Current order: userId, userIdStatus, userCode
+            # We'll try ChatGPT order first, then ChatGPT format, then original order
             
-            self._logger.info_operation("Setting user code on lock", slot, status=status, code="***")
-            
-            # Z-Wave User Code CC set parameters: [userId, userIdStatus, userCode]
-            await self._hass.services.async_call(
-                ZWAVE_JS_DOMAIN,
-                "invoke_cc_api",
-                {
-                    "entity_id": self._lock_entity_id,
-                    "command_class": CC_USER_CODE,
-                    "method_name": "set",
-                    "parameters": parameters,  # [userId (int), userIdStatus (int), userCode (str)]
-                },
-                blocking=True,
-            )
+            # Try 1: ChatGPT parameter order as positional array: [userCode, userId, userCodeStatus]
+            try:
+                parameters_chatgpt_order = [userCode, userId, userIdStatus]
+                _LOGGER.info(
+                    "Trying ChatGPT parameter order (positional): %s (types: [%s, %s, %s])",
+                    parameters_chatgpt_order,
+                    type(parameters_chatgpt_order[0]).__name__,
+                    type(parameters_chatgpt_order[1]).__name__,
+                    type(parameters_chatgpt_order[2]).__name__
+                )
+                
+                self._logger.info_operation("Setting user code on lock (ChatGPT order)", slot, status=status, code="***")
+                
+                await self._hass.services.async_call(
+                    ZWAVE_JS_DOMAIN,
+                    "invoke_cc_api",
+                    {
+                        "entity_id": self._lock_entity_id,
+                        "command_class": CC_USER_CODE,
+                        "method_name": "set",
+                        "parameters": parameters_chatgpt_order,
+                    },
+                    blocking=True,
+                )
+                
+                _LOGGER.info("ChatGPT parameter order succeeded for slot %s", slot)
+                
+            except Exception as order_err:
+                # Try 2: ChatGPT format as array of objects
+                _LOGGER.warning(
+                    "ChatGPT parameter order failed for slot %s: %s. Trying ChatGPT object format.",
+                    slot, order_err
+                )
+                try:
+                    parameters_chatgpt_format = [
+                        {"userCode": userCode},
+                        {"userId": userId},
+                        {"userCodeStatus": userIdStatus}
+                    ]
+                    _LOGGER.info("Trying ChatGPT object format: %s", parameters_chatgpt_format)
+                    
+                    self._logger.info_operation("Setting user code on lock (ChatGPT format)", slot, status=status, code="***")
+                    
+                    await self._hass.services.async_call(
+                        ZWAVE_JS_DOMAIN,
+                        "invoke_cc_api",
+                        {
+                            "entity_id": self._lock_entity_id,
+                            "command_class": CC_USER_CODE,
+                            "method_name": "set",
+                            "parameters": parameters_chatgpt_format,
+                        },
+                        blocking=True,
+                    )
+                    
+                    _LOGGER.info("ChatGPT object format succeeded for slot %s", slot)
+                    
+                except Exception as format_err:
+                    # Fall back to original positional array format
+                    _LOGGER.warning(
+                        "ChatGPT formats failed for slot %s. Using original positional format. Order err: %s, Format err: %s",
+                        slot, order_err, format_err
+                    )
+                    
+                    # Build parameters array with explicit types (original format)
+                    parameters = [userId, userIdStatus, userCode]
+                    _LOGGER.info(
+                        "Using original positional array format: %s (types: [%s, %s, %s])",
+                        parameters,
+                        type(parameters[0]).__name__,
+                        type(parameters[1]).__name__,
+                        type(parameters[2]).__name__
+                    )
+                    
+                    self._logger.info_operation("Setting user code on lock (original format)", slot, status=status, code="***")
+                    
+                    # Z-Wave User Code CC set parameters: [userId, userIdStatus, userCode]
+                    await self._hass.services.async_call(
+                        ZWAVE_JS_DOMAIN,
+                        "invoke_cc_api",
+                        {
+                            "entity_id": self._lock_entity_id,
+                            "command_class": CC_USER_CODE,
+                            "method_name": "set",
+                            "parameters": parameters,  # [userId (int), userIdStatus (int), userCode (str)]
+                        },
+                        blocking=True,
+                    )
             
             self._logger.info_operation("User code set on lock", slot)
             _LOGGER.info("set_user_code completed: slot=%s, status=%s", slot, status)
