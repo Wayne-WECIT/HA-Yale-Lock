@@ -100,10 +100,24 @@ class YaleLockLogger:
             message += f" - {context}"
         self._logger.error(message, exc_info=isinstance(error, Exception))
 
-    def error(self, message: str, **kwargs: Any) -> None:
-        """Log error message."""
+    def error(self, message: str, *args: Any, **kwargs: Any) -> None:
+        """Log error message.
+        
+        Supports both old-style formatting (message % args) and new-style (kwargs).
+        """
+        # If args are provided, use old-style string formatting
+        if args:
+            try:
+                formatted_message = message % args
+            except TypeError:
+                self._logger.error(f"Logger format error: '{message}' with args {args}", exc_info=True)
+                # Fallback to simple concatenation if formatting fails
+                formatted_message = f"{message} {' '.join(map(str, args))}"
+        else:
+            formatted_message = message
+        
         context = " ".join(f"{k}={v}" for k, v in kwargs.items())
-        full_message = message
+        full_message = formatted_message
         if context:
             full_message += f" - {context}"
         self._logger.error(full_message, exc_info=kwargs.pop("exc_info", False))
