@@ -742,9 +742,11 @@ class YaleLockCoordinator(DataUpdateCoordinator):
             
             for attempt in range(1, max_retries + 1):
                 self._logger.info_operation(f"Verifying code was written (attempt {attempt}/{max_retries})", slot)
-                verification_data = await self._zwave_client.get_user_code_data(slot)
+                attempt_data = await self._zwave_client.get_user_code_data(slot)
                 
-                if verification_data:
+                # Only update verification_data if we got data (don't overwrite with None)
+                if attempt_data:
+                    verification_data = attempt_data
                     verification_code = verification_data.get("userCode", "")
                     if verification_code:
                         verification_code = str(verification_code)
@@ -772,6 +774,7 @@ class YaleLockCoordinator(DataUpdateCoordinator):
                             await asyncio.sleep(retry_delay)
                 else:
                     _LOGGER.warning("Verification attempt %s: No data returned from lock", attempt)
+                    # Don't overwrite verification_data with None - keep last successful read
                     if attempt < max_retries:
                         _LOGGER.info("Waiting %s seconds before retry...", retry_delay)
                         await asyncio.sleep(retry_delay)
