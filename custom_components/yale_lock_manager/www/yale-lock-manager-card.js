@@ -25,6 +25,7 @@ class YaleLockManagerCard extends HTMLElement {
     this._unsavedChanges = {}; // Track unsaved changes per slot
     this._refreshSnapshot = null; // Snapshot of user data before refresh
     this._debugMode = false; // Debug mode flag for detailed logging
+    this._localStorageKey = null; // Will be set when config is available
   }
 
   setConfig(config) {
@@ -32,6 +33,10 @@ class YaleLockManagerCard extends HTMLElement {
       throw new Error('You must specify an entity');
     }
     this._config = config;
+    // Set localStorage key based on entity ID
+    this._localStorageKey = `yale_lock_manager_form_values_${config.entity}`;
+    // Load form values from localStorage on config set
+    this._loadFormValuesFromStorage();
   }
 
   set hass(hass) {
@@ -79,6 +84,10 @@ class YaleLockManagerCard extends HTMLElement {
   }
   
   connectedCallback() {
+    // Load form values from localStorage when component connects
+    if (this._localStorageKey) {
+      this._loadFormValuesFromStorage();
+    }
     // Subscribe to events when component is connected
     if (this._hass && this._hass.connection && !this._refreshProgressListener) {
       this._subscribeToRefreshProgress();
@@ -192,6 +201,54 @@ class YaleLockManagerCard extends HTMLElement {
           }
           this._refreshSnapshot = null; // Clear snapshot
           
+          // Merge entity state with localStorage values
+          // Prefer localStorage for editable fields, entity state for read-only fields
+          const stateObj = this._hass?.states[this._config?.entity];
+          const newUsers = stateObj?.attributes?.users || {};
+          const entitySlotKeys = new Set(Object.keys(newUsers));
+          
+          // Remove slots from localStorage that no longer exist in entity state
+          Object.keys(this._formValues).forEach(slot => {
+            if (!entitySlotKeys.has(slot) && this._expandedSlot !== parseInt(slot, 10)) {
+              delete this._formValues[slot];
+            }
+          });
+          
+          // Merge entity state with localStorage
+          Object.keys(newUsers).forEach(slot => {
+            const user = newUsers[slot];
+            // Only update localStorage if slot is not currently being edited
+            if (this._expandedSlot !== parseInt(slot, 10)) {
+              // Merge: keep localStorage values for editable fields, update from entity for read-only
+              if (!this._formValues[slot]) {
+                this._formValues[slot] = {};
+              }
+              // Only update editable fields if they don't exist in localStorage
+              if (!this._formValues[slot].name) {
+                this._formValues[slot].name = user.name || '';
+              }
+              if (!this._formValues[slot].code) {
+                this._formValues[slot].code = user.code || '';
+              }
+              if (this._formValues[slot].cachedStatus === undefined) {
+                this._formValues[slot].cachedStatus = user.lock_status !== null && user.lock_status !== undefined 
+                  ? user.lock_status 
+                  : (user.enabled ? 1 : 2);
+              }
+              if (!this._formValues[slot].type) {
+                this._formValues[slot].type = user.code_type || 'pin';
+              }
+              if (!this._formValues[slot].schedule) {
+                this._formValues[slot].schedule = user.schedule || { start: null, end: null };
+              }
+              if (this._formValues[slot].usageLimit === undefined) {
+                this._formValues[slot].usageLimit = user.usage_limit || null;
+              }
+            }
+          });
+          // Save merged values to localStorage
+          this._saveFormValuesToStorage();
+          
           // Entity state updated - refresh UI
           if (this._expandedSlot === null) {
             if (this._debugMode) {
@@ -203,6 +260,7 @@ class YaleLockManagerCard extends HTMLElement {
               console.log('[Yale Lock Manager] [REFRESH DEBUG] Calling _updateSlotFromEntityState() (slot expanded)');
             }
             // Update the expanded slot from entity state (with focus protection)
+            // This will use localStorage values for editable fields
             this._updateSlotFromEntityState(this._expandedSlot);
           }
         }
@@ -367,17 +425,23 @@ class YaleLockManagerCard extends HTMLElement {
         }
       }
       
-      // Update _formValues to match entity state (source of truth)
+      // Update _formValues - prefer localStorage values, fall back to entity state
+      // This preserves user input even if entity state is stale
+      const storedValues = this._formValues[slot] || {};
       this._formValues[slot] = {
-        name: user.name || '',
-        code: user.code || '',
-        type: user.code_type || 'pin',
-        cachedStatus: user.lock_status !== null && user.lock_status !== undefined 
-          ? user.lock_status 
-          : (user.enabled ? 1 : 2),
-        schedule: user.schedule || { start: null, end: null },
-        usageLimit: user.usage_limit || null
+        name: storedValues.name !== undefined ? storedValues.name : (user.name || ''),
+        code: storedValues.code !== undefined ? storedValues.code : (user.code || ''),
+        type: storedValues.type !== undefined ? storedValues.type : (user.code_type || 'pin'),
+        cachedStatus: storedValues.cachedStatus !== undefined 
+          ? storedValues.cachedStatus 
+          : (user.lock_status !== null && user.lock_status !== undefined 
+            ? user.lock_status 
+            : (user.enabled ? 1 : 2)),
+        schedule: storedValues.schedule || (user.schedule || { start: null, end: null }),
+        usageLimit: storedValues.usageLimit !== undefined ? storedValues.usageLimit : (user.usage_limit || null)
       };
+      // Save to localStorage after merging
+      this._saveFormValuesToStorage();
       
       // Update sync indicators and status badges
       this._updateNonEditableParts();
@@ -503,6 +567,8 @@ class YaleLockManagerCard extends HTMLElement {
       this._formValues[slot] = {};
     }
     this._formValues[slot][field] = value;
+    // Save to localStorage immediately
+    this._saveFormValuesToStorage();
   }
   
   // Make _setFormValue accessible from inline handlers
@@ -510,25 +576,96 @@ class YaleLockManagerCard extends HTMLElement {
     this._setFormValue(slot, field, value);
   }
 
+  // ========== LOCALSTORAGE PERSISTENCE ==========
+  
+  _getStorageKey() {
+    return this._localStorageKey || `yale_lock_manager_form_values_${this._config?.entity || 'default'}`;
+  }
+  
+  _saveFormValuesToStorage() {
+    try {
+      const key = this._getStorageKey();
+      if (key && this._formValues) {
+        localStorage.setItem(key, JSON.stringify(this._formValues));
+        if (this._debugMode) {
+          console.log('[Yale Lock Manager] Saved form values to localStorage:', Object.keys(this._formValues).length, 'slots');
+        }
+      }
+    } catch (error) {
+      console.warn('[Yale Lock Manager] Failed to save form values to localStorage:', error);
+    }
+  }
+  
+  _loadFormValuesFromStorage() {
+    try {
+      const key = this._getStorageKey();
+      if (key) {
+        const stored = localStorage.getItem(key);
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (parsed && typeof parsed === 'object') {
+            // Merge with existing _formValues (don't overwrite if slot is currently being edited)
+            Object.keys(parsed).forEach(slot => {
+              // Only load if slot is not currently expanded (preserve active edits)
+              if (this._expandedSlot !== parseInt(slot, 10)) {
+                this._formValues[slot] = { ...this._formValues[slot], ...parsed[slot] };
+              }
+            });
+            if (this._debugMode) {
+              console.log('[Yale Lock Manager] Loaded form values from localStorage:', Object.keys(parsed).length, 'slots');
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.warn('[Yale Lock Manager] Failed to load form values from localStorage:', error);
+    }
+  }
+  
+  _clearFormValuesFromStorage() {
+    try {
+      const key = this._getStorageKey();
+      if (key) {
+        localStorage.removeItem(key);
+        this._formValues = {};
+        if (this._debugMode) {
+          console.log('[Yale Lock Manager] Cleared form values from localStorage');
+        }
+      }
+    } catch (error) {
+      console.warn('[Yale Lock Manager] Failed to clear form values from localStorage:', error);
+    }
+  }
+
   _syncFormValuesFromEntity(slot, force = false) {
     // Sync form values from entity state (only when slot is first expanded, or if force=true)
-    // If _formValues[slot] already exists and force=false, don't overwrite (preserve user's edits)
+    // CRITICAL: Prefer localStorage values over entity state to preserve user input
+    // Only sync from entity state if localStorage doesn't have values for this slot
     if (!force && this._formValues[slot]) {
-      return; // Don't overwrite existing form values
+      // localStorage has values - don't overwrite (preserve user's edits)
+      return;
     }
     
-    const user = this.getUserData().find(u => u.slot === slot);
-    if (user) {
-      this._formValues[slot] = {
-        name: user.name || '',
-        code: user.code || '',
-        type: user.code_type || 'pin',
-        cachedStatus: user.lock_status !== null && user.lock_status !== undefined 
-          ? user.lock_status 
-          : (user.enabled ? 1 : 2),
-        schedule: user.schedule || { start: null, end: null },
-        usageLimit: user.usage_limit || null
-      };
+    // Try to load from localStorage first
+    this._loadFormValuesFromStorage();
+    
+    // If still no values, sync from entity state
+    if (!this._formValues[slot]) {
+      const user = this.getUserData().find(u => u.slot === slot);
+      if (user) {
+        this._formValues[slot] = {
+          name: user.name || '',
+          code: user.code || '',
+          type: user.code_type || 'pin',
+          cachedStatus: user.lock_status !== null && user.lock_status !== undefined 
+            ? user.lock_status 
+            : (user.enabled ? 1 : 2),
+          schedule: user.schedule || { start: null, end: null },
+          usageLimit: user.usage_limit || null
+        };
+        // Save to localStorage after syncing from entity
+        this._saveFormValuesToStorage();
+      }
     }
   }
 
@@ -1759,39 +1896,50 @@ class YaleLockManagerCard extends HTMLElement {
       // Clear unsaved changes flag
       delete this._unsavedChanges[slot];
       
-      // Wait for entity state to actually reflect the saved values before updating UI
-      let attempts = 0;
-      const maxAttempts = 17; // Wait up to 5.1 seconds (17 * 300ms)
-      const checkInterval = setInterval(() => {
-        attempts++;
+      // Save form values to localStorage after successful save
+      // This ensures values persist even if entity state is slow to update
+      this._saveFormValuesToStorage();
+      
+      // Update form values with saved data (including schedule and usage limit)
+      const scheduleToggle = this.shadowRoot.getElementById(`schedule-toggle-${slot}`);
+      const startInput = this.shadowRoot.getElementById(`start-${slot}`);
+      const endInput = this.shadowRoot.getElementById(`end-${slot}`);
+      const limitToggle = this.shadowRoot.getElementById(`limit-toggle-${slot}`);
+      const limitInput = this.shadowRoot.getElementById(`limit-${slot}`);
+      
+      if (scheduleToggle?.checked && startInput?.value && endInput?.value) {
+        this._setFormValue(slot, 'schedule', { start: startInput.value, end: endInput.value });
+      } else {
+        this._setFormValue(slot, 'schedule', { start: null, end: null });
+      }
+      
+      if (codeType === 'pin' && limitToggle?.checked && limitInput?.value) {
+        this._setFormValue(slot, 'usageLimit', parseInt(limitInput.value, 10));
+      } else {
+        this._setFormValue(slot, 'usageLimit', null);
+      }
+      
+      // Update only non-editable parts (lock_code, lock_status) from entity state
+      // Don't overwrite editable fields - they're already saved in localStorage
+      setTimeout(() => {
         const updatedUser = this.getUserData().find(u => u.slot === slot);
-        
-        // Check if entity state has our saved values (name and code match)
-        if (updatedUser && updatedUser.name === name && updatedUser.code === code) {
-          clearInterval(checkInterval);
+        if (updatedUser) {
+          // Only update lock fields (read-only), not editable fields
+          const lockCodeField = this.shadowRoot.querySelector(`#lock-code-${slot}`);
+          const lockStatusField = this.shadowRoot.querySelector(`#lock-status-${slot}`);
           
-          // Entity state updated with saved values - now safe to update UI
-          this._updateSlotFromEntityState(slot);
-          
-          // Show success message based on sync status
-          const codesMatch = codeType === 'pin' ? (code === (updatedUser.lock_code || '')) : true;
-          const statusMatch = updatedUser.lock_status_from_lock !== null && updatedUser.lock_status_from_lock !== undefined
-            ? (cachedStatus === updatedUser.lock_status_from_lock)
-            : false;
-          const isSynced = codesMatch && statusMatch;
-          
-          if (!isSynced && codeType === 'pin') {
-            this.showStatus(slot, '✅ User saved! ⚠️ Push required to sync with lock.', 'warning');
-          } else {
-            this.showStatus(slot, '✅ User saved successfully!', 'success');
+          if (lockCodeField) {
+            lockCodeField.value = updatedUser.lock_code || '';
           }
-        } else if (attempts >= maxAttempts) {
-          // Timeout - update anyway (entity state might be slow)
-          clearInterval(checkInterval);
-          this._updateSlotFromEntityState(slot);
-          this.showStatus(slot, '✅ User saved successfully!', 'success');
+          if (lockStatusField) {
+            const lockStatus = updatedUser.lock_status_from_lock ?? updatedUser.lock_status;
+            lockStatusField.value = lockStatus !== null && lockStatus !== undefined ? lockStatus.toString() : '0';
+          }
+          
+          // Update sync indicators
+          this._updateNonEditableParts();
         }
-      }, 300); // Check every 300ms
+      }, 1000); // Short delay to let entity state update
       
     } catch (error) {
       if (error.message && error.message.includes('occupied by an unknown code')) {
@@ -1919,6 +2067,7 @@ class YaleLockManagerCard extends HTMLElement {
       });
       this._showClearCacheConfirm = false;
       this._formValues = {}; // Clear all form values
+      this._clearFormValuesFromStorage(); // Also clear localStorage
       this.showStatus(0, 'Local cache cleared', 'success');
       setTimeout(() => this.render(), 500);
     } catch (error) {
