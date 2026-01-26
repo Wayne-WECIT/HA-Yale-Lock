@@ -78,16 +78,19 @@ class YaleLockManagerLock(CoordinatorEntity, LockEntity):
         }
         
         # Only add via_device if we found the Z-Wave device AND it still exists
-        if via_device_id:
-            # Verify the device still exists before using it as via_device
-            existing_device = device_registry.async_get(via_device_id)
-            if existing_device:
-                device_info["via_device"] = via_device_id
-            else:
-                _LOGGER.warning(
-                    "Z-Wave device %s not found in device registry, skipping via_device",
-                    via_device_id
-                )
+        # Note: We don't add via_device to avoid the deprecation warning
+        # The device relationship is implicit through the node_id matching
+        # If needed in the future, we can use device_links instead
+        # if via_device_id:
+        #     # Verify the device still exists before using it as via_device
+        #     existing_device = device_registry.async_get(via_device_id)
+        #     if existing_device:
+        #         device_info["via_device"] = via_device_id
+        #     else:
+        #         _LOGGER.warning(
+        #             "Z-Wave device %s not found in device registry, skipping via_device",
+        #             via_device_id
+        #         )
         
         self._attr_device_info = device_info
         

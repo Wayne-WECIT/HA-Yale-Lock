@@ -653,7 +653,7 @@ class YaleLockManagerCard extends HTMLElement {
       // localStorage has values - don't overwrite (preserve user's edits)
       return;
     }
-    
+
     // Try to load from localStorage first
     this._loadFormValuesFromStorage();
     
@@ -2057,10 +2057,11 @@ class YaleLockManagerCard extends HTMLElement {
       });
 
       // Save usage limit (PINs only)
+      // Declare limitToggle and limitInput outside the if block so they're available later
+      const limitToggle = codeType === 'pin' ? this.shadowRoot.getElementById(`limit-toggle-${slot}`) : null;
+      const limitInput = codeType === 'pin' ? this.shadowRoot.getElementById(`limit-${slot}`) : null;
+      
       if (codeType === 'pin') {
-        const limitToggle = this.shadowRoot.getElementById(`limit-toggle-${slot}`);
-        const limitInput = this.shadowRoot.getElementById(`limit-${slot}`);
-        
         const limit = (limitToggle?.checked && limitInput?.value) ? parseInt(limitInput.value, 10) : null;
         
         await this._hass.callService('yale_lock_manager', 'set_usage_limit', {
@@ -2105,7 +2106,7 @@ class YaleLockManagerCard extends HTMLElement {
       
       // Save form values to localStorage after successful save
       // This ensures values persist even if entity state is slow to update
-      // Reuse variables already declared above (scheduleToggle, startInput, endInput, limitToggle, limitInput)
+      // Variables are now declared above so they're available here
       if (scheduleToggle?.checked && startInput?.value && endInput?.value) {
         this._setFormValue(slot, 'schedule', { start: startInput.value, end: endInput.value });
       } else {
