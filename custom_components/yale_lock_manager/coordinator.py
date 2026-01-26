@@ -858,11 +858,19 @@ class YaleLockCoordinator(DataUpdateCoordinator):
                 def _write_state_callback():
                     """Callback to write entity state after delay."""
                     _LOGGER.debug("Writing entity state to notify frontend after push...")
+                    
+                    # CRITICAL: Update coordinator.data again to ensure it's different
+                    # This forces CoordinatorEntity to detect a change and write state
+                    if self.data:
+                        # Update timestamp again to ensure it's different
+                        self.data["last_user_update"] = datetime.now().isoformat()
+                        _LOGGER.debug("Updated coordinator.data timestamp again: %s", self.data["last_user_update"])
+                    
                     # Force entity state write - this should trigger frontend notification
                     self._lock_entity.async_write_ha_state()
                     _LOGGER.info("Entity state written after push for slot %s", slot)
                     
-                    # Also trigger a coordinator update to ensure state change is broadcast
+                    # Also trigger coordinator listeners to ensure state change is broadcast
                     # This helps ensure Home Assistant notifies the frontend
                     self.async_update_listeners()
                     _LOGGER.debug("Coordinator listeners updated after push")

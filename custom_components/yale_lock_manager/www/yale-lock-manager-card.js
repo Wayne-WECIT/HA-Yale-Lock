@@ -51,6 +51,14 @@ class YaleLockManagerCard extends HTMLElement {
     const newUsersJson = JSON.stringify(newUsers);
     const entityChanged = oldHass && hass && oldUsersJson !== newUsersJson;
     
+    // Always log when set hass() is called during push operations (for debugging)
+    if (this._expandedSlot !== null) {
+      const slotUser = newUsers[this._expandedSlot];
+      if (slotUser) {
+        console.log(`[Yale Lock Manager] set hass() called - Slot ${this._expandedSlot} lock_code: ${slotUser.lock_code || 'NOT SET'}`);
+      }
+    }
+    
     if (this._debugMode) {
       if (entityChanged) {
         console.log('[Yale Lock Manager] [REFRESH DEBUG] set hass() called - entity state changed');
