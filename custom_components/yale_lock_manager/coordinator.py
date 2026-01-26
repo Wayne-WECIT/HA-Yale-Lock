@@ -831,37 +831,18 @@ class YaleLockCoordinator(DataUpdateCoordinator):
             else:
                 _LOGGER.warning("After save - user not found in storage for slot %s", slot)
             
-            # Add a small delay to ensure storage write is complete
-            await asyncio.sleep(0.1)
-            
-            # CRITICAL: Update entity state directly without triggering a full pull
-            # A full pull might overwrite lock_code with stale data or cause timing issues
-            # Update coordinator.data to trigger state change notification
-            if self.data:
-                self.data["last_user_update"] = datetime.now().isoformat()
-                _LOGGER.debug("Updated coordinator.data with timestamp: %s", self.data["last_user_update"])
-            
-            # Verify what get_all_users() will return
-            all_users = self.get_all_users()
-            slot_user = all_users.get(slot_str)
-            if slot_user:
-                _LOGGER.info("Before entity write - get_all_users() lock_code: %s", slot_user.get("lock_code", "NOT SET"))
-            else:
-                _LOGGER.warning("Before entity write - user not found in get_all_users() for slot %s", slot)
-            
-            # CRITICAL: Update coordinator.data BEFORE scheduling callback
-            # This ensures CoordinatorEntity._handle_coordinator_update() sees the change
+            # Update coordinator.data to trigger coordinator update cycle
+            # This ensures CoordinatorEntity sees the change
             if self.data:
                 self.data["last_user_update"] = datetime.now().isoformat()
                 _LOGGER.debug("Updated coordinator.data timestamp: %s", self.data["last_user_update"])
             
-            # Trigger listeners immediately to notify CoordinatorEntity of the data change
-            # This will cause _handle_coordinator_update() to be called
+            # Trigger listeners to notify CoordinatorEntity
             self.async_update_listeners()
-            _LOGGER.debug("Coordinator listeners updated immediately after push")
+            _LOGGER.debug("Coordinator listeners updated after push")
             
-            # Schedule async_write_ha_state() to ensure it happens after the save is fully processed
-            # This ensures Home Assistant has time to process the state change
+            # Schedule async_write_ha_state() to ensure state is written
+            # The new dict copy in extra_state_attributes will be detected as changed
             if self._lock_entity:
                 _LOGGER.debug("Scheduling entity state write in 0.2 seconds after push...")
                 
@@ -869,14 +850,8 @@ class YaleLockCoordinator(DataUpdateCoordinator):
                 def _write_state_callback():
                     """Callback to write entity state after delay."""
                     _LOGGER.debug("Writing entity state to notify frontend after push...")
-                    
-                    # Force entity state write - this should trigger frontend notification
                     self._lock_entity.async_write_ha_state()
                     _LOGGER.info("Entity state written after push for slot %s", slot)
-                    
-                    # Trigger listeners again to ensure state change is broadcast
-                    self.async_update_listeners()
-                    _LOGGER.debug("Coordinator listeners updated again after state write")
                 
                 # Use hass.loop.call_later() to schedule the callback
                 self.hass.loop.call_later(0.2, _write_state_callback)
@@ -1024,26 +999,21 @@ class YaleLockCoordinator(DataUpdateCoordinator):
         await self.async_save_user_data()
         _LOGGER.info("[REFRESH DEBUG] User data saved to storage")
         
-        _LOGGER.info("[REFRESH DEBUG] Requesting coordinator refresh (triggers _async_update_data)...")
-        await self.async_request_refresh()
-        _LOGGER.info("[REFRESH DEBUG] Coordinator refresh requested")
-        
-        # Add a small delay to ensure the refresh has been processed
-        await asyncio.sleep(0.1)
-        _LOGGER.debug("[REFRESH DEBUG] Delay completed, updating coordinator.data to trigger state change...")
-        
-        # Update coordinator.data to trigger state change notification
-        # CoordinatorEntity only writes state when coordinator.data changes,
-        # but extra_state_attributes reads from _user_data which is separate
+        # Update coordinator.data to trigger coordinator update cycle
         if self.data:
             self.data["last_user_update"] = datetime.now().isoformat()
             _LOGGER.debug("[REFRESH DEBUG] Updated coordinator.data with timestamp: %s", self.data["last_user_update"])
         
-        # Schedule async_write_ha_state() to ensure it happens after the refresh is fully processed
-        # This ensures Home Assistant has time to process the state change
+        # Trigger listeners to notify CoordinatorEntity
+        self.async_update_listeners()
+        _LOGGER.debug("[REFRESH DEBUG] Coordinator listeners updated")
+        
+        # Schedule async_write_ha_state() to ensure state is written
+        # The new dict copy in extra_state_attributes will be detected as changed
         if self._lock_entity:
             _LOGGER.debug("[REFRESH DEBUG] Scheduling entity state write in 0.2 seconds...")
             
+            @callback
             def _write_state_callback():
                 """Callback to write entity state after delay."""
                 _LOGGER.debug("[REFRESH DEBUG] Writing entity state to notify frontend...")

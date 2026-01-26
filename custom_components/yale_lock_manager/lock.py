@@ -139,7 +139,14 @@ class YaleLockManagerLock(CoordinatorEntity, LockEntity):
             attrs["battery_level"] = battery_level
 
         # Add user data for the card
-        users = self.coordinator.get_all_users()
+        # CRITICAL: Create a deep copy so Home Assistant detects it as a new object
+        # This forces Home Assistant to broadcast the change to frontend
+        users_raw = self.coordinator.get_all_users()
+        users = {}
+        for slot_str, user_data in users_raw.items():
+            # Create a new dict for each user to ensure new object references
+            users[slot_str] = dict(user_data)
+        
         enabled_users = [u for u in users.values() if u.get("enabled")]
         total_users = len([u for u in users.values() if u.get("name")])
         attrs["total_users"] = total_users
