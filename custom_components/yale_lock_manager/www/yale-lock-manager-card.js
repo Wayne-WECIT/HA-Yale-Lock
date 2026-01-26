@@ -26,6 +26,8 @@ class YaleLockManagerCard extends HTMLElement {
     this._refreshSnapshot = null; // Snapshot of user data before refresh
     this._debugMode = false; // Debug mode flag for detailed logging
     this._localStorageKey = null; // Will be set when config is available
+    this._debugLog = []; // Array of debug log entries
+    this._showDebugPanel = false; // Toggle debug panel visibility
   }
 
   setConfig(config) {
@@ -832,6 +834,102 @@ class YaleLockManagerCard extends HTMLElement {
     }
   }
 
+  _addDebugLog(operation, slot, details = {}) {
+    /** Add an entry to the debug log. */
+    const timestamp = new Date().toLocaleTimeString();
+    const entry = {
+      timestamp,
+      operation,
+      slot: slot || null,
+      details: { ...details }
+    };
+    
+    // Get current cached values for this slot
+    if (slot) {
+      const cached = this._formValues[slot] || {};
+      const entity = this.getUserData().find(u => u.slot === slot);
+      entry.cached = {
+        name: cached.name || '',
+        code: cached.code ? '***' : '',
+        type: cached.type || '',
+        cachedStatus: cached.cachedStatus,
+        schedule: cached.schedule,
+        usageLimit: cached.usageLimit
+      };
+      entry.entity = entity ? {
+        name: entity.name || '',
+        code: entity.code ? '***' : '',
+        lock_code: entity.lock_code ? '***' : '',
+        lock_status: entity.lock_status,
+        lock_status_from_lock: entity.lock_status_from_lock,
+        synced_to_lock: entity.synced_to_lock
+      } : null;
+    }
+    
+    this._debugLog.push(entry);
+    
+    // Keep only last 100 entries
+    if (this._debugLog.length > 100) {
+      this._debugLog.shift();
+    }
+    
+    // Update debug panel if visible
+    if (this._showDebugPanel) {
+      this._updateDebugPanel();
+    }
+    
+    // Also log to console
+    console.log(`[Yale Lock Manager] [DEBUG] ${timestamp} - ${operation}${slot ? ` (Slot ${slot})` : ''}`, details);
+  }
+
+  _updateDebugPanel() {
+    /** Update the debug panel content. */
+    const panel = this.shadowRoot?.querySelector('#debug-panel-content');
+    if (!panel) return;
+    
+    const logHtml = this._debugLog.slice(-50).reverse().map(entry => {
+      const cachedHtml = entry.cached ? `
+        <div style="margin-top: 4px; padding-left: 12px; font-size: 0.85em;">
+          <strong>Cached:</strong> name="${entry.cached.name}", code="${entry.cached.code}", status=${entry.cached.cachedStatus}, type=${entry.cached.type}
+        </div>
+      ` : '';
+      
+      const entityHtml = entry.entity ? `
+        <div style="margin-top: 4px; padding-left: 12px; font-size: 0.85em;">
+          <strong>Entity:</strong> name="${entry.entity.name}", code="${entry.entity.code}", lock_code="${entry.entity.lock_code}", lock_status=${entry.entity.lock_status}, synced=${entry.entity.synced_to_lock}
+        </div>
+      ` : '';
+      
+      const detailsHtml = Object.keys(entry.details).length > 0 ? `
+        <div style="margin-top: 4px; padding-left: 12px; font-size: 0.85em; color: var(--secondary-text-color);">
+          ${JSON.stringify(entry.details)}
+        </div>
+      ` : '';
+      
+      return `
+        <div style="padding: 8px; border-bottom: 1px solid var(--divider-color);">
+          <div style="font-weight: 500; color: var(--primary-color);">
+            [${entry.timestamp}] ${entry.operation}${entry.slot ? ` - Slot ${entry.slot}` : ''}
+          </div>
+          ${cachedHtml}
+          ${entityHtml}
+          ${detailsHtml}
+        </div>
+      `;
+    }).join('');
+    
+    panel.innerHTML = logHtml || '<div style="padding: 16px; text-align: center; color: var(--secondary-text-color);">No debug entries yet</div>';
+  }
+
+  toggleDebugPanel() {
+    /** Toggle debug panel visibility. */
+    this._showDebugPanel = !this._showDebugPanel;
+    this.render();
+    if (this._showDebugPanel) {
+      this._updateDebugPanel();
+    }
+  }
+
   getUserData() {
     const stateObj = this._hass?.states[this._config?.entity];
     const users = stateObj?.attributes?.users || {};
@@ -1455,6 +1553,29 @@ class YaleLockManagerCard extends HTMLElement {
             This will remove all locally stored user data. Use "Refresh from lock" to reload from the physical lock.
           </p>
         </div>
+        
+        <hr style="margin: 24px 0 16px 0;">
+        <div style="text-align: center;">
+          <button class="secondary" onclick="card.toggleDebugPanel()" style="background: var(--info-color-background, rgba(33, 150, 243, 0.1)); color: var(--info-color, #2196f3); border: 1px solid var(--info-color, #2196f3);">
+            ${this._showDebugPanel ? '🔽 Hide' : '▶️ Show'} Debug Panel
+          </button>
+        </div>
+        
+        ${this._showDebugPanel ? `
+          <div id="debug-panel" style="margin-top: 16px; border: 1px solid var(--divider-color); border-radius: 4px; background: var(--card-background-color);">
+            <div style="padding: 12px; background: var(--primary-color); color: white; border-radius: 4px 4px 0 0; font-weight: 500;">
+              🐛 Debug Log - PIN Code Change Flow
+            </div>
+            <div id="debug-panel-content" style="max-height: 400px; overflow-y: auto; padding: 8px;">
+              <!-- Debug log entries will be inserted here -->
+            </div>
+            <div style="padding: 8px; background: var(--table-row-alternative-background-color); border-top: 1px solid var(--divider-color); text-align: center;">
+              <button class="secondary" onclick="card._debugLog = []; card._updateDebugPanel();" style="font-size: 0.85em;">
+                Clear Log
+              </button>
+            </div>
+          </div>
+        ` : ''}
       </ha-card>
     `;
   }
@@ -1480,9 +1601,18 @@ class YaleLockManagerCard extends HTMLElement {
       }
       if (codeField) {
         codeField.addEventListener('input', () => {
+          const oldCode = this._formValues[slot]?.code || '';
           this.updateStatusOptions(slot);
           this.setFormValue(slot, 'code', codeField.value);
           this._checkForUnsavedChanges(slot);
+          
+          // Log PIN change
+          if (codeField.value !== oldCode) {
+            this._addDebugLog('Cached PIN Changed', slot, {
+              old_code: oldCode ? '***' : '',
+              new_code: codeField.value ? '***' : ''
+            });
+          }
         });
       }
       if (statusField) {
@@ -1589,6 +1719,18 @@ class YaleLockManagerCard extends HTMLElement {
     } else {
       // When slot is first expanded, sync form values from entity state (force=true to initialize)
       this._syncFormValuesFromEntity(slot, true);
+      
+      // Log slot expansion with cached details
+      const cached = this._formValues[slot] || {};
+      const entity = this.getUserData().find(u => u.slot === slot);
+      this._addDebugLog('Slot Expanded', slot, {
+        cached_name: cached.name || '',
+        cached_code: cached.code ? '***' : '',
+        cached_status: cached.cachedStatus,
+        entity_name: entity?.name || '',
+        entity_code: entity?.code ? '***' : '',
+        entity_lock_code: entity?.lock_code ? '***' : ''
+      });
     }
     
     this.render();
@@ -1717,6 +1859,15 @@ class YaleLockManagerCard extends HTMLElement {
 
     this.clearStatus(slot);
     
+    // Log before push
+    const beforeCached = { ...(this._formValues[slot] || {}) };
+    const beforeEntity = this.getUserData().find(u => u.slot === slot);
+    this._addDebugLog('Push Clicked', slot, {
+      cached_code: beforeCached.code ? '***' : '',
+      entity_code: beforeEntity?.code ? '***' : '',
+      entity_lock_code: beforeEntity?.lock_code ? '***' : ''
+    });
+    
     this.showStatus(slot, `Push "${user.name}" to the lock now?`, 'confirm', async () => {
       try {
         // Step 1: Pushing code to lock
@@ -1758,6 +1909,16 @@ class YaleLockManagerCard extends HTMLElement {
         // Wait for push to complete
         await pushPromise;
         
+        // Log after push successful
+        const afterPushCached = { ...(this._formValues[slot] || {}) };
+        const afterPushEntity = this.getUserData().find(u => u.slot === slot);
+        this._addDebugLog('Push Successful', slot, {
+          cached_code: afterPushCached.code ? '***' : '',
+          entity_code: afterPushEntity?.code ? '***' : '',
+          entity_lock_code: afterPushEntity?.lock_code ? '***' : '',
+          synced: afterPushEntity?.synced_to_lock || false
+        });
+        
         // Step 5: All complete!
         this.showStatus(slot, '✅ All complete! Code pushed and verified successfully!', 'success');
         this.renderStatusMessage(slot);
@@ -1768,6 +1929,16 @@ class YaleLockManagerCard extends HTMLElement {
           // Update slot from entity state (with focus protection)
           // Backend already pulled from lock and updated lock_code and lock_status_from_lock
           this._updateSlotFromEntityState(slot);
+          
+          // Log after pull confirmation
+          const afterPullEntity = this.getUserData().find(u => u.slot === slot);
+          this._addDebugLog('Pull Confirmation (After Push)', slot, {
+            entity_code: afterPullEntity?.code ? '***' : '',
+            entity_lock_code: afterPullEntity?.lock_code ? '***' : '',
+            lock_status: afterPullEntity?.lock_status,
+            lock_status_from_lock: afterPullEntity?.lock_status_from_lock,
+            synced: afterPullEntity?.synced_to_lock || false
+          });
         }, 2500); // 2.5 seconds should be enough for backend to pull from lock and update entity state
         
       } catch (error) {
@@ -1783,6 +1954,17 @@ class YaleLockManagerCard extends HTMLElement {
     const codeType = this.shadowRoot.getElementById(`type-${slot}`).value;
     const code = codeType === 'pin' ? (this.shadowRoot.getElementById(`code-${slot}`)?.value.trim() || '') : '';
     const cachedStatus = parseInt(this.shadowRoot.getElementById(`cached-status-${slot}`)?.value || '0', 10);
+    
+    // Log before update
+    const beforeCached = { ...(this._formValues[slot] || {}) };
+    const beforeEntity = this.getUserData().find(u => u.slot === slot);
+    this._addDebugLog('Update User Clicked', slot, {
+      before_cached_code: beforeCached.code ? '***' : '',
+      before_cached_status: beforeCached.cachedStatus,
+      before_entity_lock_code: beforeEntity?.lock_code ? '***' : '',
+      new_code: code ? '***' : '',
+      new_status: cachedStatus
+    });
     
     // Update _formValues with what we're about to save
     this._setFormValue(slot, 'name', name);
@@ -1892,6 +2074,17 @@ class YaleLockManagerCard extends HTMLElement {
       
       // Clear unsaved changes flag
       delete this._unsavedChanges[slot];
+      
+      // Log after update completed
+      const afterCached = { ...(this._formValues[slot] || {}) };
+      const afterEntity = this.getUserData().find(u => u.slot === slot);
+      this._addDebugLog('Update User Completed', slot, {
+        after_cached_code: afterCached.code ? '***' : '',
+        after_cached_status: afterCached.cachedStatus,
+        after_entity_code: afterEntity?.code ? '***' : '',
+        after_entity_lock_code: afterEntity?.lock_code ? '***' : '',
+        synced: afterEntity?.synced_to_lock || false
+      });
       
       // Save form values to localStorage after successful save
       // This ensures values persist even if entity state is slow to update
