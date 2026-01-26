@@ -1898,26 +1898,23 @@ class YaleLockManagerCard extends HTMLElement {
       
       // Save form values to localStorage after successful save
       // This ensures values persist even if entity state is slow to update
-      this._saveFormValuesToStorage();
-      
-      // Update form values with saved data (including schedule and usage limit)
-      const scheduleToggle = this.shadowRoot.getElementById(`schedule-toggle-${slot}`);
-      const startInput = this.shadowRoot.getElementById(`start-${slot}`);
-      const endInput = this.shadowRoot.getElementById(`end-${slot}`);
-      const limitToggle = this.shadowRoot.getElementById(`limit-toggle-${slot}`);
-      const limitInput = this.shadowRoot.getElementById(`limit-${slot}`);
-      
+      // Reuse variables already declared above (scheduleToggle, startInput, endInput, limitToggle, limitInput)
       if (scheduleToggle?.checked && startInput?.value && endInput?.value) {
         this._setFormValue(slot, 'schedule', { start: startInput.value, end: endInput.value });
       } else {
         this._setFormValue(slot, 'schedule', { start: null, end: null });
       }
       
-      if (codeType === 'pin' && limitToggle?.checked && limitInput?.value) {
-        this._setFormValue(slot, 'usageLimit', parseInt(limitInput.value, 10));
-      } else {
-        this._setFormValue(slot, 'usageLimit', null);
+      if (codeType === 'pin') {
+        if (limitToggle?.checked && limitInput?.value) {
+          this._setFormValue(slot, 'usageLimit', parseInt(limitInput.value, 10));
+        } else {
+          this._setFormValue(slot, 'usageLimit', null);
+        }
       }
+      
+      // Save to localStorage after updating form values
+      this._saveFormValuesToStorage();
       
       // Update only non-editable parts (lock_code, lock_status) from entity state
       // Don't overwrite editable fields - they're already saved in localStorage
