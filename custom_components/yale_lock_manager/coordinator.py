@@ -849,6 +849,17 @@ class YaleLockCoordinator(DataUpdateCoordinator):
             else:
                 _LOGGER.warning("Before entity write - user not found in get_all_users() for slot %s", slot)
             
+            # CRITICAL: Update coordinator.data BEFORE scheduling callback
+            # This ensures CoordinatorEntity._handle_coordinator_update() sees the change
+            if self.data:
+                self.data["last_user_update"] = datetime.now().isoformat()
+                _LOGGER.debug("Updated coordinator.data timestamp: %s", self.data["last_user_update"])
+            
+            # Trigger listeners immediately to notify CoordinatorEntity of the data change
+            # This will cause _handle_coordinator_update() to be called
+            self.async_update_listeners()
+            _LOGGER.debug("Coordinator listeners updated immediately after push")
+            
             # Schedule async_write_ha_state() to ensure it happens after the save is fully processed
             # This ensures Home Assistant has time to process the state change
             if self._lock_entity:
@@ -859,21 +870,13 @@ class YaleLockCoordinator(DataUpdateCoordinator):
                     """Callback to write entity state after delay."""
                     _LOGGER.debug("Writing entity state to notify frontend after push...")
                     
-                    # CRITICAL: Update coordinator.data again to ensure it's different
-                    # This forces CoordinatorEntity to detect a change and write state
-                    if self.data:
-                        # Update timestamp again to ensure it's different
-                        self.data["last_user_update"] = datetime.now().isoformat()
-                        _LOGGER.debug("Updated coordinator.data timestamp again: %s", self.data["last_user_update"])
-                    
                     # Force entity state write - this should trigger frontend notification
                     self._lock_entity.async_write_ha_state()
                     _LOGGER.info("Entity state written after push for slot %s", slot)
                     
-                    # Also trigger coordinator listeners to ensure state change is broadcast
-                    # This helps ensure Home Assistant notifies the frontend
+                    # Trigger listeners again to ensure state change is broadcast
                     self.async_update_listeners()
-                    _LOGGER.debug("Coordinator listeners updated after push")
+                    _LOGGER.debug("Coordinator listeners updated again after state write")
                 
                 # Use hass.loop.call_later() to schedule the callback
                 self.hass.loop.call_later(0.2, _write_state_callback)
