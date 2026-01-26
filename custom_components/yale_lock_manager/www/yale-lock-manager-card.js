@@ -1956,10 +1956,12 @@ class YaleLockManagerCard extends HTMLElement {
         // Poll entity state multiple times to track when it updates
         let pollAttempt = 0;
         const maxPollAttempts = 10;
-        const pollInterval = 500; // Check every 500ms
+        const pollInterval = 1000; // Check every 1 second (increased from 500ms)
+        const startTime = Date.now();
         
         const pollEntityState = () => {
           pollAttempt++;
+          const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
           const currentEntity = this.getUserData().find(u => u.slot === slot);
           const currentCached = this._formValues[slot] || {};
           
@@ -1970,7 +1972,8 @@ class YaleLockManagerCard extends HTMLElement {
             lock_status: currentEntity?.lock_status,
             lock_status_from_lock: currentEntity?.lock_status_from_lock,
             synced: currentEntity?.synced_to_lock || false,
-            note: `Polling entity state ${pollAttempt}/${maxPollAttempts}`
+            elapsed_seconds: elapsed,
+            note: `Polling entity state ${pollAttempt}/${maxPollAttempts} (${elapsed}s elapsed)`
           });
           
           // Check if lock_code has been updated
@@ -1983,7 +1986,8 @@ class YaleLockManagerCard extends HTMLElement {
               cached_code: currentCached.code || '',
               entity_lock_code: currentEntity?.lock_code || '',
               match: true,
-              note: 'Entity state now shows correct lock_code'
+              elapsed_seconds: elapsed,
+              note: `Entity state now shows correct lock_code after ${elapsed}s`
             });
             
             // Update slot from entity state (with focus protection)
@@ -1999,7 +2003,10 @@ class YaleLockManagerCard extends HTMLElement {
           
           // Continue polling if not updated yet
           if (pollAttempt < maxPollAttempts) {
-            setTimeout(pollEntityState, pollInterval);
+            // Schedule next poll with proper delay
+            setTimeout(() => {
+              pollEntityState();
+            }, pollInterval);
           } else {
             // Max attempts reached - log final state
             this._addDebugLog('Entity State Poll Complete (Max Attempts)', slot, {
@@ -2009,7 +2016,8 @@ class YaleLockManagerCard extends HTMLElement {
               lock_status: currentEntity?.lock_status,
               lock_status_from_lock: currentEntity?.lock_status_from_lock,
               synced: currentEntity?.synced_to_lock || false,
-              note: 'Reached max poll attempts - entity state may not have updated'
+              elapsed_seconds: elapsed,
+              note: `Reached max poll attempts after ${elapsed}s - entity state may not have updated`
             });
             
             // Update UI anyway
@@ -2017,8 +2025,8 @@ class YaleLockManagerCard extends HTMLElement {
           }
         };
         
-        // Start polling after a short delay
-        setTimeout(pollEntityState, 500);
+        // Start polling after a short delay (1 second to give backend time to update)
+        setTimeout(pollEntityState, 1000);
         
       } catch (error) {
         this.showStatus(slot, `❌ Push failed: ${error.message}`, 'error');
