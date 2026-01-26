@@ -23,6 +23,7 @@ class YaleLockManagerCard extends HTMLElement {
     this._refreshProgressListener = null; // Event listener for refresh progress
     this._refreshProgress = null; // Current refresh progress data
     this._unsavedChanges = {}; // Track unsaved changes per slot
+    this._refreshSnapshot = null; // Snapshot of user data before refresh
   }
 
   setConfig(config) {
@@ -121,18 +122,48 @@ class YaleLockManagerCard extends HTMLElement {
       );
       this.renderStatusMessage(0); // Explicitly render
       
-      // Wait for entity state to actually update before refreshing UI
+      // Wait for entity state to actually change (compare to snapshot)
       let attempts = 0;
       const maxAttempts = 20; // Wait up to 6 seconds (20 * 300ms)
       const checkInterval = setInterval(() => {
         attempts++;
         const stateObj = this._hass?.states[this._config?.entity];
-        const users = stateObj?.attributes?.users || {};
-        const totalUsers = stateObj?.attributes?.total_users || 0;
+        const newUsers = stateObj?.attributes?.users || {};
         
-        // Check if entity state has been updated (has user data)
-        if (Object.keys(users).length > 0 || totalUsers > 0 || attempts >= maxAttempts) {
+        // Check if data has actually changed by comparing to snapshot
+        let hasChanged = false;
+        if (this._refreshSnapshot) {
+          // Compare: check if any user's lock_status, lock_code, or lock_status_from_lock changed
+          for (const slot in newUsers) {
+            const newUser = newUsers[slot];
+            const oldUser = this._refreshSnapshot[slot];
+            
+            if (!oldUser || 
+                newUser.lock_status !== oldUser.lock_status ||
+                newUser.lock_code !== oldUser.lock_code ||
+                newUser.lock_status_from_lock !== oldUser.lock_status_from_lock ||
+                newUser.name !== oldUser.name ||
+                newUser.code !== oldUser.code) {
+              hasChanged = true;
+              break;
+            }
+          }
+          
+          // Also check if any users were added (new slots)
+          for (const slot in newUsers) {
+            if (!(slot in this._refreshSnapshot)) {
+              hasChanged = true;
+              break;
+            }
+          }
+        } else {
+          // No snapshot - check if we have user data
+          hasChanged = Object.keys(newUsers).length > 0;
+        }
+        
+        if (hasChanged || attempts >= maxAttempts) {
           clearInterval(checkInterval);
+          this._refreshSnapshot = null; // Clear snapshot
           
           // Entity state updated - refresh UI
           if (this._expandedSlot === null) {
@@ -1353,6 +1384,11 @@ class YaleLockManagerCard extends HTMLElement {
 
   async refresh() {
     try {
+      // Store snapshot of current user data BEFORE refresh
+      const stateObj = this._hass?.states[this._config?.entity];
+      const currentUsers = stateObj?.attributes?.users || {};
+      this._refreshSnapshot = JSON.parse(JSON.stringify(currentUsers)); // Deep copy
+      
       // Clear previous progress
       this._refreshProgress = null;
       this._updateRefreshProgress();
@@ -1370,6 +1406,7 @@ class YaleLockManagerCard extends HTMLElement {
       // Don't call render() here - let the complete event handler do it
     } catch (error) {
       this._refreshProgress = null;
+      this._refreshSnapshot = null; // Clear snapshot on error
       this._updateRefreshProgress();
       this.showStatus(0, `❌ Refresh failed: ${error.message}`, 'error');
       this.renderStatusMessage(0);

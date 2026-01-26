@@ -2,6 +2,57 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.8.2.47] - 2026-01-25
+
+### 🐛 Bug Fixes - Refresh Complete Data Change Detection
+
+**User feedback**: "after the clicking the refresh the page still did not refresh."
+
+### The Problem
+
+The refresh complete handler was using a flawed polling mechanism that only checked if user data *existed* (`Object.keys(users).length > 0`), not if the data had actually *changed*. This meant:
+
+1. **False Positives**: If users already existed, the check would immediately pass even with stale data
+2. **No Change Detection**: The UI would refresh with old data before the entity state had actually updated
+3. **Timeout Issues**: If data didn't change (e.g., refresh found same codes), the timeout would trigger but with no actual change
+
+### The Solution
+
+Implemented **snapshot-based change detection**:
+
+1. **Store Snapshot Before Refresh**: When `refresh()` is called, capture a deep copy of current user data (`this._refreshSnapshot`)
+2. **Compare After Refresh**: In the refresh complete handler, poll comparing new entity state data to the snapshot
+3. **Detect Actual Changes**: Check specific fields that should change after refresh:
+   - `lock_status` (status from lock)
+   - `lock_code` (PIN from lock)
+   - `lock_status_from_lock` (read-only status from lock)
+   - `name` (user name)
+   - `code` (cached PIN)
+4. **Detect New Users**: Also check if any new slots were added (users that exist in new data but not in snapshot)
+
+### Changed
+
+- **Frontend (`yale-lock-manager-card.js` & `yale-lock-manager-panel.js`)**:
+  - **Constructor**: Added `this._refreshSnapshot = null` to store snapshot
+  - **`refresh()` Method**: 
+    - Store snapshot of current user data before calling service: `this._refreshSnapshot = JSON.parse(JSON.stringify(currentUsers))`
+    - Clear snapshot on error
+  - **`_handleRefreshProgress()` Complete Handler**:
+    - Replaced existence check with snapshot comparison
+    - Polls checking if any user's fields have changed compared to snapshot
+    - Only refreshes UI when actual data changes are detected
+    - Clears snapshot after refresh completes
+
+### What's Fixed
+
+- ✅ UI now only refreshes when data has actually changed, not just when it exists
+- ✅ Prevents refreshing with stale data
+- ✅ Works correctly even if users already exist before refresh
+- ✅ Detects new users added during refresh
+- ✅ More reliable change detection using field-by-field comparison
+
+---
+
 ## [1.8.2.45] - 2026-01-25
 
 ### 🐛 Bug Fixes - Refresh Complete & Save User PIN Revert
