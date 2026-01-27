@@ -834,21 +834,15 @@ class YaleLockCoordinator(DataUpdateCoordinator):
             self.async_update_listeners()
             if self._lock_entity:
                 self.hass.loop.call_later(0.2, self._lock_entity.async_write_ha_state)
+                _LOGGER.debug("Entity state write scheduled after push")
+            else:
+                _LOGGER.warning("Lock entity not registered - cannot update entity state")
             
         except Exception as err:
             _LOGGER.error("Failed to push code to lock for slot %s: %s", slot, err, exc_info=True)
             user_data["synced_to_lock"] = False
             await self.async_save_user_data()
             raise
-                _LOGGER.debug("Entity state write scheduled after push")
-            else:
-                _LOGGER.warning("Lock entity not registered - cannot update entity state")
-            
-        except Exception as err:
-            _LOGGER.error("Failed to push code for slot %s: %s", slot, err)
-            user_data["synced_to_lock"] = False
-            await self.async_save_user_data()
-            raise ValueError(f"Failed to push code to lock: {err}") from err
 
     async def async_pull_codes_from_lock(self) -> None:
         """Pull all codes from the lock and update our data."""
