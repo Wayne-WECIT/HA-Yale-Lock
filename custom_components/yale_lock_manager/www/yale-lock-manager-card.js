@@ -497,7 +497,17 @@ class YaleLockManagerCard extends HTMLElement {
       // Update status badge
       const statusCell = this.shadowRoot?.querySelector(`#status-badge-${user.slot}`);
       if (statusCell) {
-        const getStatusText = (status, lockEnabled, enabled) => {
+        // Check if there's a cached PIN
+        const hasCachedPin = user.code && user.code.trim() !== '';
+        const lockStatus = user.lock_status_from_lock ?? user.lock_status;
+        const isLockAvailable = (lockStatus === 0 || lockStatus === null || lockStatus === undefined);
+        
+        const getStatusText = (status, lockEnabled, enabled, hasCachedPin, isLockAvailable) => {
+          // If no cached PIN and lock is available, show "Available"
+          if (!hasCachedPin && isLockAvailable) {
+            return 'Available';
+          }
+          
           if (status !== null && status !== undefined) {
             if (status === 0) return 'Available';
             if (status === 1) return 'Enabled';
@@ -512,7 +522,12 @@ class YaleLockManagerCard extends HTMLElement {
           return 'Unknown';
         };
         
-        const getStatusColor = (status, lockEnabled, enabled) => {
+        const getStatusColor = (status, lockEnabled, enabled, hasCachedPin, isLockAvailable) => {
+          // If no cached PIN and lock is available, use gray for "Available"
+          if (!hasCachedPin && isLockAvailable) {
+            return '#9e9e9e';
+          }
+          
           if (status !== null && status !== undefined) {
             if (status === 0) return '#9e9e9e';
             if (status === 1) return '#4caf50';
@@ -525,8 +540,8 @@ class YaleLockManagerCard extends HTMLElement {
           return '#9e9e9e';
         };
         
-        const statusText = getStatusText(user.lock_status, user.lock_enabled, user.enabled);
-        const statusColor = getStatusColor(user.lock_status, user.lock_enabled, user.enabled);
+        const statusText = getStatusText(user.lock_status, user.lock_enabled, user.enabled, hasCachedPin, isLockAvailable);
+        const statusColor = getStatusColor(user.lock_status, user.lock_enabled, user.enabled, hasCachedPin, isLockAvailable);
         
         statusCell.innerHTML = `
           <span style="
@@ -1223,7 +1238,17 @@ class YaleLockManagerCard extends HTMLElement {
           ? user.lock_status 
           : (user.enabled ? 1 : 2));
       
-      const getStatusText = (status, lockEnabled, enabled) => {
+      // Check if there's a cached PIN
+      const hasCachedPin = formCode && formCode.trim() !== '';
+      const lockStatus = user.lock_status_from_lock ?? user.lock_status;
+      const isLockAvailable = (lockStatus === 0 || lockStatus === null || lockStatus === undefined);
+      
+      const getStatusText = (status, lockEnabled, enabled, hasCachedPin, isLockAvailable) => {
+        // If no cached PIN and lock is available, show "Available"
+        if (!hasCachedPin && isLockAvailable) {
+          return 'Available';
+        }
+        
         if (status !== null && status !== undefined) {
           if (status === 0) return 'Available';
           if (status === 1) return 'Enabled';
@@ -1238,7 +1263,12 @@ class YaleLockManagerCard extends HTMLElement {
         return 'Unknown';
       };
       
-      const getStatusColor = (status, lockEnabled, enabled) => {
+      const getStatusColor = (status, lockEnabled, enabled, hasCachedPin, isLockAvailable) => {
+        // If no cached PIN and lock is available, use gray for "Available"
+        if (!hasCachedPin && isLockAvailable) {
+          return '#9e9e9e';
+        }
+        
         if (status !== null && status !== undefined) {
           if (status === 0) return '#9e9e9e';
           if (status === 1) return '#4caf50';
@@ -1251,8 +1281,8 @@ class YaleLockManagerCard extends HTMLElement {
         return '#9e9e9e';
       };
       
-      const statusText = getStatusText(user.lock_status, user.lock_enabled, user.enabled);
-      const statusColor = getStatusColor(user.lock_status, user.lock_enabled, user.enabled);
+      const statusText = getStatusText(user.lock_status, user.lock_enabled, user.enabled, hasCachedPin, isLockAvailable);
+      const statusColor = getStatusColor(user.lock_status, user.lock_enabled, user.enabled, hasCachedPin, isLockAvailable);
       
       // Determine status dropdown options
       const hasLockPin = user.lock_code && user.lock_code.trim() !== '' && user.lock_code.trim() !== 'No PIN on lock';
@@ -1342,6 +1372,14 @@ class YaleLockManagerCard extends HTMLElement {
                     </div>
                     ${(() => {
                       const lockStatus = user.lock_status_from_lock ?? user.lock_status;
+                      const hasCachedPin = formCode && formCode.trim() !== '';
+                      const isLockAvailable = (lockStatus === 0 || lockStatus === null || lockStatus === undefined);
+                      
+                      // If no cached PIN and lock is available, don't show sync indicator (blank)
+                      if (!hasCachedPin && isLockAvailable) {
+                        return '';
+                      }
+                      
                       // Status comparison logic:
                       // - Cached=Enabled (1) + Lock=Enabled (1) = Synced ✅
                       // - Cached=Disabled (2) + Lock=Available (0) = Synced ✅ (expected when disabled)
@@ -2355,14 +2393,27 @@ class YaleLockManagerCard extends HTMLElement {
   async clearSlot(slot) {
     this.showStatus(slot, 'Clear this slot? This will remove all settings.', 'confirm', async () => {
       try {
+        // Step 1: Clear the slot on the lock
+        this.showStatus(slot, '⏳ Clearing slot on lock...', 'info');
         await this._hass.callService('yale_lock_manager', 'clear_user_code', {
           entity_id: this._config.entity,
           slot: parseInt(slot, 10)
         });
-        this._expandedSlot = null;
-        delete this._formValues[slot]; // Clear form values for cleared slot
-        this.showStatus(slot, 'Slot cleared', 'success');
-        setTimeout(() => this.render(), 1000);
+        
+        // Step 2: Pull data from lock to get the updated state
+        this.showStatus(slot, '⏳ Refreshing data from lock...', 'info');
+        await this._hass.callService('yale_lock_manager', 'pull_codes_from_lock', {
+          entity_id: this._config.entity
+        });
+        
+        // Step 3: Wait a moment for entity state to update, then refresh UI
+        // The pull will update the cache with values from the lock
+        setTimeout(() => {
+          this._expandedSlot = null;
+          delete this._formValues[slot]; // Clear form values - will be repopulated from entity state
+          this.showStatus(slot, '✅ Slot cleared and cache updated from lock', 'success');
+          this.render();
+        }, 1500);
       } catch (error) {
         this.showStatus(slot, `Clear failed: ${error.message}`, 'error');
       }
