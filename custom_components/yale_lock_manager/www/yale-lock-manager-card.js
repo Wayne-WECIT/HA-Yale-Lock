@@ -2612,25 +2612,19 @@ class YaleLockManagerCard extends HTMLElement {
   async clearSlot(slot) {
     this.showStatus(slot, 'Clear this slot? This will remove all settings.', 'confirm', async () => {
       try {
-        // Step 1: Clear the slot on the lock
+        // Clear the slot on the lock (backend will update only this slot)
         this.showStatus(slot, '⏳ Clearing slot on lock...', 'info');
         await this._hass.callService('yale_lock_manager', 'clear_user_code', {
           entity_id: this._config.entity,
           slot: parseInt(slot, 10)
         });
         
-        // Step 2: Pull data from lock to get the updated state
-        this.showStatus(slot, '⏳ Refreshing data from lock...', 'info');
-        await this._hass.callService('yale_lock_manager', 'pull_codes_from_lock', {
-          entity_id: this._config.entity
-        });
-        
-        // Step 3: Wait a moment for entity state to update, then refresh UI
-        // The pull will update the cache with values from the lock
+        // Wait for entity state to update (backend already updated the single slot)
+        this.showStatus(slot, '⏳ Updating cache...', 'info');
         setTimeout(() => {
           this._expandedSlot = null;
           delete this._formValues[slot]; // Clear form values - will be repopulated from entity state
-          this.showStatus(slot, '✅ Slot cleared and cache updated from lock', 'success');
+          this.showStatus(slot, '✅ Slot cleared and cache updated', 'success');
           this.render();
         }, 1500);
       } catch (error) {
