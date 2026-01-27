@@ -2,6 +2,54 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.8.4.36] - 2026-01-27
+
+### ✨ Enhancement - Notification Service Selection UI
+
+**User feedback**: Will the notification push to the iOS/android app or do we need to do something to enable this?
+
+### The Solution
+
+Added UI support for selecting notification service per slot, allowing users to choose between UI-only notifications (`notify.persistent_notification`) and mobile app push notifications (`notify.mobile_app`). Also created comprehensive documentation explaining how to set up mobile app notifications.
+
+### Changed
+
+- **Frontend (`yale-lock-manager-card.js`)**:
+  - Added notification service dropdown selector in expanded slot settings
+  - Updated `toggleNotification()` method to get and pass selected notification service
+  - Added `changeNotificationService()` method to handle service selection changes
+  - Updated `_updateSlotFromEntityState()` to sync notification service dropdown state
+  - Updated `_formValues` structure to include `notificationService` field
+- **Frontend (`yale-lock-manager-panel.js`)**:
+  - Added notification service dropdown selector in expanded slot settings
+  - Updated `toggleNotification()` method to get and pass selected notification service
+  - Added `changeNotificationService()` method to handle service selection changes
+  - Updated `_updateSlotFromEntityState()` to sync notification service dropdown state
+- **Documentation (`NOTIFICATIONS.md`)**:
+  - Created comprehensive notification configuration guide
+  - Documented mobile app setup process for iOS and Android
+  - Explained available notification services and their use cases
+  - Included troubleshooting section and best practices
+  - Added service call examples for advanced users
+- **Version (`const.py`, `manifest.json`)**:
+  - Updated `VERSION` to `1.8.4.36`
+
+### What's New
+
+- ✅ **Notification service selector**: Dropdown in expanded slot settings to choose notification service
+- ✅ **Mobile app support**: Easy selection of `notify.mobile_app` for push notifications
+- ✅ **Immediate saving**: Notification service changes are saved immediately when selected
+- ✅ **Comprehensive documentation**: Complete guide for setting up mobile app notifications
+- ✅ **Service options**: Choose between UI-only or mobile push notifications per slot
+
+### Notification Services Available
+
+- `notify.persistent_notification` - UI-only notifications (default)
+- `notify.mobile_app` - Push notifications to all registered mobile devices
+- Device-specific services (e.g., `notify.mobile_app_iphone`) can be set via service calls
+
+---
+
 ## [1.8.4.35] - 2026-01-27
 
 ### 🐛 Bug Fix - UnboundLocalError when setting FOB user codes

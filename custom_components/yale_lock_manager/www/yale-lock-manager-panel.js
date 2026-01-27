@@ -370,6 +370,15 @@ class YaleLockManagerPanel extends HTMLElement {
         }
       }
       
+      // Sync notification service dropdown
+      const notificationServiceSelect = this.querySelector(`#notification-service-${slot}`);
+      if (notificationServiceSelect) {
+        const notificationService = user.notification_service || 'notify.persistent_notification';
+        if (notificationServiceSelect.value !== notificationService) {
+          notificationServiceSelect.value = notificationService;
+        }
+      }
+      
       // Update sync indicators and status badges
       this._updateNonEditableParts();
     } else {
@@ -1202,6 +1211,21 @@ class YaleLockManagerPanel extends HTMLElement {
                 </div>
               ` : ''}
               
+              <div class="form-group">
+                <label>🔔 Notification Service:</label>
+                <select 
+                  id="notification-service-${user.slot}" 
+                  onchange="panel.changeNotificationService(${user.slot}, this.value)"
+                  style="width: 100%;"
+                >
+                  <option value="notify.persistent_notification" ${(user.notification_service || 'notify.persistent_notification') === 'notify.persistent_notification' ? 'selected' : ''}>Persistent Notification (UI only)</option>
+                  <option value="notify.mobile_app" ${user.notification_service === 'notify.mobile_app' ? 'selected' : ''}>Mobile App (All devices)</option>
+                </select>
+                <p style="color: var(--secondary-text-color); font-size: 0.75em; margin: 4px 0 0 0;">
+                  Choose where to send notifications. Use "Mobile App" for push notifications to iOS/Android devices.
+                </p>
+              </div>
+              
               <hr>
               <div class="button-group">
                 <button onclick="panel.saveUser(${user.slot})">
@@ -1521,11 +1545,16 @@ class YaleLockManagerPanel extends HTMLElement {
 
   async toggleNotification(slot, checked) {
     try {
+      // Get selected notification service from dropdown
+      const serviceSelect = this.querySelector(`#notification-service-${slot}`);
+      const notificationService = serviceSelect ? serviceSelect.value : 'notify.persistent_notification';
+      
       // Save immediately by calling the service
       await this._hass.callService('yale_lock_manager', 'set_notification_enabled', {
         entity_id: this._config.entity,
         slot: parseInt(slot, 10),
-        enabled: checked
+        enabled: checked,
+        notification_service: notificationService
       });
       
       // Show success message
@@ -1537,6 +1566,36 @@ class YaleLockManagerPanel extends HTMLElement {
       const toggle = this.querySelector(`#notification-toggle-${slot}`);
       if (toggle) {
         toggle.checked = !checked;
+      }
+    }
+  }
+
+  async changeNotificationService(slot, service) {
+    try {
+      // Get current notification enabled state
+      const toggle = this.querySelector(`#notification-toggle-${slot}`);
+      const enabled = toggle ? toggle.checked : false;
+      
+      // Save notification service immediately
+      await this._hass.callService('yale_lock_manager', 'set_notification_enabled', {
+        entity_id: this._config.entity,
+        slot: parseInt(slot, 10),
+        enabled: enabled,
+        notification_service: service
+      });
+      
+      // Show success message
+      this.showStatus(slot, `🔔 Notification service updated to ${service}`, 'success');
+    } catch (error) {
+      // Show error message
+      this.showStatus(slot, `❌ Failed to update notification service: ${error.message}`, 'error');
+      // Revert dropdown state
+      const user = this.getUserData().find(u => u.slot === slot);
+      if (user) {
+        const serviceSelect = this.querySelector(`#notification-service-${slot}`);
+        if (serviceSelect) {
+          serviceSelect.value = user.notification_service || 'notify.persistent_notification';
+        }
       }
     }
   }
