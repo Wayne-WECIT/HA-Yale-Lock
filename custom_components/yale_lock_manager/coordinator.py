@@ -783,6 +783,9 @@ class YaleLockCoordinator(DataUpdateCoordinator):
                 lock_code = ""
                 lock_status_from_lock = None
                 lock_enabled = False
+            # Preserve or initialize notification settings for FOBs
+            notifications_enabled = existing_user.get("notifications_enabled", False) if existing_user else False
+            notification_service = existing_user.get("notification_service", "notify.persistent_notification") if existing_user else "notify.persistent_notification"
             # FOBs are always synced (they're managed directly on the lock)
             synced_to_lock = True
         else:

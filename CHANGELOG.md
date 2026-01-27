@@ -2,6 +2,36 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.8.4.35] - 2026-01-27
+
+### 🐛 Bug Fix - UnboundLocalError when setting FOB user codes
+
+**User feedback**: Error when trying to set a FOB user code: "cannot access local variable 'notifications_enabled' where it is not associated with a value"
+
+### The Problem
+
+When setting a user code with `code_type=fob`, the `notifications_enabled` and `notification_service` variables were only initialized in the PIN branch of the code, but were used later for both PINs and FOBs. This caused an `UnboundLocalError` when trying to set FOB user codes.
+
+### The Solution
+
+Added initialization of `notifications_enabled` and `notification_service` variables in the FOB branch of `async_set_user_code()` method to preserve existing notification settings or initialize them with defaults.
+
+### Changed
+
+- **Backend (`coordinator.py`)**:
+  - Added initialization of `notifications_enabled` and `notification_service` in the FOB branch of `async_set_user_code()` method
+  - These variables are now properly initialized for both PIN and FOB code types
+- **Version (`const.py`, `manifest.json`)**:
+  - Updated `VERSION` to `1.8.4.35`
+
+### What's Fixed
+
+- ✅ **FOB user code setting now works**: No more `UnboundLocalError` when setting FOB user codes
+- ✅ **Notification settings preserved**: Existing notification settings are preserved when updating FOB user codes
+- ✅ **Consistent behavior**: Both PIN and FOB code types now handle notification settings correctly
+
+---
+
 ## [1.8.4.34] - 2026-01-27
 
 ### ✨ Enhancement - Notification Toggle Moved to Main Table Column
