@@ -1316,6 +1316,9 @@ class YaleLockManagerCard extends HTMLElement {
                 
                 <div id="status-${user.slot}"></div>
                 
+                <!-- Validation error message -->
+                <div id="validation-error-${user.slot}" style="display: none;"></div>
+                
                 <!-- Unsaved changes warning -->
                 <div id="unsaved-warning-${user.slot}" style="display: none;"></div>
                         
@@ -1348,7 +1351,7 @@ class YaleLockManagerCard extends HTMLElement {
                         <label>📝 Cached Status (editable):</label>
                         <select 
                           id="cached-status-${user.slot}" 
-                          onchange="card.changeStatus(${user.slot}, this.value); card._checkForUnsavedChanges(${user.slot})" 
+                          onchange="card.changeStatus(${user.slot}, this.value); card._checkForUnsavedChanges(${user.slot}); card._validateSlot(${user.slot})" 
                           style="width: 100%;"
                         >
                           <option value="1" ${formCachedStatus === 1 ? 'selected' : ''}>Enabled</option>
@@ -1437,11 +1440,11 @@ class YaleLockManagerCard extends HTMLElement {
                           type="text" 
                           id="code-${user.slot}" 
                           value="${formCode}" 
-                          placeholder="Enter PIN code" 
-                          maxlength="10" 
+                          placeholder="Enter PIN code (4-8 digits)" 
+                          maxlength="8" 
                           pattern="[0-9]*" 
                           style="width: 100%;"
-                          oninput="card.setFormValue(${user.slot}, 'code', this.value); card._checkForUnsavedChanges(${user.slot})"
+                          oninput="card.setFormValue(${user.slot}, 'code', this.value); card._checkForUnsavedChanges(${user.slot}); card._validateSlot(${user.slot})"
                         >
                         <p style="color: var(--secondary-text-color); font-size: 0.75em; margin: 4px 0 0 0;">PIN stored locally</p>
                       </div>
@@ -1566,7 +1569,7 @@ class YaleLockManagerCard extends HTMLElement {
                 
                 <hr>
                 <div class="button-group">
-                  <button onclick="card.saveUser(${user.slot})">
+                  <button id="save-button-${user.slot}" onclick="card.saveUser(${user.slot})">
                     ${user.name ? 'Update User' : 'Save User'}
                   </button>
                   ${user.name ? `
@@ -1762,6 +1765,76 @@ class YaleLockManagerCard extends HTMLElement {
     }
   }
 
+  _validateSlot(slot) {
+    /**Validate slot data and enable/disable save button accordingly.
+     * 
+     * Rules:
+     * - If status is Enabled (1) and code type is PIN, PIN must be 4-8 characters
+     * - If status is Enabled (1) and PIN is empty, show error and disable button
+     * - If PIN is too short (< 4) or too long (> 8), show error and disable button
+     */
+    const codeField = this.shadowRoot.getElementById(`code-${slot}`);
+    const statusField = this.shadowRoot.getElementById(`cached-status-${slot}`);
+    const typeField = this.shadowRoot.getElementById(`type-${slot}`);
+    const saveButton = this.shadowRoot.getElementById(`save-button-${slot}`);
+    const errorDiv = this.shadowRoot.getElementById(`validation-error-${slot}`);
+    
+    if (!statusField || !typeField || !saveButton) return;
+    
+    const codeType = typeField.value;
+    const cachedStatus = parseInt(statusField.value || '0', 10);
+    const code = codeField ? codeField.value.trim() || '' : '';
+    const isEnabled = cachedStatus === 1;
+    const isPin = codeType === 'pin';
+    
+    let errorMessage = '';
+    let isValid = true;
+    
+    // Only validate PINs (FOBs don't need PIN validation)
+    if (isPin) {
+      if (isEnabled && !code) {
+        errorMessage = '⚠️ PIN is required when status is Enabled';
+        isValid = false;
+      } else if (code) {
+        if (code.length < 4) {
+          errorMessage = '⚠️ PIN must be at least 4 digits';
+          isValid = false;
+        } else if (code.length > 8) {
+          errorMessage = '⚠️ PIN cannot be longer than 8 digits';
+          isValid = false;
+        }
+      }
+    }
+    
+    // Update error display
+    if (errorDiv) {
+      if (errorMessage) {
+        errorDiv.style.display = 'block';
+        errorDiv.innerHTML = `
+          <div style="padding: 8px; background: #f4433615; border-left: 4px solid #f44336; border-radius: 4px; margin-bottom: 8px;">
+            <span style="color: #f44336; font-size: 0.85em;">${errorMessage}</span>
+          </div>
+        `;
+      } else {
+        errorDiv.style.display = 'none';
+        errorDiv.innerHTML = '';
+      }
+    }
+    
+    // Enable/disable save button
+    if (saveButton) {
+      if (isValid) {
+        saveButton.disabled = false;
+        saveButton.style.opacity = '1';
+        saveButton.style.cursor = 'pointer';
+      } else {
+        saveButton.disabled = true;
+        saveButton.style.opacity = '0.5';
+        saveButton.style.cursor = 'not-allowed';
+      }
+    }
+  }
+
   updateStatusOptions(slot) {
     const nameField = this.shadowRoot.getElementById(`name-${slot}`);
     const codeField = this.shadowRoot.getElementById(`code-${slot}`);
@@ -1824,6 +1897,9 @@ class YaleLockManagerCard extends HTMLElement {
         entity_code: entity?.code || '',
         entity_lock_code: entity?.lock_code || ''
       });
+      
+      // Validate slot after expansion to set initial button state
+      setTimeout(() => this._validateSlot(slot), 100);
     }
     
     this.render();
@@ -2152,9 +2228,23 @@ class YaleLockManagerCard extends HTMLElement {
       return;
     }
 
-    if (codeType === 'pin' && (!code || code.length < 4)) {
-      this.showStatus(slot, 'PIN must be at least 4 digits', 'error');
-      return;
+    // PIN validation
+    if (codeType === 'pin') {
+      if (cachedStatus === 1 && !code) {
+        this.showStatus(slot, '⚠️ PIN is required when status is Enabled', 'error');
+        return;
+      }
+      
+      if (code) {
+        if (code.length < 4) {
+          this.showStatus(slot, '⚠️ PIN must be at least 4 digits', 'error');
+          return;
+        }
+        if (code.length > 8) {
+          this.showStatus(slot, '⚠️ PIN cannot be longer than 8 digits', 'error');
+          return;
+        }
+      }
     }
 
     try {

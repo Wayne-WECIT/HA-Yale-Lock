@@ -87,7 +87,7 @@ SERVICE_CLEAR_LOCAL_CACHE: Final = "clear_local_cache"
 # Defaults
 DEFAULT_SCAN_INTERVAL: Final = 300  # 5 minutes
 MIN_CODE_LENGTH: Final = 4
-MAX_CODE_LENGTH: Final = 10
+MAX_CODE_LENGTH: Final = 8
 MAX_USER_SLOTS: Final = 20
 
 # Attributes
