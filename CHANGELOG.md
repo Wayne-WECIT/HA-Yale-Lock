@@ -2,6 +2,46 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.8.4.22] - 2026-01-27
+
+### 🐛 Bug Fix - Notification Event Structure Parsing
+
+**User feedback**: PIN usage count was not incrementing when unlocking the door with a PIN.
+
+### The Problem
+
+The notification handler was looking for `event_parameters.alarmType` and `event_parameters.alarmLevel`, but the actual Z-Wave JS notification event structure uses:
+- `type` (notification type, 6 = Access Control)
+- `event` (event number, 6 = Keypad unlock operation)
+- `parameters.userId` (the user slot number)
+
+This caused the handler to never detect keypad unlock events, so usage counts never incremented.
+
+### The Fix
+
+- Updated notification handler to use the correct event structure
+- Extract `type` and `event` directly from `event.data` instead of `event_parameters`
+- Extract user slot from `parameters.userId` instead of `alarmLevel`
+- Match `event_number == 6` for keypad unlock instead of checking `alarm_type in [144, 19]`
+- Added comprehensive logging to show the actual event structure received
+
+### Changed
+
+- **Backend (`coordinator.py`)**:
+  - Updated `_handle_notification()` to use correct event structure
+  - Changed from `event_parameters.alarmType/alarmLevel` to `type/event/parameters.userId`
+  - Match `event_number == 6` for keypad unlock events
+  - Extract user slot from `parameters.userId`
+
+### What's Fixed
+
+- ✅ PIN usage count now increments when door is unlocked with a PIN
+- ✅ Notification events are correctly parsed and processed
+- ✅ User slot is correctly extracted from event parameters
+- ✅ Better logging shows actual event structure for debugging
+
+---
+
 ## [1.8.4.21] - 2026-01-27
 
 ### 🐛 Bug Fix - PIN Usage Tracking and Activity Log Display
