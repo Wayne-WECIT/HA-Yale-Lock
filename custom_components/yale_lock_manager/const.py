@@ -2,7 +2,7 @@
 from typing import Final
 
 DOMAIN: Final = "yale_lock_manager"
-VERSION: Final = "1.8.4.37"
+VERSION: Final = "1.8.4.38"
 
 # Z-Wave JS Domain
 ZWAVE_JS_DOMAIN: Final = "zwave_js"
@@ -109,4 +109,5 @@ ATTR_ENABLED: Final = "enabled"
 ATTR_STATUS: Final = "status"
 ATTR_SYNCED: Final = "synced_to_lock"
 ATTR_LAST_USED: Final = "last_used"
-ATTR_NOTIFICATION_SERVICE: Final = "notification_service"
+ATTR_NOTIFICATION_SERVICE: Final = "notification_service"  # Deprecated, use ATTR_NOTIFICATION_SERVICES
+ATTR_NOTIFICATION_SERVICES: Final = "notification_services"

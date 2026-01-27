@@ -204,8 +204,15 @@ set_notification_enabled:
         boolean:
     notification_service:
       name: Notification Service
-      description: Home Assistant notification service to use (e.g., notify.persistent_notification, notify.mobile_app). Defaults to notify.persistent_notification if not specified.
+      description: Home Assistant notification service to use (deprecated, use notification_services). Single service string for backward compatibility.
       required: false
       example: "notify.persistent_notification"
       selector:
         text:
+    notification_services:
+      name: Notification Services
+      description: List of Home Assistant notification services to use (e.g., ["notify.persistent_notification", "notify.mobile_app"]). Can also accept a single service string for backward compatibility.
+      required: false
+      example: ["notify.persistent_notification", "notify.mobile_app"]
+      selector:
+        object:

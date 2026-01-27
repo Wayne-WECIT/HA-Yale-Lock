@@ -403,47 +403,58 @@ class YaleLockCoordinator(DataUpdateCoordinator):
         # Send notification if enabled for this slot
         notifications_enabled = user_data.get("notifications_enabled", False)
         if notifications_enabled:
-            notification_service = user_data.get("notification_service", "notify.persistent_notification")
+            # Support both old format (single string) and new format (list) for backward compatibility
+            notification_services = user_data.get("notification_services")
+            if notification_services is None:
+                # Migrate from old format
+                old_service = user_data.get("notification_service", "notify.persistent_notification")
+                notification_services = [old_service] if old_service else ["notify.persistent_notification"]
+            elif not isinstance(notification_services, list):
+                # Ensure it's a list
+                notification_services = [notification_services] if notification_services else ["notify.persistent_notification"]
+            
             method_display = method.upper() if method else "Unknown"
             message = f"{user_name} (Slot {user_slot}) unlocked the door via {method_display}"
             
-            try:
-                # Split service into domain and service (e.g., "notify.persistent_notification" -> domain="notify", service="persistent_notification")
-                if "." in notification_service:
-                    domain, service = notification_service.split(".", 1)
-                else:
-                    domain = "notify"
-                    service = notification_service
-                
-                notification_data = {
-                    "title": "Lock Access",
-                    "message": message,
-                    "data": {
-                        "entity_id": self.lock_entity_id,
-                        "user_name": user_name,
-                        "user_slot": user_slot,
-                        "method": method,
-                        "timestamp": dt_util.utcnow().isoformat(),
-                        "usage_count": usage_count,
-                    },
-                }
-                
-                await self.hass.services.async_call(domain, service, notification_data)
-                _LOGGER.info(
-                    "Notification sent for user %s (slot %s) via %s",
-                    user_name,
-                    user_slot,
-                    notification_service,
-                )
-            except Exception as err:
-                # Log error but don't fail the access event processing
-                _LOGGER.warning(
-                    "Failed to send notification for user %s (slot %s) via %s: %s",
-                    user_name,
-                    user_slot,
-                    notification_service,
-                    err,
-                )
+            notification_data = {
+                "title": "Lock Access",
+                "message": message,
+                "data": {
+                    "entity_id": self.lock_entity_id,
+                    "user_name": user_name,
+                    "user_slot": user_slot,
+                    "method": method,
+                    "timestamp": dt_util.utcnow().isoformat(),
+                    "usage_count": usage_count,
+                },
+            }
+            
+            # Send notification to all selected services
+            for notification_service in notification_services:
+                try:
+                    # Split service into domain and service (e.g., "notify.persistent_notification" -> domain="notify", service="persistent_notification")
+                    if "." in notification_service:
+                        domain, service = notification_service.split(".", 1)
+                    else:
+                        domain = "notify"
+                        service = notification_service
+                    
+                    await self.hass.services.async_call(domain, service, notification_data)
+                    _LOGGER.info(
+                        "Notification sent for user %s (slot %s) via %s",
+                        user_name,
+                        user_slot,
+                        notification_service,
+                    )
+                except Exception as err:
+                    # Log error but don't fail the access event processing
+                    _LOGGER.warning(
+                        "Failed to send notification for user %s (slot %s) via %s: %s",
+                        user_name,
+                        user_slot,
+                        notification_service,
+                        err,
+                    )
 
     def _is_code_valid(self, user_slot: int) -> bool:
         """Check if a user code is currently valid based on schedule."""
@@ -785,7 +796,13 @@ class YaleLockCoordinator(DataUpdateCoordinator):
                 lock_enabled = False
             # Preserve or initialize notification settings for FOBs
             notifications_enabled = existing_user.get("notifications_enabled", False) if existing_user else False
-            notification_service = existing_user.get("notification_service", "notify.persistent_notification") if existing_user else "notify.persistent_notification"
+            # Support both old format (string) and new format (list) for backward compatibility
+            notification_services = existing_user.get("notification_services") if existing_user else None
+            if notification_services is None:
+                old_service = existing_user.get("notification_service") if existing_user else None
+                notification_services = [old_service] if old_service else ["notify.persistent_notification"]
+            elif not isinstance(notification_services, list):
+                notification_services = [notification_services] if notification_services else ["notify.persistent_notification"]
             # FOBs are always synced (they're managed directly on the lock)
             synced_to_lock = True
         else:
@@ -822,7 +839,13 @@ class YaleLockCoordinator(DataUpdateCoordinator):
             
             # Preserve or initialize notification settings
             notifications_enabled = existing_user.get("notifications_enabled", False) if existing_user else False
-            notification_service = existing_user.get("notification_service", "notify.persistent_notification") if existing_user else "notify.persistent_notification"
+            # Support both old format (string) and new format (list) for backward compatibility
+            notification_services = existing_user.get("notification_services") if existing_user else None
+            if notification_services is None:
+                old_service = existing_user.get("notification_service") if existing_user else None
+                notification_services = [old_service] if old_service else ["notify.persistent_notification"]
+            elif not isinstance(notification_services, list):
+                notification_services = [notification_services] if notification_services else ["notify.persistent_notification"]
 
             # Calculate sync status: based on code existence, not status
             # Note: We can't check schedule here, so we use enabled flag
@@ -861,7 +884,7 @@ class YaleLockCoordinator(DataUpdateCoordinator):
             "synced_to_lock": synced_to_lock,  # Calculated based on code and status comparison (always True for FOBs)
             "last_used": None,
             "notifications_enabled": notifications_enabled,
-            "notification_service": notification_service,
+            "notification_services": notification_services,  # List of notification services
         }
 
         await self.async_save_user_data()
@@ -930,6 +953,7 @@ class YaleLockCoordinator(DataUpdateCoordinator):
                 user_data["usage_count"] = 0
                 user_data["last_used"] = None
                 user_data["notifications_enabled"] = False
+                user_data["notification_services"] = []  # Clear notification services
                 user_data["code_type"] = CODE_TYPE_PIN
                 user_data["synced_to_lock"] = False
                 _LOGGER.info("✓ All local cached details cleared for slot %s", slot)
@@ -1052,18 +1076,38 @@ class YaleLockCoordinator(DataUpdateCoordinator):
         await self.async_save_user_data()
 
     async def async_set_notification_enabled(
-        self, slot: int, enabled: bool, notification_service: str | None = None
+        self, slot: int, enabled: bool, notification_services: list[str] | str | None = None
     ) -> None:
-        """Set notification enabled status for a user code."""
+        """Set notification enabled status for a user code.
+        
+        Args:
+            slot: User slot number
+            enabled: Whether notifications are enabled
+            notification_services: List of notification services, or single service string (for backward compatibility)
+        """
         if str(slot) not in self._user_data["users"]:
             raise ValueError(f"User slot {slot} not found")
 
         self._user_data["users"][str(slot)]["notifications_enabled"] = enabled
-        if notification_service is not None:
-            self._user_data["users"][str(slot)]["notification_service"] = notification_service
-        elif enabled and "notification_service" not in self._user_data["users"][str(slot)]:
-            # Set default service if enabling and no service is set
-            self._user_data["users"][str(slot)]["notification_service"] = "notify.persistent_notification"
+        
+        if notification_services is not None:
+            # Convert to list if single string (backward compatibility)
+            if isinstance(notification_services, str):
+                notification_services = [notification_services]
+            self._user_data["users"][str(slot)]["notification_services"] = notification_services
+            # Remove old format if it exists
+            if "notification_service" in self._user_data["users"][str(slot)]:
+                del self._user_data["users"][str(slot)]["notification_service"]
+        elif enabled:
+            # Set default services if enabling and no services are set
+            if "notification_services" not in self._user_data["users"][str(slot)]:
+                # Migrate from old format if exists
+                old_service = self._user_data["users"][str(slot)].get("notification_service")
+                if old_service:
+                    self._user_data["users"][str(slot)]["notification_services"] = [old_service]
+                    del self._user_data["users"][str(slot)]["notification_service"]
+                else:
+                    self._user_data["users"][str(slot)]["notification_services"] = ["notify.persistent_notification"]
         
         await self.async_save_user_data()
         await self.async_request_refresh()  # Refresh entity state so card updates

@@ -23,6 +23,7 @@ class YaleLockManagerPanel extends HTMLElement {
     this._refreshProgress = null; // Current refresh progress data
     this._refreshSnapshot = null; // Snapshot of user data before refresh
     this._debugMode = false; // Debug mode flag for detailed logging
+    this._availableNotificationServices = null; // Cached list of available notification services
   }
 
   set hass(hass) {
@@ -46,6 +47,19 @@ class YaleLockManagerPanel extends HTMLElement {
     }
     
     this._hass = hass;
+    
+    if (!this._config) {
+      return;
+    }
+    
+    // Load available notification services when hass is set
+    if (hass && !this._availableNotificationServices) {
+      this.getAvailableNotificationServices().then(() => {
+        if (this._expandedSlot !== null) {
+          this.render(); // Re-render to show updated services
+        }
+      });
+    }
     
     // Subscribe to refresh progress events when hass is first set
     if (hass && !this._refreshProgressListener && hass.connection) {
@@ -370,13 +384,20 @@ class YaleLockManagerPanel extends HTMLElement {
         }
       }
       
-      // Sync notification service dropdown
-      const notificationServiceSelect = this.querySelector(`#notification-service-${slot}`);
-      if (notificationServiceSelect) {
-        const notificationService = user.notification_service || 'notify.persistent_notification';
-        if (notificationServiceSelect.value !== notificationService) {
-          notificationServiceSelect.value = notificationService;
-        }
+      // Sync notification service chips
+      // Support both old format (string) and new format (array)
+      let notificationServices = user.notification_services;
+      if (!notificationServices) {
+        notificationServices = user.notification_service ? [user.notification_service] : ['notify.persistent_notification'];
+      } else if (!Array.isArray(notificationServices)) {
+        notificationServices = [notificationServices];
+      }
+      
+      // Update chips display
+      const chipsContainer = this.querySelector(`#notification-services-${slot}`);
+      if (chipsContainer) {
+        const tempUser = { ...user, notification_services: notificationServices };
+        chipsContainer.innerHTML = this.renderNotificationServiceChips(slot, tempUser);
       }
       
       // Update sync indicators and status badges
@@ -782,6 +803,11 @@ class YaleLockManagerPanel extends HTMLElement {
         border-bottom: 1px solid var(--divider-color);
       }
       
+      td:nth-child(8) {
+        min-width: 180px;
+        max-width: 250px;
+      }
+      
       th {
         background: var(--table-header-background-color, var(--secondary-background-color));
         font-weight: bold;
@@ -882,6 +908,42 @@ class YaleLockManagerPanel extends HTMLElement {
       
       .hidden { display: none !important; }
       
+      .notification-chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+        align-items: center;
+      }
+      
+      .notification-chip {
+        display: inline-flex;
+        align-items: center;
+        padding: 4px 8px;
+        border-radius: 12px;
+        font-size: 0.75em;
+        cursor: pointer;
+        user-select: none;
+        border: 1px solid var(--divider-color);
+        background: var(--card-background-color);
+        color: var(--primary-text-color);
+        transition: all 0.2s;
+      }
+      
+      .notification-chip.selected {
+        background: var(--primary-color);
+        color: var(--text-primary-color, white);
+        border-color: var(--primary-color);
+      }
+      
+      .notification-chip:hover {
+        opacity: 0.8;
+      }
+      
+      .notification-chip-icon {
+        margin-right: 4px;
+        font-size: 0.9em;
+      }
+      
       .fob-notice {
         background: var(--table-row-alternative-background-color);
         border-radius: 8px;
@@ -907,6 +969,45 @@ class YaleLockManagerPanel extends HTMLElement {
         min-width: 120px;
       }
     `;
+  }
+
+  renderNotificationServiceChips(slot, user) {
+    // Get selected services (support both old and new format)
+    let selectedServices = [];
+    if (user.notification_services) {
+      selectedServices = Array.isArray(user.notification_services) ? user.notification_services : [user.notification_services];
+    } else if (user.notification_service) {
+      // Backward compatibility
+      selectedServices = [user.notification_service];
+    } else {
+      selectedServices = ['notify.persistent_notification'];
+    }
+    
+    // Get available services (use cached or default)
+    const availableServices = this._availableNotificationServices || [
+      { id: 'notify.persistent_notification', name: 'UI', type: 'ui' },
+      { id: 'notify.mobile_app', name: 'All Mobiles', type: 'all' }
+    ];
+    
+    // Always show UI and All Mobiles first, then individual devices
+    const alwaysShow = availableServices.filter(s => s.type === 'ui' || s.type === 'all');
+    const devices = availableServices.filter(s => s.type === 'device');
+    
+    const allServices = [...alwaysShow, ...devices];
+    
+    return allServices.map(service => {
+      const isSelected = selectedServices.includes(service.id);
+      return `
+        <span 
+          class="notification-chip ${isSelected ? 'selected' : ''}"
+          onclick="panel.toggleNotificationService(${slot}, '${service.id}')"
+          title="${service.id}"
+        >
+          <span class="notification-chip-icon">${isSelected ? '✓' : '○'}</span>
+          ${service.name}
+        </span>
+      `;
+    }).join('');
   }
 
   formatLastUsed(lastUsed) {
@@ -1005,14 +1106,9 @@ class YaleLockManagerPanel extends HTMLElement {
           </label>
         </td>
         <td onclick="event.stopPropagation();">
-          <select 
-            id="notification-service-${user.slot}" 
-            onchange="panel.changeNotificationService(${user.slot}, this.value)"
-            style="width: 100%; padding: 4px; font-size: 0.9em;"
-          >
-            <option value="notify.persistent_notification" ${(user.notification_service || 'notify.persistent_notification') === 'notify.persistent_notification' ? 'selected' : ''}>UI Only</option>
-            <option value="notify.mobile_app" ${user.notification_service === 'notify.mobile_app' ? 'selected' : ''}>Mobile App</option>
-          </select>
+          <div class="notification-chips" id="notification-services-${user.slot}">
+            ${this.renderNotificationServiceChips(user.slot, user)}
+          </div>
         </td>
       </tr>
       ${isExpanded ? `
@@ -1551,15 +1647,120 @@ class YaleLockManagerPanel extends HTMLElement {
     }
   }
 
-  changeNotificationService(slot, service) {
-    // Store notification service in form values
-    // Mark as having unsaved changes when notification service is changed
+  async getAvailableNotificationServices() {
+    // Return cached services if available
+    if (this._availableNotificationServices !== null) {
+      return this._availableNotificationServices;
+    }
+    
+    try {
+      // Query Home Assistant for available services
+      const services = await this._hass.callWS({
+        type: 'get_services',
+      });
+      
+      // Filter for notify services
+      const notifyServices = [];
+      if (services && services.notify) {
+        // Get all notify services
+        for (const [serviceId, serviceData] of Object.entries(services.notify)) {
+          if (serviceId.startsWith('mobile_app_')) {
+            // Extract device name from service ID (e.g., "mobile_app_iphone" -> "iPhone")
+            const deviceName = serviceId.replace('mobile_app_', '').replace(/_/g, ' ');
+            notifyServices.push({
+              id: `notify.${serviceId}`,
+              name: deviceName.charAt(0).toUpperCase() + deviceName.slice(1),
+              type: 'device'
+            });
+          } else if (serviceId === 'mobile_app') {
+            notifyServices.push({
+              id: 'notify.mobile_app',
+              name: 'All Mobiles',
+              type: 'all'
+            });
+          } else if (serviceId === 'persistent_notification') {
+            notifyServices.push({
+              id: 'notify.persistent_notification',
+              name: 'UI',
+              type: 'ui'
+            });
+          }
+        }
+      }
+      
+      // Always include UI and All Mobiles if not found
+      const hasUI = notifyServices.some(s => s.id === 'notify.persistent_notification');
+      const hasAllMobiles = notifyServices.some(s => s.id === 'notify.mobile_app');
+      
+      if (!hasUI) {
+        notifyServices.unshift({
+          id: 'notify.persistent_notification',
+          name: 'UI',
+          type: 'ui'
+        });
+      }
+      if (!hasAllMobiles) {
+        notifyServices.splice(hasUI ? 1 : 0, 0, {
+          id: 'notify.mobile_app',
+          name: 'All Mobiles',
+          type: 'all'
+        });
+      }
+      
+      this._availableNotificationServices = notifyServices;
+      return notifyServices;
+    } catch (error) {
+      console.error('[Yale Lock Manager] Error fetching notification services:', error);
+      // Return default services on error
+      return [
+        { id: 'notify.persistent_notification', name: 'UI', type: 'ui' },
+        { id: 'notify.mobile_app', name: 'All Mobiles', type: 'all' }
+      ];
+    }
+  }
+
+  toggleNotificationService(slot, serviceId) {
+    // Get current selected services from chips container
+    const chipsContainer = this.querySelector(`#notification-services-${slot}`);
+    if (!chipsContainer) return;
+    
+    // Get selected services by checking which chips are selected
+    const selectedChips = chipsContainer.querySelectorAll('.notification-chip.selected');
+    const currentServices = Array.from(selectedChips).map(chip => {
+      const onclick = chip.getAttribute('onclick');
+      const match = onclick.match(/'([^']+)'/);
+      return match ? match[1] : null;
+    }).filter(Boolean);
+    
+    // Toggle service in list
+    const index = currentServices.indexOf(serviceId);
+    let newServices;
+    if (index > -1) {
+      newServices = currentServices.filter(s => s !== serviceId);
+    } else {
+      newServices = [...currentServices, serviceId];
+    }
+    
+    // Update chips display
+    const user = this.getUserData().find(u => u.slot === slot);
+    if (user) {
+      // Temporarily update user data for rendering
+      const tempUser = { ...user, notification_services: newServices };
+      chipsContainer.innerHTML = this.renderNotificationServiceChips(slot, tempUser);
+    }
+    
+    // Enable save button
     const saveButton = this.querySelector(`button[onclick*="saveUser(${slot})"]`);
     if (saveButton) {
       saveButton.disabled = false;
       saveButton.style.opacity = '1';
       saveButton.style.cursor = 'pointer';
     }
+  }
+
+  changeNotificationService(slot, service) {
+    // Legacy method - redirect to toggleNotificationService
+    this.toggleNotificationService(slot, service);
   }
 
   async saveUser(slot) {
@@ -1650,16 +1851,22 @@ class YaleLockManagerPanel extends HTMLElement {
 
       // Save notification settings (works for both PINs and FOBs)
       const notificationToggle = this.querySelector(`#notification-toggle-${slot}`);
-      const notificationServiceSelect = this.querySelector(`#notification-service-${slot}`);
-      if (notificationToggle && notificationServiceSelect) {
+      if (notificationToggle) {
         const notificationsEnabled = notificationToggle.checked;
-        const notificationService = notificationServiceSelect.value;
+        // Get selected services from chips
+        const chipsContainer = this.querySelector(`#notification-services-${slot}`);
+        const selectedChips = chipsContainer ? chipsContainer.querySelectorAll('.notification-chip.selected') : [];
+        const selectedServices = Array.from(selectedChips).map(chip => {
+          const onclick = chip.getAttribute('onclick');
+          const match = onclick.match(/'([^']+)'/);
+          return match ? match[1] : null;
+        }).filter(Boolean);
         
         await this._hass.callService('yale_lock_manager', 'set_notification_enabled', {
           entity_id: this._config.entity,
           slot: parseInt(slot, 10),
           enabled: notificationsEnabled,
-          notification_service: notificationService
+          notification_services: selectedServices.length > 0 ? selectedServices : ['notify.persistent_notification']
         });
       }
 

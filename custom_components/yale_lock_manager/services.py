@@ -17,6 +17,7 @@ from .const import (
     ATTR_MAX_USES,
     ATTR_NAME,
     ATTR_NOTIFICATION_SERVICE,
+    ATTR_NOTIFICATION_SERVICES,
     ATTR_OVERRIDE_PROTECTION,
     ATTR_SLOT,
     ATTR_START_DATETIME,
@@ -90,7 +91,8 @@ SET_NOTIFICATION_ENABLED_SCHEMA = vol.Schema(
         vol.Optional("entity_id"): cv.entity_id,
         vol.Required(ATTR_SLOT): vol.All(vol.Coerce(int), vol.Range(min=1, max=MAX_USER_SLOTS)),
         vol.Required(ATTR_ENABLED): cv.boolean,
-        vol.Optional(ATTR_NOTIFICATION_SERVICE): cv.string,
+        vol.Optional(ATTR_NOTIFICATION_SERVICE): cv.string,  # Deprecated, use ATTR_NOTIFICATION_SERVICES
+        vol.Optional(ATTR_NOTIFICATION_SERVICES): vol.Any([cv.string], cv.string),  # Accept list or single string
     }
 )
 
@@ -334,11 +336,17 @@ async def async_setup_services(hass: HomeAssistant) -> None:
         coordinator = get_coordinator()
         slot = call.data[ATTR_SLOT]
         enabled = call.data[ATTR_ENABLED]
-        notification_service = call.data.get(ATTR_NOTIFICATION_SERVICE)
+        
+        # Support both old format (single service) and new format (list of services)
+        notification_services = call.data.get(ATTR_NOTIFICATION_SERVICES)
+        if notification_services is None:
+            # Backward compatibility: check for old format
+            notification_service = call.data.get(ATTR_NOTIFICATION_SERVICE)
+            notification_services = notification_service
 
         try:
-            await coordinator.async_set_notification_enabled(slot, enabled, notification_service)
-            _LOGGER.info("Set notification enabled for slot %s: %s", slot, enabled)
+            await coordinator.async_set_notification_enabled(slot, enabled, notification_services)
+            _LOGGER.info("Set notification enabled for slot %s: %s (services: %s)", slot, enabled, notification_services)
         except Exception as err:
             _LOGGER.error("Error setting notification enabled: %s", err)
             raise HomeAssistantError(f"Failed to set notification enabled: {err}") from err

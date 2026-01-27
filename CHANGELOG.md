@@ -2,6 +2,71 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.8.4.38] - 2026-01-27
+
+### ✨ Enhancement - Multi-Select Notification Services with Chips UI and Column Width Fix
+
+**User feedback**: The notification service column is too small (dropdown truncated). Also, can we have a multi-select which shows the UI and all mobiles and each mobile device individually so we can select what we want to get the notification?
+
+### The Solution
+
+Fixed column width issue and replaced single-select dropdown with chips/tags multi-select UI. Users can now select multiple notification services (UI, All Mobiles, and individual devices). The system queries Home Assistant dynamically for available mobile app services and displays them as toggleable chips.
+
+### Changed
+
+- **Backend (`coordinator.py`)**:
+  - Changed `notification_service` (string) to `notification_services` (list) in user data structure
+  - Updated `async_set_notification_enabled()` to accept list of services (with backward compatibility for single string)
+  - Updated `_handle_access_event()` to send notifications to all selected services in the list
+  - Added migration logic to convert old `notification_service` format to new `notification_services` format
+  - Updated initialization and clear logic to use list format
+- **Backend (`services.py`)**:
+  - Updated `handle_set_notification_enabled()` to accept `notification_services` as list
+  - Added backward compatibility for `notification_service` (single string)
+  - Updated schema to accept both formats
+- **Backend (`services.yaml`)**:
+  - Added `notification_services` field (list) while keeping `notification_service` for backward compatibility
+- **Backend (`const.py`)**:
+  - Added `ATTR_NOTIFICATION_SERVICES` constant
+- **Frontend (`yale-lock-manager-card.js`)**:
+  - Fixed column width: Added min-width and max-width CSS for notification service column
+  - Replaced single-select dropdown with chips/tags multi-select UI
+  - Added `renderNotificationServiceChips()` method to render chips for each service
+  - Added `getAvailableNotificationServices()` method to query Home Assistant for available services
+  - Updated `toggleNotificationService()` method to handle chip toggling (add/remove from list)
+  - Updated `saveUser()` to send array of selected services
+  - Updated `_checkForUnsavedChanges()` to detect changes in notification services array
+  - Updated `_updateSlotFromEntityState()` to sync chips from entity data
+  - Added CSS styling for chips (selected/unselected states)
+- **Frontend (`yale-lock-manager-panel.js`)**:
+  - Fixed column width: Added min-width and max-width CSS for notification service column
+  - Replaced single-select dropdown with chips/tags multi-select UI
+  - Added `renderNotificationServiceChips()` method
+  - Added `getAvailableNotificationServices()` method
+  - Updated `toggleNotificationService()` method
+  - Updated `saveUser()` to send array of selected services
+  - Updated `_updateSlotFromEntityState()` to sync chips
+  - Added CSS styling for chips
+- **Version (`const.py`, `manifest.json`)**:
+  - Updated `VERSION` to `1.8.4.38`
+
+### What's New
+
+- ✅ **Multi-select notification services**: Select multiple services (UI, All Mobiles, individual devices)
+- ✅ **Chips/tags UI**: Modern chip-based interface for selecting notification services
+- ✅ **Dynamic service discovery**: Automatically queries Home Assistant for available mobile app services
+- ✅ **Individual device selection**: Can select specific devices (e.g., iPhone, Android) in addition to "All Mobiles"
+- ✅ **Fixed column width**: Notification service column now has proper width to display all chips
+- ✅ **Backward compatibility**: Existing single-service configurations are automatically migrated to list format
+
+### Notification Service Selection
+
+- **UI**: Always available, shows notifications in Home Assistant UI
+- **All Mobiles**: Sends to all registered mobile devices (if mobile app is installed)
+- **Individual Devices**: Dynamically discovered from Home Assistant (e.g., iPhone, Android, etc.)
+
+---
+
 ## [1.8.4.37] - 2026-01-27
 
 ### ✨ Enhancement - Notification Settings Moved to Main Table with Update User Button
