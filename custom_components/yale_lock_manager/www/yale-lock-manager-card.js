@@ -1543,11 +1543,11 @@ class YaleLockManagerCard extends HTMLElement {
                     
                     <div id="limit-fields-${user.slot}" class="${user.usage_limit ? '' : 'hidden'}">
                       <div style="display: flex; gap: 12px;">
-                        <div style="flex: 1;">
+                              <div style="flex: 1;">
                           <label style="font-size: 0.85em;">Current:</label>
                           <input type="number" value="${user.usage_count || 0}" readonly style="background: var(--disabled-color, #f0f0f0);">
-                        </div>
-                        <div style="flex: 1;">
+                              </div>
+                              <div style="flex: 1;">
                           <label style="font-size: 0.85em;">Max:</label>
                           <input 
                             type="number" 
@@ -1555,9 +1555,10 @@ class YaleLockManagerCard extends HTMLElement {
                             value="${user.usage_limit || ''}" 
                             placeholder="e.g., 5" 
                             min="1"
+                            oninput="card._checkForUnsavedChanges(${user.slot})"
                           >
-                        </div>
-                      </div>
+                              </div>
+                            </div>
                       ${user.usage_limit && user.usage_count >= user.usage_limit ? `
                         <p style="color: var(--error-color); margin-top: 8px;">🚫 Limit reached!</p>
                       ` : user.usage_count > 0 ? `
@@ -1566,7 +1567,7 @@ class YaleLockManagerCard extends HTMLElement {
                       ${user.usage_count > 0 ? `
                         <button class="secondary" style="margin-top: 8px; width: 100%;" onclick="card.resetCount(${user.slot})">Reset Counter</button>
                       ` : ''}
-                    </div>
+                          </div>
                   </div>
                 ` : ''}
                 
@@ -2043,6 +2044,8 @@ class YaleLockManagerCard extends HTMLElement {
     if (fields) {
       fields.classList.toggle('hidden', !checked);
     }
+    // Mark as having unsaved changes when limit toggle is changed
+    this._checkForUnsavedChanges(slot);
   }
 
   // ========== ACTIONS ==========
@@ -2331,6 +2334,13 @@ class YaleLockManagerCard extends HTMLElement {
     const code = !isFob ? (this.shadowRoot.getElementById(`code-${slot}`)?.value.trim() || '') : '';
     const cachedStatus = !isFob ? parseInt(this.shadowRoot.getElementById(`cached-status-${slot}`)?.value || '0', 10) : 0;
     
+    // Declare schedule and limit variables at function scope so they're accessible in both if blocks
+    const scheduleToggle = !isFob ? this.shadowRoot.getElementById(`schedule-toggle-${slot}`) : null;
+    const startInput = !isFob ? this.shadowRoot.getElementById(`start-${slot}`) : null;
+    const endInput = !isFob ? this.shadowRoot.getElementById(`end-${slot}`) : null;
+    const limitToggle = !isFob ? this.shadowRoot.getElementById(`limit-toggle-${slot}`) : null;
+    const limitInput = !isFob ? this.shadowRoot.getElementById(`limit-${slot}`) : null;
+    
     // Log before update
     const beforeCached = { ...(this._formValues[slot] || {}) };
     const beforeEntity = this.getUserData().find(u => u.slot === slot);
@@ -2398,10 +2408,6 @@ class YaleLockManagerCard extends HTMLElement {
 
       // Save schedule (PINs only - FOBs don't have schedules)
       if (!isFob) {
-        const scheduleToggle = this.shadowRoot.getElementById(`schedule-toggle-${slot}`);
-        const startInput = this.shadowRoot.getElementById(`start-${slot}`);
-        const endInput = this.shadowRoot.getElementById(`end-${slot}`);
-        
         let start = null;
         let end = null;
         
@@ -2439,9 +2445,6 @@ class YaleLockManagerCard extends HTMLElement {
         });
 
         // Save usage limit (PINs only)
-        const limitToggle = this.shadowRoot.getElementById(`limit-toggle-${slot}`);
-        const limitInput = this.shadowRoot.getElementById(`limit-${slot}`);
-        
         const limit = (limitToggle?.checked && limitInput?.value) ? parseInt(limitInput.value, 10) : null;
         
         await this._hass.callService('yale_lock_manager', 'set_usage_limit', {
