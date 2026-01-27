@@ -2,6 +2,261 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.8.4.18] - 2026-01-27
+
+### 🐛 Bug Fix - Sync Status Calculation for FOB Slots
+
+**Issue**: FOB slots were not being marked as synced during refresh operations.
+
+### The Fix
+
+- FOB slots are now always marked as synced during refresh (they're managed directly on the lock)
+- Only PIN slots use code/status matching for sync calculation
+- Prevents incorrect sync warnings for FOB slots
+
+### Changed
+
+- **Backend (`coordinator.py`)**:
+  - Updated sync status calculation in `async_pull_codes_from_lock()` to check code_type
+  - FOB slots are always marked as `synced_to_lock = True`
+  - PIN slots continue to use code/status matching logic
+
+---
+
+## [1.8.4.17] - 2026-01-27
+
+### 🎨 FOB/RFID Simplification - Hide Fields and Skip Refresh Overwrite
+
+**User feedback**: "when FOB/RFID is chosen for the code type, also hide the cached and lock status's, usage & time schedule too, all we save is the username, codetype for the slot. nothing is pushed to the lock at all... when a refresh occurs we dont overwrite slots sets as fob/rfid, unless a pin is set for that slot on the lock."
+
+### The Problem
+
+FOB/RFID slots were showing irrelevant fields (status dropdowns, schedules, usage limits) and refresh operations were overwriting FOB slots even though FOBs are managed directly on the lock.
+
+### The Solution
+
+1. **UI Simplification**: Hide all irrelevant fields for FOB slots (status, schedule, usage limit)
+2. **Data Storage**: Only save `name` and `code_type` for FOB slots (no status, schedule, usage_limit)
+3. **Refresh Protection**: Skip overwriting FOB slots during refresh, unless a PIN is found on the lock (indicating it was changed from FOB to PIN)
+
+### Changed
+
+- **Frontend (`yale-lock-manager-card.js`)**:
+  - Added IDs to status, schedule, and usage sections for dynamic toggling
+  - Wrapped schedule section in `${!isFob ? `...` : ''}` conditional
+  - Updated `changeType()` to toggle visibility of status, schedule, and usage fields
+  - Updated `saveUser()` to only send `name` and `code_type` for FOB slots
+  - Skip `set_user_schedule` and `set_usage_limit` service calls for FOB slots
+
+- **Backend (`coordinator.py`)**:
+  - Updated `async_set_user_code()` to only save `name` and `code_type` for FOB slots
+  - Set defaults for FOB slots: empty code, no schedule, no usage_limit, default status
+  - Updated `async_pull_codes_from_lock()` to check if slot is marked as FOB before overwriting
+  - If FOB and lock has no PIN: skip overwriting, update lock state only
+  - If FOB but lock has PIN: update `code_type` to PIN and proceed with normal overwrite
+  - FOB slots are always marked as synced
+
+### What's Fixed
+
+- ✅ FOB slots only show: username field, code type selector, and FOB notice
+- ✅ No irrelevant fields (status, schedule, usage limit) for FOB slots
+- ✅ FOB slots only save username and code_type (no other data)
+- ✅ Refresh preserves FOB slots unless PIN is detected on lock
+- ✅ Automatic conversion from FOB to PIN when PIN is found on lock
+
+---
+
+## [1.8.4.16] - 2026-01-27
+
+### 🐛 Bug Fix - Clear Slot Optimization
+
+**User feedback**: "after clear lock it looks like you are still pulling all the slots instead of the slot in question"
+
+### The Problem
+
+After clearing a slot, the frontend was calling `pull_codes_from_lock` which refreshed all 20 slots instead of just the cleared slot. The backend `async_clear_user_code` already updates only the specific slot via `_update_slot_from_lock(slot)`, so the frontend call was unnecessary and inefficient.
+
+### The Fix
+
+- Removed the unnecessary `pull_codes_from_lock` service call from the frontend `clearSlot` function
+- Backend `async_clear_user_code` already updates only the specific slot
+- Updated status messages to reflect automatic entity state update
+
+### Changed
+
+- **Frontend (`yale-lock-manager-card.js`)**:
+  - Removed `pull_codes_from_lock` call from `clearSlot()` function
+  - Updated status messages to reflect that backend handles the single slot update
+
+### What's Fixed
+
+- ✅ No more full refresh of all 20 slots when clearing a single slot
+- ✅ Faster clear operation (only queries the specific slot)
+- ✅ Cleaner code with updated status messages
+
+---
+
+## [1.8.4.15] - 2026-01-27
+
+### 🐛 Bug Fix - Z-Wave JS Device Not Loaded Error Handling
+
+**User feedback**: Errors showing "Device X config entry is not loaded" and "No zwave_js nodes found for given targets" when trying to refresh codes from lock.
+
+### The Problem
+
+The Z-Wave JS device wasn't available when the integration tried to query it, causing errors for all 20 slots during refresh.
+
+### The Fix
+
+- Added entity validation before calling Z-Wave JS services
+- Check if lock entity exists and is available (not `unknown` or `unavailable`)
+- Added specific error handling for "config entry is not loaded" errors
+- Provide clearer error messages when Z-Wave JS device is unavailable
+
+### Changed
+
+- **Backend (`zwave_client.py`)**:
+  - Added entity validation in `get_user_code_data()` before calling `invoke_cc_api`
+  - Check entity state is not `unknown` or `unavailable`
+  - Early return with `None` if entity is invalid
+  - Added specific error detection for "config entry is not loaded" errors
+  - Improved error messages with entity ID and state information
+
+### What's Fixed
+
+- ✅ Prevents unnecessary service calls when entity doesn't exist
+- ✅ Better error messages when Z-Wave JS device is unavailable
+- ✅ Graceful degradation (returns `None` instead of crashing)
+- ✅ Clearer error messages for troubleshooting
+
+---
+
+## [1.8.4.14] - 2026-01-27
+
+### 🐛 Bug Fix - changeStatus Entity State Check
+
+**User feedback**: "still getting the error" - `Failed to set user status: User slot X not found` error still occurring when changing status.
+
+### The Problem
+
+The `getUserData()` method always returns an object for all 20 slots (with default empty values), so the check `if (!user)` never worked. The code was calling `set_user_status` service for slots that didn't exist in the entity state.
+
+### The Fix
+
+- Check entity state directly instead of using `getUserData()` which returns defaults for all slots
+- Verify slot exists in `entity.attributes.users` AND has a name
+- Only call `set_user_status` service if user actually exists in entity state
+
+### Changed
+
+- **Frontend (`yale-lock-manager-card.js`)**:
+  - Updated `changeStatus()` to check entity state directly
+  - Check if slot exists in `entity.attributes.users` and has a name
+  - Only call service if user exists in entity state
+  - Update form value silently if user doesn't exist
+
+### What's Fixed
+
+- ✅ No more service calls for unsaved slots
+- ✅ Status changes for unsaved slots only update form value
+- ✅ No error messages for unsaved slots
+- ✅ Service is only called for slots that have been saved
+
+---
+
+## [1.8.4.13] - 2026-01-27
+
+### 🐛 Bug Fix - changeStatus Validation Strengthening
+
+**User feedback**: Error still showing when changing status to enabled for available slots.
+
+### The Problem
+
+The previous fix addressed programmatic changes, but manual changes could still trigger the error if the user didn't exist in the backend yet.
+
+### The Fix
+
+- Simplified check: only call service if user exists in entity state AND has a real name
+- Removed complex `hasName` check from form field - rely solely on entity state
+- If user doesn't exist in entity, always just update form value and return
+
+### Changed
+
+- **Frontend (`yale-lock-manager-card.js`)**:
+  - Simplified `changeStatus()` validation logic
+  - Check entity state directly for user existence and name
+  - Only call service if both conditions are true
+
+### What's Fixed
+
+- ✅ Prevents ALL service calls for slots that haven't been saved yet
+- ✅ Cleaner validation logic
+- ✅ No errors when changing status for unsaved slots
+
+---
+
+## [1.8.4.12] - 2026-01-27
+
+### 🐛 Bug Fix - changeStatus Service Call Prevention
+
+**User feedback**: Error when typing in username box for an available slot: `Failed to set user status: User slot X not found`
+
+### The Problem
+
+Typing in the username field for an available slot triggered `updateStatusOptions()`, which programmatically changed the status dropdown from "Available" (0) to "Enabled" (1). This programmatic change fired the `onchange` event, which called `changeStatus()`, attempting to call the `set_user_status` service for a user that didn't yet exist in the backend.
+
+### The Fix
+
+- Added check in `changeStatus()` to verify user exists before calling service
+- Temporarily remove `onchange` handler when programmatically changing status
+- Only update form value if user doesn't exist (no service call)
+
+### Changed
+
+- **Frontend (`yale-lock-manager-card.js`)**:
+  - Added user existence check in `changeStatus()`
+  - Temporarily remove `onchange` handler in `updateStatusOptions()` when changing status programmatically
+  - Restore handler after a short delay
+
+### What's Fixed
+
+- ✅ No more service calls for non-existent users
+- ✅ Programmatic status changes don't trigger service calls
+- ✅ Cleaner error handling
+
+---
+
+## [1.8.4.11] - 2026-01-27
+
+### 🐛 Bug Fix - set_user_status Error for Available Slots
+
+**User feedback**: Error `Failed to perform the action yale_lock_manager/set_user_status. Failed to set user status: User slot X not found` when typing in the username box for an available slot.
+
+### The Problem
+
+When typing in the username field for an available slot, the status dropdown was programmatically changed from "Available" (0) to "Enabled" (1), which triggered the `onchange` event and called `changeStatus()`. This attempted to call the `set_user_status` service for a user that didn't exist in the backend yet.
+
+### The Fix
+
+- Added check in `changeStatus()` to verify user exists before calling service
+- If user doesn't exist, only update form value and return (no service call)
+- Prevent `onchange` event from firing when `updateStatusOptions()` programmatically changes status
+
+### Changed
+
+- **Frontend (`yale-lock-manager-card.js`)**:
+  - Added user existence check at start of `changeStatus()`
+  - Temporarily remove `onchange` handler when programmatically setting status
+  - Restore handler after a short delay
+
+### What's Fixed
+
+- ✅ No more service calls for non-existent users
+- ✅ Status changes for unsaved slots only update form value
+- ✅ No error messages when typing username for available slots
+
+---
+
 ## [1.8.2.51] - 2026-01-26
 
 ### 🐛 Bug Fix - Frontend Update After Refresh (Timing Fix)
