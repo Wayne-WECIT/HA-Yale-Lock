@@ -1321,14 +1321,10 @@ class YaleLockManagerCard extends HTMLElement {
                           onchange="card.changeStatus(${user.slot}, this.value)" 
                           style="width: 100%;"
                         >
-                          ${!hasData ? `
-                            <option value="0" ${formCachedStatus === 0 ? 'selected' : ''}>Available</option>
-                          ` : `
-                            <option value="1" ${formCachedStatus === 1 ? 'selected' : ''}>Enabled</option>
-                            <option value="2" ${formCachedStatus === 2 ? 'selected' : ''}>Disabled</option>
-                          `}
-                          </select>
-                        <p style="color: var(--secondary-text-color); font-size: 0.75em; margin: 4px 0 0 0;">Status stored locally</p>
+                          <option value="1" ${formCachedStatus === 1 ? 'selected' : ''}>Enabled</option>
+                          <option value="2" ${formCachedStatus === 2 ? 'selected' : ''}>Disabled</option>
+                        </select>
+                        <p style="color: var(--secondary-text-color); font-size: 0.75em; margin: 4px 0 0 0;">Status stored locally (Enabled = code on lock, Disabled = code cleared)</p>
                         </div>
                       <div>
                         <label>🔒 Lock Status (from lock):</label>
@@ -1341,23 +1337,53 @@ class YaleLockManagerCard extends HTMLElement {
                           <option value="1" ${(user.lock_status_from_lock ?? user.lock_status) === 1 ? 'selected' : ''}>Enabled</option>
                           <option value="2" ${(user.lock_status_from_lock ?? user.lock_status) === 2 ? 'selected' : ''}>Disabled</option>
                         </select>
-                        <p style="color: var(--secondary-text-color); font-size: 0.75em; margin: 4px 0 0 0;">Status from physical lock</p>
+                        <p style="color: var(--secondary-text-color); font-size: 0.75em; margin: 4px 0 0 0;">Status from physical lock (read-only)</p>
                       </div>
                     </div>
                     ${(() => {
                       const lockStatus = user.lock_status_from_lock ?? user.lock_status;
-                      if (lockStatus !== null && lockStatus !== undefined && formCachedStatus !== lockStatus) {
-                        return `
-                          <div style="margin-top: 8px; padding: 8px; background: #ff980015; border-left: 4px solid #ff9800; border-radius: 4px;">
-                            <span style="color: #ff9800; font-size: 0.85em;">⚠️ Status doesn't match - Click "Push" to sync</span>
-                          </div>
-                        `;
-                      } else if (lockStatus !== null && lockStatus !== undefined && formCachedStatus === lockStatus) {
-                        return `
-                          <div style="margin-top: 8px; padding: 8px; background: #4caf5015; border-left: 4px solid #4caf50; border-radius: 4px;">
-                            <span style="color: #4caf50; font-size: 0.85em;">✅ Status matches - Synced</span>
-                          </div>
-                        `;
+                      // Status comparison logic:
+                      // - Cached=Enabled (1) + Lock=Enabled (1) = Synced ✅
+                      // - Cached=Disabled (2) + Lock=Available (0) = Synced ✅ (expected when disabled)
+                      // - Cached=Enabled (1) + Lock=Available (0) = Not synced ⚠️ (needs push)
+                      // - Cached=Disabled (2) + Lock=Enabled (1) = Not synced ⚠️ (needs clear)
+                      if (lockStatus !== null && lockStatus !== undefined) {
+                        if (formCachedStatus === 1 && lockStatus === 1) {
+                          // Enabled + Enabled = Synced
+                          return `
+                            <div style="margin-top: 8px; padding: 8px; background: #4caf5015; border-left: 4px solid #4caf50; border-radius: 4px;">
+                              <span style="color: #4caf50; font-size: 0.85em;">✅ Status synced - Enabled on lock</span>
+                            </div>
+                          `;
+                        } else if (formCachedStatus === 2 && lockStatus === 0) {
+                          // Disabled + Available = Synced (expected when disabled)
+                          return `
+                            <div style="margin-top: 8px; padding: 8px; background: #4caf5015; border-left: 4px solid #4caf50; border-radius: 4px;">
+                              <span style="color: #4caf50; font-size: 0.85em;">✅ Status synced - Code cleared from lock</span>
+                            </div>
+                          `;
+                        } else if (formCachedStatus === 1 && lockStatus === 0) {
+                          // Enabled + Available = Not synced (needs push)
+                          return `
+                            <div style="margin-top: 8px; padding: 8px; background: #ff980015; border-left: 4px solid #ff9800; border-radius: 4px;">
+                              <span style="color: #ff9800; font-size: 0.85em;">⚠️ Status not synced - Click "Push" to set code on lock</span>
+                            </div>
+                          `;
+                        } else if (formCachedStatus === 2 && lockStatus === 1) {
+                          // Disabled + Enabled = Not synced (needs clear)
+                          return `
+                            <div style="margin-top: 8px; padding: 8px; background: #ff980015; border-left: 4px solid #ff9800; border-radius: 4px;">
+                              <span style="color: #ff9800; font-size: 0.85em;">⚠️ Status not synced - Click "Push" to clear code from lock</span>
+                            </div>
+                          `;
+                        } else if (formCachedStatus !== lockStatus) {
+                          // Other mismatches
+                          return `
+                            <div style="margin-top: 8px; padding: 8px; background: #ff980015; border-left: 4px solid #ff9800; border-radius: 4px;">
+                              <span style="color: #ff9800; font-size: 0.85em;">⚠️ Status doesn't match - Click "Push" to sync</span>
+                            </div>
+                          `;
+                        }
                       }
                       return '';
                     })()}

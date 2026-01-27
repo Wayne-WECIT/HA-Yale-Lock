@@ -140,79 +140,41 @@ class ZWaveClient:
             return None
 
     async def set_user_code(self, slot: int, code: str) -> None:
-        """Set user code on the lock using invoke_cc_api.
+        """Set user code on the lock using zwave_js.set_lock_usercode service.
         
-        Status is derived from code existence - when a code is set, status becomes ENABLED.
-        
-        According to Z-Wave User Code CC specification, the set method parameters are:
-        [userId, userIdStatus, userCode]
-        
-        However, we use [userId, userCode] and let the lock derive status from code existence.
-        Some locks may require the full format - if this fails, we may need to adjust.
+        This uses the lock_code_manager approach - we use the Z-Wave JS service
+        which handles parameter formatting internally. Status is derived from
+        code existence - when a code is set, status becomes ENABLED.
         
         Parameters:
-        - userId: INTEGER (slot number)
-        - userCode: STRING (PIN code)
+        - code_slot: INTEGER (slot number)
+        - usercode: STRING (PIN code)
         """
         try:
-            # Validate and convert types explicitly
-            userId = int(slot)
-            userCode = str(code)
+            code_slot = int(slot)
+            usercode = str(code)
             
-            if not userCode:
+            if not usercode:
                 raise ValueError("Code cannot be empty. Use clear_user_code() to clear a code.")
             
-            # Log parameter types and values for debugging
             _LOGGER.info(
                 "set_user_code called: slot=%s, code='%s'",
-                userId, userCode
-            )
-            
-            # Build parameters array - try [userId, userCode] first
-            # Note: Z-Wave spec requires [userId, userIdStatus, userCode], but we're trying
-            # to let the lock derive status. If this fails, we may need to use:
-            # parameters = [userId, USER_STATUS_ENABLED, userCode]
-            parameters = [userId, userCode]
-            _LOGGER.info(
-                "Parameters array: %s (types: [%s, %s])",
-                parameters,
-                type(parameters[0]).__name__,
-                type(parameters[1]).__name__
+                code_slot, usercode
             )
             
             self._logger.info_operation("Setting user code on lock", slot, code="***")
             
-            try:
-                # Try the simplified format first
-                await self._hass.services.async_call(
-                    ZWAVE_JS_DOMAIN,
-                    "invoke_cc_api",
-                    {
-                        "entity_id": self._lock_entity_id,
-                        "command_class": CC_USER_CODE,
-                        "method_name": "set",
-                        "parameters": parameters,
-                    },
-                    blocking=True,
-                )
-            except Exception as format_err:
-                # If simplified format fails, try with explicit status
-                _LOGGER.warning(
-                    "Simplified format failed for slot %s, trying with explicit status: %s",
-                    slot, format_err
-                )
-                parameters = [userId, USER_STATUS_ENABLED, userCode]
-                await self._hass.services.async_call(
-                    ZWAVE_JS_DOMAIN,
-                    "invoke_cc_api",
-                    {
-                        "entity_id": self._lock_entity_id,
-                        "command_class": CC_USER_CODE,
-                        "method_name": "set",
-                        "parameters": parameters,
-                    },
-                    blocking=True,
-                )
+            # Use Z-Wave JS service (lock_code_manager approach)
+            await self._hass.services.async_call(
+                "zwave_js",
+                "set_lock_usercode",
+                {
+                    "entity_id": self._lock_entity_id,
+                    "code_slot": code_slot,
+                    "usercode": usercode,
+                },
+                blocking=True,
+            )
             
             self._logger.info_operation("User code set on lock", slot)
             _LOGGER.info("set_user_code completed: slot=%s", slot)
@@ -222,29 +184,29 @@ class ZWaveClient:
             raise
 
     async def clear_user_code(self, slot: int) -> None:
-        """Clear user code from the lock.
+        """Clear user code from the lock using zwave_js.clear_lock_usercode service.
         
-        This sets the code to empty string with status AVAILABLE, which clears the slot.
+        This uses the lock_code_manager approach - we use the Z-Wave JS service
+        which handles clearing internally. When cleared, the lock status becomes
+        AVAILABLE (0) on the lock, but we track it as DISABLED (2) in our cache.
+        
+        Parameters:
+        - code_slot: INTEGER (slot number)
         """
         try:
-            userId = int(slot)
+            code_slot = int(slot)
             
-            _LOGGER.info("clear_user_code called: slot=%s", userId)
+            _LOGGER.info("clear_user_code called: slot=%s", code_slot)
             
             self._logger.info_operation("Clearing user code from lock", slot)
             
-            # To clear a code, set it to empty string with status AVAILABLE
-            # Z-Wave User Code CC set parameters: [userId, userIdStatus, userCode]
-            parameters = [userId, USER_STATUS_AVAILABLE, ""]
-            
+            # Use Z-Wave JS service (lock_code_manager approach)
             await self._hass.services.async_call(
-                ZWAVE_JS_DOMAIN,
-                "invoke_cc_api",
+                "zwave_js",
+                "clear_lock_usercode",
                 {
                     "entity_id": self._lock_entity_id,
-                    "command_class": CC_USER_CODE,
-                    "method_name": "set",
-                    "parameters": parameters,
+                    "code_slot": code_slot,
                 },
                 blocking=True,
             )

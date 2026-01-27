@@ -657,6 +657,8 @@ class YaleLockCoordinator(DataUpdateCoordinator):
         user_data = self._user_data["users"][slot_str]
         
         # Map status to enabled flag
+        # Note: AVAILABLE (0) is not a settable cached status - it's what the lock returns when cleared
+        # When disabled, cached status = DISABLED (2), lock status = AVAILABLE (0)
         if status == USER_STATUS_ENABLED:
             user_data["enabled"] = True
             user_data["lock_status"] = USER_STATUS_ENABLED
@@ -664,9 +666,10 @@ class YaleLockCoordinator(DataUpdateCoordinator):
             user_data["enabled"] = False
             user_data["lock_status"] = USER_STATUS_DISABLED
         elif status == USER_STATUS_AVAILABLE:
-            # AVAILABLE means cleared - set enabled=False
+            # AVAILABLE is not a valid cached status - treat as DISABLED
+            # (Lock returns AVAILABLE when code is cleared, but we track it as DISABLED in cache)
             user_data["enabled"] = False
-            user_data["lock_status"] = USER_STATUS_AVAILABLE
+            user_data["lock_status"] = USER_STATUS_DISABLED
         else:
             raise ValueError(f"Invalid status: {status}. Must be 0, 1, or 2")
         
@@ -795,6 +798,7 @@ class YaleLockCoordinator(DataUpdateCoordinator):
                     user_data["synced_to_lock"] = False
             else:
                 # Code should NOT be on lock - clear it
+                # When disabled: cached status = DISABLED (2), lock status = AVAILABLE (0)
                 self._logger.info_operation("Clearing code from lock", slot)
                 await self._zwave_client.clear_user_code(slot)
                 
@@ -810,7 +814,8 @@ class YaleLockCoordinator(DataUpdateCoordinator):
                     if verification_status == USER_STATUS_AVAILABLE or not verification_code:
                         _LOGGER.info("✓ Code successfully cleared from lock for slot %s", slot)
                         user_data["lock_code"] = ""
-                        user_data["lock_status_from_lock"] = USER_STATUS_AVAILABLE
+                        user_data["lock_status_from_lock"] = USER_STATUS_AVAILABLE  # Lock shows Available
+                        user_data["lock_status"] = USER_STATUS_DISABLED  # Cached status is Disabled
                         user_data["lock_enabled"] = False
                         user_data["synced_to_lock"] = True
                     else:
@@ -824,6 +829,8 @@ class YaleLockCoordinator(DataUpdateCoordinator):
                         user_data["synced_to_lock"] = False
                 else:
                     _LOGGER.warning("Could not verify code cleared for slot %s", slot)
+                    user_data["lock_status_from_lock"] = USER_STATUS_AVAILABLE
+                    user_data["lock_status"] = USER_STATUS_DISABLED
                     user_data["synced_to_lock"] = False
             
             await self.async_save_user_data()
@@ -924,11 +931,17 @@ class YaleLockCoordinator(DataUpdateCoordinator):
                     codes_found += 1
                     codes_updated += 1
                 elif status_int in (USER_STATUS_AVAILABLE, USER_STATUS_DISABLED):
-                    # Lock is disabled/available - preserve cached PIN (don't overwrite)
+                    # Lock is disabled/available - preserve cached PIN and status
+                    # When disabled: cached status = DISABLED (2), lock status = AVAILABLE (0)
                     _LOGGER.debug(
-                        "Slot %s: Lock status=%s, preserving cached PIN '%s'",
+                        "Slot %s: Lock status=%s (Available/Disabled), preserving cached PIN '%s' and cached status",
                         slot, status_int, "***" if user_data.get("code") else "None"
                     )
+                    # Update lock_status_from_lock but preserve cached lock_status
+                    # If cached status is DISABLED and lock is AVAILABLE, this is correct
+                    if user_data.get("lock_status") == USER_STATUS_DISABLED and status_int == USER_STATUS_AVAILABLE:
+                        # This is expected - cached is Disabled, lock is Available (synced)
+                        _LOGGER.debug("Slot %s: Cached=Disabled, Lock=Available (synced)", slot)
                     # Still count as found if there's a code (even if disabled)
                     if code:
                         codes_found += 1
