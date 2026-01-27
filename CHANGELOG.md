@@ -2,6 +2,48 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.8.4.37] - 2026-01-27
+
+### ✨ Enhancement - Notification Settings Moved to Main Table with Update User Button
+
+**User feedback**: Can we move the Notifications into the slot from to the main panel? We need to ensure that you can enable the notifications and the Notification service even for the FOB and when those options are changed that the update user button becomes available.
+
+### The Solution
+
+Moved the notification service selector from expanded slot settings to the main table as a new column. Changed both notification toggle and service selector to trigger the Update User button instead of saving immediately. This ensures notification settings can be configured for both PINs and FOBs, and changes are saved together with other user settings when Update User is clicked.
+
+### Changed
+
+- **Frontend (`yale-lock-manager-card.js`)**:
+  - Added "Notification Service" column header to main table (after "Notifications")
+  - Added notification service selector dropdown in main table row
+  - Updated `toggleNotification()` to store state and call `_checkForUnsavedChanges()` instead of saving immediately
+  - Updated `changeNotificationService()` to store state and call `_checkForUnsavedChanges()` instead of saving immediately
+  - Updated `_checkForUnsavedChanges()` to detect notification toggle and service changes
+  - Updated `saveUser()` to save notification settings when Update User is clicked (works for both PINs and FOBs)
+  - Removed notification service selector from expanded slot settings
+  - Updated expanded row colspan from 8 to 9 to accommodate new column
+- **Frontend (`yale-lock-manager-panel.js`)**:
+  - Added "Notification Service" column header to main table (after "Notifications")
+  - Added notification service selector dropdown in main table row
+  - Updated `toggleNotification()` to enable Update User button instead of saving immediately
+  - Updated `changeNotificationService()` to enable Update User button instead of saving immediately
+  - Updated `saveUser()` to save notification settings when Update User is clicked (works for both PINs and FOBs)
+  - Removed notification service selector from expanded slot settings
+  - Updated expanded row colspan from 7 to 8 to accommodate new column
+- **Version (`const.py`, `manifest.json`)**:
+  - Updated `VERSION` to `1.8.4.37`
+
+### What's Fixed
+
+- ✅ **Notification service selector in main table**: Now visible in main table alongside notification toggle
+- ✅ **Update User button enabled**: Notification settings changes now enable the Update User button
+- ✅ **Works for FOBs**: Notification settings can be configured and saved for FOB slots
+- ✅ **Consistent behavior**: Notification settings are saved together with other user settings
+- ✅ **Better UX**: All notification controls are now in the main table, no need to expand slot to access them
+
+---
+
 ## [1.8.4.36] - 2026-01-27
 
 ### ✨ Enhancement - Notification Service Selection UI

@@ -1363,10 +1363,20 @@ class YaleLockManagerCard extends HTMLElement {
               <span class="slider"></span>
             </label>
           </td>
+          <td onclick="event.stopPropagation();">
+            <select 
+              id="notification-service-${user.slot}" 
+              onchange="card.changeNotificationService(${user.slot}, this.value)"
+              style="width: 100%; padding: 4px; font-size: 0.9em;"
+            >
+              <option value="notify.persistent_notification" ${(user.notification_service || 'notify.persistent_notification') === 'notify.persistent_notification' ? 'selected' : ''}>UI Only</option>
+              <option value="notify.mobile_app" ${user.notification_service === 'notify.mobile_app' ? 'selected' : ''}>Mobile App</option>
+            </select>
+          </td>
                 </tr>
                 ${isExpanded ? `
                   <tr class="expanded-row">
-                    <td colspan="8">
+                    <td colspan="9">
               <div class="expanded-content">
                 <h3>Slot ${user.slot} Settings</h3>
                 
@@ -1628,21 +1638,6 @@ class YaleLockManagerCard extends HTMLElement {
                   </div>
                 ` : ''}
                           
-                <div class="form-group">
-                  <label>🔔 Notification Service:</label>
-                  <select 
-                    id="notification-service-${user.slot}" 
-                    onchange="card.changeNotificationService(${user.slot}, this.value)"
-                    style="width: 100%;"
-                  >
-                    <option value="notify.persistent_notification" ${(user.notification_service || 'notify.persistent_notification') === 'notify.persistent_notification' ? 'selected' : ''}>Persistent Notification (UI only)</option>
-                    <option value="notify.mobile_app" ${user.notification_service === 'notify.mobile_app' ? 'selected' : ''}>Mobile App (All devices)</option>
-                  </select>
-                  <p style="color: var(--secondary-text-color); font-size: 0.75em; margin: 4px 0 0 0;">
-                    Choose where to send notifications. Use "Mobile App" for push notifications to iOS/Android devices.
-                  </p>
-                </div>
-                          
                 <hr>
                 <div class="button-group">
                   <button id="save-button-${user.slot}" onclick="card.saveUser(${user.slot})">
@@ -1704,6 +1699,7 @@ class YaleLockManagerCard extends HTMLElement {
               <th>Synced</th>
               <th>Last Used</th>
               <th>Notifications</th>
+              <th>Notification Service</th>
             </tr>
           </thead>
           <tbody>
@@ -1812,6 +1808,8 @@ class YaleLockManagerCard extends HTMLElement {
     const limitField = this.shadowRoot.getElementById(`limit-${slot}`);
     const scheduleToggle = this.shadowRoot.getElementById(`schedule-toggle-${slot}`);
     const limitToggle = this.shadowRoot.getElementById(`limit-toggle-${slot}`);
+    const notificationToggle = this.shadowRoot.getElementById(`notification-toggle-${slot}`);
+    const notificationServiceSelect = this.shadowRoot.getElementById(`notification-service-${slot}`);
     
     if (!nameField || !statusField) return;
     
@@ -1823,6 +1821,8 @@ class YaleLockManagerCard extends HTMLElement {
     const currentLimit = limitField ? parseInt(limitField.value || '0', 10) : 0;
     const scheduleEnabled = scheduleToggle ? scheduleToggle.checked : false;
     const limitEnabled = limitToggle ? limitToggle.checked : false;
+    const notificationsEnabled = notificationToggle ? notificationToggle.checked : false;
+    const notificationService = notificationServiceSelect ? notificationServiceSelect.value : 'notify.persistent_notification';
     
     const savedName = user.name || '';
     const savedCode = user.code || '';
@@ -1833,6 +1833,8 @@ class YaleLockManagerCard extends HTMLElement {
     const savedEnd = user.schedule?.end ? user.schedule.end.substring(0, 16) : '';
     const savedLimit = user.usage_limit || 0;
     const savedScheduleEnabled = !!(user.schedule?.start || user.schedule?.end);
+    const savedNotificationsEnabled = user.notifications_enabled || false;
+    const savedNotificationService = user.notification_service || 'notify.persistent_notification';
     
     // Check if PIN or status changed (these affect Push button)
     const pinChanged = (currentCode !== savedCode);
@@ -1840,7 +1842,8 @@ class YaleLockManagerCard extends HTMLElement {
     const nameChanged = (currentName !== savedName);
     const scheduleChanged = (currentStart !== savedStart) || (currentEnd !== savedEnd) || (scheduleEnabled !== savedScheduleEnabled);
     const limitChanged = (currentLimit !== savedLimit) || (limitEnabled !== !!savedLimit);
-    const hasChanges = nameChanged || pinChanged || statusChanged || scheduleChanged || limitChanged;
+    const notificationChanged = (notificationsEnabled !== savedNotificationsEnabled) || (notificationService !== savedNotificationService);
+    const hasChanges = nameChanged || pinChanged || statusChanged || scheduleChanged || limitChanged || notificationChanged;
     
     // Track lock-affecting changes (PIN or status) separately from non-lock changes (username, schedule, usage_limit)
     const lockAffectingChanged = pinChanged || statusChanged;
@@ -2162,68 +2165,18 @@ class YaleLockManagerCard extends HTMLElement {
     this._checkForUnsavedChanges(slot);
   }
 
-  async toggleNotification(slot, checked) {
-    try {
-      // Get selected notification service from dropdown
-      const serviceSelect = this.shadowRoot.getElementById(`notification-service-${slot}`);
-      const notificationService = serviceSelect ? serviceSelect.value : 'notify.persistent_notification';
-      
-      // Save immediately by calling the service
-      await this._hass.callService('yale_lock_manager', 'set_notification_enabled', {
-        entity_id: this._config.entity,
-        slot: parseInt(slot, 10),
-        enabled: checked,
-        notification_service: notificationService
-      });
-      
-      // Store notification setting in form values
-      this._setFormValue(slot, 'notificationsEnabled', checked);
-      this._setFormValue(slot, 'notificationService', notificationService);
-      
-      // Show success message
-      this.showStatus(slot, checked ? '🔔 Notifications enabled' : '🔕 Notifications disabled', 'success');
-    } catch (error) {
-      // Show error message
-      this.showStatus(slot, `❌ Failed to update notifications: ${error.message}`, 'error');
-      // Revert toggle state
-      const toggle = this.shadowRoot.getElementById(`notification-toggle-${slot}`);
-      if (toggle) {
-        toggle.checked = !checked;
-      }
-    }
+  toggleNotification(slot, checked) {
+    // Store notification setting in form values
+    this._setFormValue(slot, 'notificationsEnabled', checked);
+    // Mark as having unsaved changes when notification toggle is changed
+    this._checkForUnsavedChanges(slot);
   }
 
-  async changeNotificationService(slot, service) {
-    try {
-      // Get current notification enabled state
-      const toggle = this.shadowRoot.getElementById(`notification-toggle-${slot}`);
-      const enabled = toggle ? toggle.checked : false;
-      
-      // Save notification service immediately
-      await this._hass.callService('yale_lock_manager', 'set_notification_enabled', {
-        entity_id: this._config.entity,
-        slot: parseInt(slot, 10),
-        enabled: enabled,
-        notification_service: service
-      });
-      
-      // Store notification service in form values
-      this._setFormValue(slot, 'notificationService', service);
-      
-      // Show success message
-      this.showStatus(slot, `🔔 Notification service updated to ${service}`, 'success');
-    } catch (error) {
-      // Show error message
-      this.showStatus(slot, `❌ Failed to update notification service: ${error.message}`, 'error');
-      // Revert dropdown state
-      const user = this.getUserData().find(u => u.slot === slot);
-      if (user) {
-        const serviceSelect = this.shadowRoot.getElementById(`notification-service-${slot}`);
-        if (serviceSelect) {
-          serviceSelect.value = user.notification_service || 'notify.persistent_notification';
-        }
-      }
-    }
+  changeNotificationService(slot, service) {
+    // Store notification service in form values
+    this._setFormValue(slot, 'notificationService', service);
+    // Mark as having unsaved changes when notification service is changed
+    this._checkForUnsavedChanges(slot);
   }
 
   // ========== ACTIONS ==========
@@ -2647,6 +2600,21 @@ class YaleLockManagerCard extends HTMLElement {
           entity_id: this._config.entity,
           slot: parseInt(slot, 10),
           max_uses: limit
+        });
+      }
+
+      // Save notification settings (works for both PINs and FOBs)
+      const notificationToggle = this.shadowRoot.getElementById(`notification-toggle-${slot}`);
+      const notificationServiceSelect = this.shadowRoot.getElementById(`notification-service-${slot}`);
+      if (notificationToggle && notificationServiceSelect) {
+        const notificationsEnabled = notificationToggle.checked;
+        const notificationService = notificationServiceSelect.value;
+        
+        await this._hass.callService('yale_lock_manager', 'set_notification_enabled', {
+          entity_id: this._config.entity,
+          slot: parseInt(slot, 10),
+          enabled: notificationsEnabled,
+          notification_service: notificationService
         });
       }
 
