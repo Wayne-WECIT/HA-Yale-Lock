@@ -1224,7 +1224,7 @@ After `async_pull_codes_from_lock()` completes:
 
 ### 🔧 Comprehensive Refresh Fix & Refactoring
 
-**User feedback**: "ok you need to look at all the code, that refresh is still not working. I want you now to look at everything and check everthing.. and look at refactoring at they may make the codebase simpleer to debug"
+**User feedback**: The refresh is still not working. Please review all the code, check everything, and consider refactoring to make the codebase simpler to debug.
 
 ### The Problem
 
@@ -1331,7 +1331,7 @@ Then click "Refresh from lock" and watch the console for detailed logs showing:
 
 ### 🐛 Bug Fixes - Refresh Complete Data Change Detection
 
-**User feedback**: "after the clicking the refresh the page still did not refresh."
+**User feedback**: After clicking refresh, the page still did not refresh.
 
 ### The Problem
 
@@ -1431,7 +1431,7 @@ Implemented **snapshot-based change detection**:
 
 ### 🔄 Refactor - Simplified Value Refresh with Focus Protection
 
-**User feedback**: "nothing is working what i have been asking you, regarding the refreshing of values" and "when updating the pin or the status will the hass auto refreshes cause the values from being enter to be cleared/changed to the cached values?"
+**User feedback**: Nothing is working regarding the refreshing of values. When updating the PIN or status, will Home Assistant auto-refresh cause the entered values to be cleared or changed to the cached values?
 
 ### The Solution
 
@@ -1483,7 +1483,7 @@ Replaced complex polling-based value refresh with a simpler, more reliable appro
 
 ### 🔄 Refactor - Entity State as Source of Truth
 
-**User feedback**: "after every button push should you rerender the values for that slot from the cached data? and after the status/pin change has been pushed to the lock then pull the pin and status from the lock and store in the lock cache and rerender the values again. what you are doing isnt working maybe you need to think and do a new approche like above"
+**User feedback**: After every button push, should you re-render the values for that slot from the cached data? After the status/PIN change has been pushed to the lock, then pull the PIN and status from the lock, store in the lock cache, and re-render the values again. What you are doing isn't working - maybe you need to think and do a new approach like above.
 
 ### The Solution
 
@@ -1628,7 +1628,7 @@ Use `lock.smart_door_lock_manager` for the Lovelace card!
 
 ### 🐛 Bug Fix - Refresh Progress Events Not Showing
 
-**User feedback**: "can you check that what you have done is correct as there is nothing beign shown after pressing the refresh button. so the user know something is happening"
+**User feedback**: Can you check that what you have done is correct? There is nothing being shown after pressing the refresh button, so the user knows something is happening.
 
 ### The Issue
 
@@ -1683,7 +1683,7 @@ The refresh progress events were implemented but nothing was showing in the UI w
 
 ### ✨ New Feature - Real-Time Refresh Progress Events
 
-**User feedback**: "we currently dont haveanything that tells you what is happening after we push the refresh button i think we shoul dhave somethign that shows the user that things are happening rather thatn a nothign your thoughts?"
+**User feedback**: We currently don't have anything that tells you what is happening after we push the refresh button. I think we should have something that shows the user that things are happening rather than nothing. Your thoughts?
 
 ### The Solution
 
@@ -1921,7 +1921,7 @@ Even with `_formValues` storage, form fields were still being overwritten in som
 
 ### 🔧 Improvement - Independent Form Value Storage
 
-**User feedback**: "pin initially - 23432445 pin updated - 23432449 get a confirmed then the page refreshes and the editable pin is back to 23432445"
+**User feedback**: PIN initially was 23432445, updated to 23432449, got confirmation, then the page refreshes and the editable PIN is back to 23432445.
 
 ### The Issue
 
@@ -2015,7 +2015,7 @@ Or add it to your sidebar via Settings → Dashboards → Panels.
 
 ### ⚡ Performance - Immediate Save Without Lock Query
 
-**User feedback**: "the status and pin should not be stored until save/update is clicked. the save should be immediate as there is not need to call the lock for a sync check as you have the current lock pin stored."
+**User feedback**: The status and PIN should not be stored until save/update is clicked. The save should be immediate as there is no need to call the lock for a sync check since you have the current lock PIN stored.
 
 ### The Issue
 
@@ -2064,7 +2064,7 @@ Or add it to your sidebar via Settings → Dashboards → Panels.
 
 ### 🔄 Complete Rebuild - Simple, Logical Approach
 
-**User feedback**: "your rebuild of the JS is worse than the one it replaced!!!!!!!!!!!!!!!!!!!!!!!!!!"
+**User feedback**: The rebuild of the JavaScript is worse than the one it replaced.
 
 ### The Issue
 
@@ -2116,7 +2116,7 @@ The previous rebuild with focus tracking was overly complex and still had issues
 
 ### 🐛 Bug Fix - Cached PIN Reverting After Save
 
-**User feedback**: "i change the pin clicked update user once it confimed all save it revertect back to the original cached pin again"
+**User feedback**: Changed the PIN, clicked update user, once it confirmed and saved, it reverted back to the original cached PIN again.
 
 ### The Issue
 
@@ -2190,7 +2190,7 @@ Cached PIN was reverting to old value after save because focus was cleared too e
 
 ### 🔄 Complete Rebuild - Entity State as Single Source of Truth
 
-**User feedback**: "it is still doing the same thing. do you need to rebuild the code for the card? has it been become to complicate das we keep addign thisng?"
+**User feedback**: It is still doing the same thing. Do you need to rebuild the code for the card? Has it become too complicated as we keep adding things?
 
 ### The Issue
 
@@ -2285,7 +2285,7 @@ Form preservation fix was only applied to cached PIN, not other cached fields (n
 
 ### 🐛 Bug Fix - Cached PIN Reverting After Save
 
-**User feedback**: "the pin showed as - 23432446 again!!!!!!!" (after updating to 23432448 and clicking update user)
+**User feedback**: The PIN showed as 23432446 again after updating to 23432448 and clicking update user.
 
 ### The Issue
 
@@ -2316,7 +2316,7 @@ Cached PIN was reverting to old value after save because form restoration was ov
 
 ### 🐛 Bug Fix - Cached PIN Reverting After Save
 
-**User feedback**: "the pin showed as - 23432446 again!!!!!!!" (after updating to 23432448 and clicking update user)
+**User feedback**: The PIN showed as 23432446 again after updating to 23432448 and clicking update user.
 
 ### The Issue
 
@@ -2347,7 +2347,7 @@ Cached PIN was reverting to old value after save because form restoration was ov
 
 ### 🎨 UI/UX - Move Push Button to Settings & Persistent Status Messages
 
-**User feedback**: "after clicking update user the updates flash very quickly... we really could do with some user updates so they know what happening"
+**User feedback**: After clicking update user, the updates flash very quickly. We really could do with some user updates so they know what's happening.
 
 ### The Issue
 
@@ -2396,7 +2396,7 @@ Cached PIN was reverting to old value after save because form restoration was ov
 
 ### 🎨 UI/UX - User Feedback Messages & Lock Code Update Fix
 
-**User feedback**: "we really could do with some user updates so they know what happening as there is no indication anything is happening"
+**User feedback**: We really could do with some user updates so they know what's happening, as there is no indication anything is happening.
 
 ### The Issue
 
@@ -2494,7 +2494,7 @@ Cached PIN was reverting to old value after save because form restoration was ov
 
 ### 🎨 UI/UX - FOB/RFID Improvements
 
-**User feedback**: "when fob type is RFID or FOB the Cached and lock staus and the usage limits can also be hidden as fobs are added to the lock directly"
+**User feedback**: When FOB type is RFID or FOB, the cached and lock status and the usage limits can also be hidden as FOBs are added to the lock directly.
 
 ### The Issue
 
@@ -2548,7 +2548,7 @@ FOBs/RFID cards are added directly to the lock, so:
 
 ### 🎨 UI/UX - Status Dropdown & Clear Cache Button
 
-**User feedback**: "the caches staus drop down keeps refreshing like the others did before you stopped it"
+**User feedback**: The cached status dropdown keeps refreshing like the others did before you stopped it.
 
 ### The Issue
 
@@ -2656,7 +2656,7 @@ The "Enabled" toggle only showed two states (on/off), but the lock actually has 
 
 ### ✨ NEW - Sync Status Checking & Visual Indicators
 
-**User feedback**: "when someone click Save User does it auto update the lock or do they have to do something? if so we need to find a way to tell them."
+**User feedback**: When someone clicks Save User, does it auto-update the lock or do they have to do something? If so, we need to find a way to tell them.
 
 ### The Issue
 
@@ -2706,7 +2706,7 @@ Users were unclear about when changes needed to be pushed to the lock:
 
 ### 🔧 FIX - Form Fields Clearing During Auto-Refresh
 
-**User feedback**: "when i fill in some data like the image suddenly the contents disappear, is there like a auto refresh or something happensing which is causing this?"
+**User feedback**: When filling in some data, suddenly the contents disappear. Is there an auto-refresh or something happening which is causing this?
 
 ### The Issue
 
@@ -2966,7 +2966,7 @@ The response from `invoke_cc_api` is logged by Z-Wave JS but not directly access
 
 ### 🔧 FIX - Improved Event Listener for User Code Capture
 
-**User feedback**: "you have the codes yet the lock pins are empty why ?"
+**User feedback**: You have the codes, yet the lock PINs are empty. Why?
 
 ### The Issue
 
@@ -3023,7 +3023,7 @@ The event listener in `_get_user_code_data()` was not capturing events because:
 
 ### ✅ SOLUTION - Event-Based Response Capture
 
-**User feedback**: "i dont know how yo should Capture it that what yo are for to hekp me figue rthat out ¬!!!!!!!"
+**User feedback**: I don't know how you should capture it - that's what you are for, to help me figure that out.
 
 ### The Solution
 
@@ -3086,7 +3086,7 @@ await asyncio.wait_for(event_received.wait(), timeout=3.0)
 
 ### ❌ REMOVED return_response=True (Doesn't Work)
 
-**User feedback**: "why have you turned return_response=True back on again when we know from earlier it doent work???!!!!!!!!!!"
+**User feedback**: Why have you turned `return_response=True` back on again when we know from earlier it doesn't work?
 
 ### The Issue
 
