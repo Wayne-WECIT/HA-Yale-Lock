@@ -1357,7 +1357,7 @@ class YaleLockManagerCard extends HTMLElement {
                         >
                           <option value="1" ${formCachedStatus === 1 ? 'selected' : ''}>Enabled</option>
                           <option value="2" ${formCachedStatus === 2 ? 'selected' : ''}>Disabled</option>
-                        </select>
+                          </select>
                         <p style="color: var(--secondary-text-color); font-size: 0.75em; margin: 4px 0 0 0;">Status stored locally (Enabled = code on lock, Disabled = code cleared)</p>
                         </div>
                       <div>
@@ -1430,8 +1430,8 @@ class YaleLockManagerCard extends HTMLElement {
                       return '';
                     })()}
                   </div>
-                ` : ''}
-                
+                        ` : ''}
+                        
                 <div id="code-field-${user.slot}" class="${isFob ? 'hidden' : ''}">
                   <div class="form-group">
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
@@ -2102,20 +2102,32 @@ class YaleLockManagerCard extends HTMLElement {
   async changeStatus(slot, statusValue) {
     const status = parseInt(statusValue, 10);
     
-    // Check if user exists before trying to set status
+    // CRITICAL: Check if user exists before trying to set status
+    // getUserData() returns users from entity state - if slot doesn't exist in entity, user will be undefined
     const user = this.getUserData().find(u => u.slot === slot);
-    if (!user) {
+    
+    // Also check if user has a name (indicates it's a real user, not just an empty slot)
+    const nameField = this.shadowRoot.getElementById(`name-${slot}`);
+    const hasName = nameField && nameField.value.trim() && nameField.value.trim() !== `User ${slot}`;
+    
+    // If user doesn't exist in entity state AND doesn't have a name, don't call service
+    if (!user && !hasName) {
       // User doesn't exist yet - just update form value, don't call service
       // This happens when typing in username for an available slot and status changes programmatically
       this._setFormValue(slot, 'cachedStatus', status);
       return; // Exit silently - no error message needed
     }
     
-    // Only call service if user exists and this is a real user change (not programmatic)
-    // Check if this change was triggered by updateStatusOptions by checking if status was '0' before
-    const statusField = this.shadowRoot.getElementById(`cached-status-${slot}`);
-    if (!statusField) return;
+    // If user exists OR has a name, we can try to set status
+    // But if user doesn't exist in entity, we should create it first via set_user_code, not set_user_status
+    if (!user && hasName) {
+      // User has a name but doesn't exist in entity - this means they haven't saved yet
+      // Don't call set_user_status, just update form value
+      this._setFormValue(slot, 'cachedStatus', status);
+      return; // Exit silently - user needs to save first
+    }
     
+    // User exists in entity - safe to call service
     try {
       await this._hass.callService('yale_lock_manager', 'set_user_status', {
         entity_id: this._config.entity,
