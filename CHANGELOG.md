@@ -2,6 +2,61 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.8.4.40] - 2026-01-27
+
+### 🐛 Bug Fix & ✨ Enhancement - Service Discovery and Instant Save for Notifications
+
+**User feedback**: Individual mobile devices not showing in notification service chips, and notification settings require clicking "Update User" button instead of saving instantly like the notification toggle.
+
+### The Solution
+
+Fixed service discovery to properly detect individual mobile app devices and implemented instant save for both notification toggle and service chips. Changes are now saved immediately when clicked, without requiring the "Update User" button.
+
+### Changed
+
+- **Frontend (`yale-lock-manager-card.js`)**:
+  - **Service Discovery Fix**: Updated `getAvailableNotificationServices()` to handle multiple service ID formats:
+    - Handles `mobile_app_*` format (e.g., `mobile_app_iphone`)
+    - Handles `notify.mobile_app_*` format (e.g., `notify.mobile_app_iphone`)
+    - Added fallback pattern matching for services with `mobile_app_` anywhere in the ID
+    - Added debug logging to help diagnose service discovery issues
+  - **Instant Save for Notification Toggle**: Updated `toggleNotification()` to:
+    - Save immediately via `set_notification_enabled` service call
+    - Show success/error status messages
+    - No longer requires "Update User" button
+  - **Instant Save for Service Chips**: Updated `toggleNotificationService()` to:
+    - Save immediately via `set_notification_enabled` service call
+    - Re-render chips UI after save
+    - Show success/error status messages
+    - No longer requires "Update User" button
+  - **Removed Notification Logic from `_checkForUnsavedChanges()`**: Since notifications save instantly, they no longer trigger the "Update User" button
+  - **Updated `saveUser()`**: Removed notification settings save logic since they're saved instantly
+  - **Updated Event Handlers**: Added error handling for async functions in onclick/onchange handlers
+- **Frontend (`yale-lock-manager-panel.js`)**:
+  - Applied same service discovery fixes
+  - Applied same instant save logic for both toggle and chips
+  - Removed notification settings from `saveUser()`
+  - Updated event handlers with error handling
+- **Version (`const.py`, `manifest.json`)**:
+  - Updated `VERSION` to `1.8.4.40`
+
+### What's Fixed
+
+- ✅ **Individual mobile devices now appear**: Service discovery properly detects and displays individual mobile app devices (e.g., iPhone, Android) in addition to "UI" and "All Mobiles"
+- ✅ **Instant save for notification toggle**: Clicking the notification toggle saves immediately without requiring "Update User" button
+- ✅ **Instant save for service chips**: Clicking notification service chips saves immediately without requiring "Update User" button
+- ✅ **Better UX**: Notification settings are now consistent with instant save behavior
+- ✅ **Error handling**: Proper error messages displayed if save fails
+
+### Technical Details
+
+- Service discovery now handles multiple service ID formats from Home Assistant's `get_services` API
+- Both notification toggle and service chips use async/await with proper error handling
+- Status messages provide immediate feedback on save success/failure
+- UI updates automatically after instant save
+
+---
+
 ## [1.8.4.39] - 2026-01-27
 
 ### 🐛 Bug Fix - Duplicate Variable Declaration

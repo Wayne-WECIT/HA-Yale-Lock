@@ -924,7 +924,7 @@ class YaleLockManagerCard extends HTMLElement {
       return `
         <span 
           class="notification-chip ${isSelected ? 'selected' : ''}"
-          onclick="card.toggleNotificationService(${slot}, '${service.id}')"
+          onclick="card.toggleNotificationService(${slot}, '${service.id}').catch(err => console.error('Error toggling service:', err))"
           title="${service.id}"
         >
           <span class="notification-chip-icon">${isSelected ? '✓' : '○'}</span>
@@ -1449,7 +1449,7 @@ class YaleLockManagerCard extends HTMLElement {
               <input 
                 type="checkbox" 
                 id="notification-toggle-${user.slot}" 
-                onchange="card.toggleNotification(${user.slot}, this.checked)" 
+                onchange="card.toggleNotification(${user.slot}, this.checked).catch(err => console.error('Error toggling notification:', err))" 
                 ${user.notifications_enabled ? 'checked' : ''}
               >
               <span class="slider"></span>
@@ -1922,17 +1922,8 @@ class YaleLockManagerCard extends HTMLElement {
     const savedEnd = user.schedule?.end ? user.schedule.end.substring(0, 16) : '';
     const savedLimit = user.usage_limit || 0;
     const savedScheduleEnabled = !!(user.schedule?.start || user.schedule?.end);
-    const savedNotificationsEnabled = user.notifications_enabled || false;
-    // Support both old format (string) and new format (array)
-    let savedNotificationServices = user.notification_services;
-    if (!savedNotificationServices) {
-      savedNotificationServices = user.notification_service ? [user.notification_service] : ['notify.persistent_notification'];
-    } else if (!Array.isArray(savedNotificationServices)) {
-      savedNotificationServices = [savedNotificationServices];
-    }
-    
-    // Compare arrays (order doesn't matter)
-    const servicesChanged = JSON.stringify([...currentServicesArray].sort()) !== JSON.stringify([...savedNotificationServices].sort());
+    // Note: Notification settings (toggle and services) are now saved instantly,
+    // so we don't check for notification changes here
     
     // Check if PIN or status changed (these affect Push button)
     const pinChanged = (currentCode !== savedCode);
@@ -1940,8 +1931,7 @@ class YaleLockManagerCard extends HTMLElement {
     const nameChanged = (currentName !== savedName);
     const scheduleChanged = (currentStart !== savedStart) || (currentEnd !== savedEnd) || (scheduleEnabled !== savedScheduleEnabled);
     const limitChanged = (currentLimit !== savedLimit) || (limitEnabled !== !!savedLimit);
-    const notificationChanged = (notificationsEnabled !== savedNotificationsEnabled) || servicesChanged;
-    const hasChanges = nameChanged || pinChanged || statusChanged || scheduleChanged || limitChanged || notificationChanged;
+    const hasChanges = nameChanged || pinChanged || statusChanged || scheduleChanged || limitChanged;
     
     // Track lock-affecting changes (PIN or status) separately from non-lock changes (username, schedule, usage_limit)
     const lockAffectingChanged = pinChanged || statusChanged;
@@ -2263,11 +2253,30 @@ class YaleLockManagerCard extends HTMLElement {
     this._checkForUnsavedChanges(slot);
   }
 
-  toggleNotification(slot, checked) {
-    // Store notification setting in form values
-    this._setFormValue(slot, 'notificationsEnabled', checked);
-    // Mark as having unsaved changes when notification toggle is changed
-    this._checkForUnsavedChanges(slot);
+  async toggleNotification(slot, checked) {
+    try {
+      // Get current notification services
+      const currentServices = this._formValues[slot]?.notificationServices || [];
+      const servicesArray = Array.isArray(currentServices) ? currentServices : 
+        (currentServices ? [currentServices] : ['notify.persistent_notification']);
+      
+      // Save immediately
+      await this._hass.callService('yale_lock_manager', 'set_notification_enabled', {
+        entity_id: this._config.entity,
+        slot: parseInt(slot, 10),
+        enabled: checked,
+        notification_services: servicesArray.length > 0 ? servicesArray : ['notify.persistent_notification']
+      });
+      
+      // Update form values
+      this._setFormValue(slot, 'notificationsEnabled', checked);
+      
+      // Show success message
+      this.showStatus(slot, '✅ Notifications updated', 'success');
+    } catch (error) {
+      console.error('[Yale Lock Manager] Error updating notifications:', error);
+      this.showStatus(slot, `❌ Failed to update notifications: ${error.message}`, 'error');
+    }
   }
 
   async getAvailableNotificationServices() {
@@ -2287,6 +2296,8 @@ class YaleLockManagerCard extends HTMLElement {
       if (services && services.notify) {
         // Get all notify services
         for (const [serviceId, serviceData] of Object.entries(services.notify)) {
+          // Handle individual mobile app devices
+          // Service IDs can be: "mobile_app_iphone" or "notify.mobile_app_iphone"
           if (serviceId.startsWith('mobile_app_')) {
             // Extract device name from service ID (e.g., "mobile_app_iphone" -> "iPhone")
             const deviceName = serviceId.replace('mobile_app_', '').replace(/_/g, ' ');
@@ -2295,6 +2306,18 @@ class YaleLockManagerCard extends HTMLElement {
               name: deviceName.charAt(0).toUpperCase() + deviceName.slice(1),
               type: 'device'
             });
+          } else if (serviceId.includes('mobile_app_') && serviceId !== 'mobile_app') {
+            // Handle case where service ID might already include "notify." prefix
+            // or has mobile_app_ in the middle (e.g., "notify.mobile_app_iphone")
+            const parts = serviceId.split('mobile_app_');
+            if (parts.length > 1) {
+              const deviceName = parts[1].replace(/_/g, ' ');
+              notifyServices.push({
+                id: serviceId.startsWith('notify.') ? serviceId : `notify.${serviceId}`,
+                name: deviceName.charAt(0).toUpperCase() + deviceName.slice(1),
+                type: 'device'
+              });
+            }
           } else if (serviceId === 'mobile_app') {
             notifyServices.push({
               id: 'notify.mobile_app',
@@ -2308,6 +2331,14 @@ class YaleLockManagerCard extends HTMLElement {
               type: 'ui'
             });
           }
+        }
+      }
+      
+      // Debug logging to help diagnose service discovery issues
+      if (this._debugMode) {
+        console.log('[Yale Lock Manager] Discovered notification services:', notifyServices);
+        if (services && services.notify) {
+          console.log('[Yale Lock Manager] Available notify service IDs:', Object.keys(services.notify));
         }
       }
       
@@ -2342,24 +2373,46 @@ class YaleLockManagerCard extends HTMLElement {
     }
   }
 
-  toggleNotificationService(slot, serviceId) {
-    // Get current selected services
-    const currentServices = this._formValues[slot]?.notificationServices || [];
-    const isArray = Array.isArray(currentServices);
-    const services = isArray ? [...currentServices] : (currentServices ? [currentServices] : []);
-    
-    // Toggle service in list
-    const index = services.indexOf(serviceId);
-    if (index > -1) {
-      services.splice(index, 1);
-    } else {
-      services.push(serviceId);
+  async toggleNotificationService(slot, serviceId) {
+    try {
+      // Get current state
+      const currentServices = this._formValues[slot]?.notificationServices || [];
+      const servicesArray = Array.isArray(currentServices) ? currentServices : 
+        (currentServices ? [currentServices] : []);
+      
+      // Toggle service in list
+      const index = servicesArray.indexOf(serviceId);
+      if (index > -1) {
+        servicesArray.splice(index, 1);
+      } else {
+        servicesArray.push(serviceId);
+      }
+      
+      // Get notification enabled state
+      const notificationToggle = this.shadowRoot.getElementById(`notification-toggle-${slot}`);
+      const notificationsEnabled = notificationToggle ? notificationToggle.checked : 
+        (this._formValues[slot]?.notificationsEnabled ?? false);
+      
+      // Save immediately
+      await this._hass.callService('yale_lock_manager', 'set_notification_enabled', {
+        entity_id: this._config.entity,
+        slot: parseInt(slot, 10),
+        enabled: notificationsEnabled,
+        notification_services: servicesArray.length > 0 ? servicesArray : ['notify.persistent_notification']
+      });
+      
+      // Update form values and UI
+      this._setFormValue(slot, 'notificationServices', servicesArray);
+      
+      // Re-render to update chips
+      this.render();
+      
+      // Show success message
+      this.showStatus(slot, '✅ Notification service updated', 'success');
+    } catch (error) {
+      console.error('[Yale Lock Manager] Error updating notification service:', error);
+      this.showStatus(slot, `❌ Failed to update service: ${error.message}`, 'error');
     }
-    
-    // Store updated services in form values
-    this._setFormValue(slot, 'notificationServices', services);
-    // Mark as having unsaved changes when notification services are changed
-    this._checkForUnsavedChanges(slot);
   }
 
   changeNotificationService(slot, service) {
@@ -2791,21 +2844,8 @@ class YaleLockManagerCard extends HTMLElement {
         });
       }
 
-      // Save notification settings (works for both PINs and FOBs)
-      const notificationToggle = this.shadowRoot.getElementById(`notification-toggle-${slot}`);
-      if (notificationToggle) {
-        const notificationsEnabled = notificationToggle.checked;
-        // Get selected services from form values
-        const selectedServices = this._formValues[slot]?.notificationServices || [];
-        const servicesArray = Array.isArray(selectedServices) ? selectedServices : (selectedServices ? [selectedServices] : []);
-        
-        await this._hass.callService('yale_lock_manager', 'set_notification_enabled', {
-          entity_id: this._config.entity,
-          slot: parseInt(slot, 10),
-          enabled: notificationsEnabled,
-          notification_services: servicesArray
-        });
-      }
+      // Note: Notification settings are now saved instantly when toggled/changed,
+      // so we don't save them here in saveUser()
 
       // Rule 3: After confirmed save - immediate, no lock query
       // Compare new cached values with stored lock values (from entity state)
