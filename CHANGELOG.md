@@ -2,6 +2,49 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.8.4.26] - 2026-01-27
+
+### 🐛 Bug Fix - Timezone-Aware Datetime for Timestamp Sensor
+
+**User feedback**: PIN usage incremented correctly, but an error occurred: `ValueError: Invalid datetime: sensor.smart_door_lock_node_4061103099_manager_last_access provides state '2026-01-27 06:03:42.218016', which is missing timezone information`
+
+### The Problem
+
+The `YaleLockLastAccessSensor` uses `SensorDeviceClass.TIMESTAMP` which requires timezone-aware datetime objects. However, the code was creating timestamps with `datetime.now().isoformat()` (naive datetime) and parsing them with `datetime.fromisoformat()` (also naive). Home Assistant rejects naive datetimes for TIMESTAMP sensors, causing the error when the sensor tried to update its state.
+
+### The Fix
+
+1. **Updated timestamp creation in `coordinator.py`**:
+   - Imported `dt_util` from `homeassistant.util`
+   - Replaced all `datetime.now().isoformat()` calls with `dt_util.utcnow().isoformat()` to create timezone-aware UTC datetimes
+   - Updated timestamps for: `last_access_timestamp`, `last_used`, `last_user_update`, `battery_low_timestamp`, and all event timestamps
+
+2. **Updated timestamp parsing in `sensor.py`**:
+   - Imported `timezone` from `datetime`
+   - Updated `YaleLockLastAccessSensor.native_value` to ensure parsed datetimes are timezone-aware by adding UTC timezone if missing
+   - Updated `YaleLockLastUserSensor` to ensure parsed datetimes are timezone-aware by adding UTC timezone if missing
+
+### Changed
+
+- **Backend (`coordinator.py`)**:
+  - Added import: `from homeassistant.util import dt as dt_util`
+  - Replaced all `datetime.now().isoformat()` with `dt_util.utcnow().isoformat()` (10 instances)
+- **Sensors (`sensor.py`)**:
+  - Added import: `from datetime import timezone`
+  - Updated `YaleLockLastAccessSensor.native_value` to add UTC timezone to naive datetimes
+  - Updated `YaleLockLastUserSensor` to add UTC timezone to naive datetimes
+- **Version (`const.py`, `manifest.json`)**:
+  - Updated `VERSION` to `1.8.4.26`
+
+### What's Fixed
+
+- ✅ **No more timezone errors**: Timestamp sensor now works correctly with timezone-aware datetimes
+- ✅ **Backward compatibility**: Old timestamps (naive) are automatically converted to timezone-aware during parsing
+- ✅ **Consistent timestamps**: All new timestamps are created as UTC timezone-aware from the start
+- ✅ **PIN usage tracking**: Usage count increments correctly without errors
+
+---
+
 ## [1.8.4.25] - 2026-01-27
 
 ### 🐛 Bug Fix - Node ID Comparison Mismatch
