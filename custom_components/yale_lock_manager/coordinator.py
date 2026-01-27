@@ -135,106 +135,117 @@ class YaleLockCoordinator(DataUpdateCoordinator):
     @callback
     async def _handle_notification(self, event) -> None:
         """Handle Z-Wave JS notification events."""
-        # Log all notifications for debugging
-        _LOGGER.info("Received Z-Wave notification event: %s", event.data)
-        
-        # Check node_id - handle both int and string comparisons
-        # Also check for 'nodeId' (used in some event structures)
-        event_node_id = event.data.get("node_id") or event.data.get("nodeId")
-        if event_node_id is None:
-            _LOGGER.warning("Notification event missing node_id/nodeId: %s", event.data)
-            return
-        
         try:
-            if int(event_node_id) != int(self.node_id):
-                _LOGGER.debug("Notification from different node (%s != %s), ignoring", event_node_id, self.node_id)
+            # Log all notifications for debugging
+            _LOGGER.info("Received Z-Wave notification event: %s", event.data)
+            
+            # Check node_id - handle both int and string comparisons
+            # Also check for 'nodeId' (used in some event structures)
+            event_node_id = event.data.get("node_id") or event.data.get("nodeId")
+            if event_node_id is None:
+                _LOGGER.warning("Notification event missing node_id/nodeId: %s", event.data)
                 return
-        except (ValueError, TypeError) as err:
-            _LOGGER.warning("Failed to compare node_id: %s (event_node_id=%s, self.node_id=%s)", err, event_node_id, self.node_id)
-            return
-
-        # Z-Wave JS notification event structure for Access Control (command_class 113):
-        # - 'type': notification type (6 = Access Control)
-        # - 'event': event number (6 = Keypad unlock operation, 9 = Auto lock locked operation)
-        # - 'parameters': dict with event-specific parameters (e.g., {'userId': 1})
-        # 
-        # For Battery notifications (command_class 128), the structure is different:
-        # - 'command_class': 128
-        # - 'args': dict with 'eventType' (e.g., 'battery low') and 'urgency'
-        command_class = event.data.get("command_class")
-        
-        # Handle Battery notifications (command_class 128)
-        # Battery notifications may come in different formats:
-        # 1. As part of zwave_js_notification with command_class=128
-        # 2. As a separate event with 'ccId' or 'command_class' = 128
-        command_class_alt = event.data.get("ccId")  # Alternative field name
-        if command_class == CC_BATTERY or command_class_alt == CC_BATTERY:
-            # Try both 'args' and direct event.data fields
-            args = event.data.get("args", {})
-            if not args:
-                args = event.data  # Fallback to event.data itself
             
-            event_type = args.get("eventType", "")
-            urgency = args.get("urgency")
-            
-            _LOGGER.info("Battery notification - EventType: %s, Urgency: %s, Full args: %s", event_type, urgency, args)
-            
-            if event_type == "battery low" or "battery low" in str(event_type).lower():
-                _LOGGER.warning("Battery low alarm detected for lock (urgency: %s)", urgency)
-                # Fire battery low event
-                self._fire_event(
-                    f"{DOMAIN}_battery_low",
-                    {
-                        "entity_id": self.lock_entity_id,
-                        "urgency": urgency,
-                        "timestamp": datetime.now().isoformat(),
-                    },
-                )
-                # Update coordinator data to reflect battery alarm
-                self.data["battery_low_alarm"] = True
-                self.data["battery_low_timestamp"] = datetime.now().isoformat()
-                self.async_update_listeners()
-                if self._lock_entity:
-                    self.hass.loop.call_later(0.2, self._lock_entity.async_write_ha_state)
-            return
-
-        # Handle Access Control notifications (command_class 113)
-        if command_class != CC_NOTIFICATION:
-            _LOGGER.debug("Notification from unsupported command class: %s", command_class)
-            return
-
-        event_type = event.data.get("type")
-        event_number = event.data.get("event")
-        event_parameters = event.data.get("parameters", {})
-
-        _LOGGER.info("Notification - Type: %s, Event: %s, Parameters: %s", 
-                     event_type, event_number, event_parameters)
-
-        # Handle keypad unlock (event 6 = Keypad unlock operation)
-        if event_number == 6 and event_type == 6:  # Access Control notification, Keypad unlock event
-            # Get user slot from parameters
-            user_slot = event_parameters.get("userId")
-            
-            # Validate and convert user_slot to int
             try:
-                user_slot = int(user_slot) if user_slot is not None else None
-                if user_slot is None or user_slot < 1 or user_slot > MAX_USER_SLOTS:
-                    _LOGGER.warning("Invalid userId for keypad unlock: %s", event_parameters.get("userId"))
+                event_node_id_int = int(event_node_id)
+                self_node_id_int = int(self.node_id)
+                if event_node_id_int != self_node_id_int:
+                    _LOGGER.info("Notification from different node (%s != %s), ignoring", event_node_id, self.node_id)
                     return
+                _LOGGER.info("Node ID check passed: event_node_id=%s, self.node_id=%s", event_node_id, self.node_id)
             except (ValueError, TypeError) as err:
-                _LOGGER.error("Failed to convert userId to int: %s", err)
+                _LOGGER.warning("Failed to compare node_id: %s (event_node_id=%s, self.node_id=%s)", err, event_node_id, self.node_id)
                 return
+
+            # Z-Wave JS notification event structure for Access Control (command_class 113):
+            # - 'type': notification type (6 = Access Control)
+            # - 'event': event number (6 = Keypad unlock operation, 9 = Auto lock locked operation)
+            # - 'parameters': dict with event-specific parameters (e.g., {'userId': 1})
+            # 
+            # For Battery notifications (command_class 128), the structure is different:
+            # - 'command_class': 128
+            # - 'args': dict with 'eventType' (e.g., 'battery low') and 'urgency'
+            command_class = event.data.get("command_class")
+            command_class_alt = event.data.get("ccId")  # Alternative field name
             
-            _LOGGER.info("Keypad unlock detected - User slot: %s", user_slot)
-            await self._handle_access_event(user_slot, ACCESS_METHOD_PIN)
-        # Handle auto lock (event 9 = Auto lock locked operation)
-        elif event_number == 9 and event_type == 6:  # Access Control notification, Auto lock event
-            self._fire_event(EVENT_LOCKED, {
-                "entity_id": self.lock_entity_id,
-                "method": ACCESS_METHOD_AUTO
-            })
-        else:
-            _LOGGER.debug("Unhandled notification - Type: %s, Event: %s", event_type, event_number)
+            _LOGGER.info("Command class: %s (CC_NOTIFICATION=%s, CC_BATTERY=%s, ccId=%s)", 
+                        command_class, CC_NOTIFICATION, CC_BATTERY, command_class_alt)
+            _LOGGER.info("Command class check: %s == CC_NOTIFICATION? %s", 
+                        command_class, command_class == CC_NOTIFICATION)
+            
+            # Handle Battery notifications (command_class 128)
+            # Battery notifications may come in different formats:
+            # 1. As part of zwave_js_notification with command_class=128
+            # 2. As a separate event with 'ccId' or 'command_class' = 128
+            if command_class == CC_BATTERY or command_class_alt == CC_BATTERY:
+                # Try both 'args' and direct event.data fields
+                args = event.data.get("args", {})
+                if not args:
+                    args = event.data  # Fallback to event.data itself
+                
+                event_type = args.get("eventType", "")
+                urgency = args.get("urgency")
+                
+                _LOGGER.info("Battery notification - EventType: %s, Urgency: %s, Full args: %s", event_type, urgency, args)
+                
+                if event_type == "battery low" or "battery low" in str(event_type).lower():
+                    _LOGGER.warning("Battery low alarm detected for lock (urgency: %s)", urgency)
+                    # Fire battery low event
+                    self._fire_event(
+                        f"{DOMAIN}_battery_low",
+                        {
+                            "entity_id": self.lock_entity_id,
+                            "urgency": urgency,
+                            "timestamp": datetime.now().isoformat(),
+                        },
+                    )
+                    # Update coordinator data to reflect battery alarm
+                    self.data["battery_low_alarm"] = True
+                    self.data["battery_low_timestamp"] = datetime.now().isoformat()
+                    self.async_update_listeners()
+                    if self._lock_entity:
+                        self.hass.loop.call_later(0.2, self._lock_entity.async_write_ha_state)
+                return
+
+            # Handle Access Control notifications (command_class 113)
+            if command_class != CC_NOTIFICATION:
+                _LOGGER.info("Notification from unsupported command class: %s (expected %s)", command_class, CC_NOTIFICATION)
+                return
+
+            event_type = event.data.get("type")
+            event_number = event.data.get("event")
+            event_parameters = event.data.get("parameters", {})
+
+            _LOGGER.info("Notification - Type: %s, Event: %s, Parameters: %s", 
+                         event_type, event_number, event_parameters)
+
+            # Handle keypad unlock (event 6 = Keypad unlock operation)
+            if event_number == 6 and event_type == 6:  # Access Control notification, Keypad unlock event
+                # Get user slot from parameters
+                user_slot = event_parameters.get("userId")
+                
+                # Validate and convert user_slot to int
+                try:
+                    user_slot = int(user_slot) if user_slot is not None else None
+                    if user_slot is None or user_slot < 1 or user_slot > MAX_USER_SLOTS:
+                        _LOGGER.warning("Invalid userId for keypad unlock: %s", event_parameters.get("userId"))
+                        return
+                except (ValueError, TypeError) as err:
+                    _LOGGER.error("Failed to convert userId to int: %s", err)
+                    return
+                
+                _LOGGER.info("Keypad unlock detected - User slot: %s", user_slot)
+                await self._handle_access_event(user_slot, ACCESS_METHOD_PIN)
+            # Handle auto lock (event 9 = Auto lock locked operation)
+            elif event_number == 9 and event_type == 6:  # Access Control notification, Auto lock event
+                self._fire_event(EVENT_LOCKED, {
+                    "entity_id": self.lock_entity_id,
+                    "method": ACCESS_METHOD_AUTO
+                })
+            else:
+                _LOGGER.info("Unhandled notification - Type: %s, Event: %s", event_type, event_number)
+        except Exception as err:
+            _LOGGER.error("Exception in notification handler: %s", err, exc_info=True)
 
     async def _handle_access_event(self, user_slot: int, method: str) -> None:
         """Handle a user access event."""
