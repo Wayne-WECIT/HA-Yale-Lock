@@ -1901,11 +1901,9 @@ class YaleLockManagerCard extends HTMLElement {
     const beforeEntity = this.getUserData().find(u => u.slot === slot);
     this._addDebugLog('Push Clicked', slot, {
       cached_code: beforeCached.code || '',
-      cached_status: beforeCached.cachedStatus || '',
-      expected_status: beforeCached.cachedStatus || '', // Status we're pushing
       entity_code: beforeEntity?.code || '',
       entity_lock_code: beforeEntity?.lock_code || '',
-      entity_lock_status: beforeEntity?.lock_status_from_lock || null
+      synced: beforeEntity?.synced_to_lock || false
     });
     
     this.showStatus(slot, `Push "${user.name}" to the lock now?`, 'confirm', async () => {
@@ -1953,17 +1951,13 @@ class YaleLockManagerCard extends HTMLElement {
         try {
           await pushPromise;
         } catch (error) {
-          // Check if error is due to status mismatch
-          const isStatusMismatch = error.message && error.message.includes('Status mismatch');
           const errorEntity = this.getUserData().find(u => u.slot === slot);
           this._addDebugLog('Push Failed', slot, {
             error: error.message || 'Unknown error',
-            is_status_mismatch: isStatusMismatch,
             cached_code: afterPushCached.code || '',
-            cached_status: afterPushCached.cachedStatus || '',
-            expected_status: afterPushCached.cachedStatus || '',
-            entity_lock_status: errorEntity?.lock_status_from_lock || null,
-            note: isStatusMismatch ? 'Status verification failed - lock did not accept status change' : 'Push failed for unknown reason'
+            entity_lock_code: errorEntity?.lock_code || '',
+            synced: errorEntity?.synced_to_lock || false,
+            note: 'Push failed'
           });
           throw error; // Re-throw to show error to user
         }
@@ -1972,34 +1966,15 @@ class YaleLockManagerCard extends HTMLElement {
         const afterPushEntity = this.getUserData().find(u => u.slot === slot);
         this._addDebugLog('Push Successful (Immediate)', slot, {
           cached_code: afterPushCached.code || '',
-          cached_status: afterPushCached.cachedStatus || '',
-          expected_status: afterPushCached.cachedStatus || '', // What we pushed
           entity_code: afterPushEntity?.code || '',
           entity_lock_code: afterPushEntity?.lock_code || '',
-          entity_lock_status: afterPushEntity?.lock_status_from_lock || null,
-          status_match: (afterPushCached.cachedStatus === afterPushEntity?.lock_status_from_lock),
           synced: afterPushEntity?.synced_to_lock || false,
           note: 'Entity state checked immediately after push promise resolves'
         });
         
-        // Check if status change was unsupported
-        const finalEntity = this.getUserData().find(u => u.slot === slot);
-        const statusUnsupported = finalEntity?.status_change_unsupported || false;
-        const syncFailureReason = finalEntity?.sync_failure_reason;
-        
-        if (statusUnsupported && syncFailureReason === 'lock_does_not_support_status_changes') {
-          // Status change limitation detected - show informational message
-          this.showStatus(
-            slot, 
-            '⚠️ Code updated successfully, but this lock model doesn\'t support status changes via Z-Wave. The status has been updated in the local cache only.',
-            'warning'
-          );
-          this.renderStatusMessage(slot);
-        } else {
-          // Step 5: All complete!
-          this.showStatus(slot, '✅ All complete! Code pushed and verified successfully!', 'success');
-          this.renderStatusMessage(slot);
-        }
+        // Step 5: All complete!
+        this.showStatus(slot, '✅ All complete! Code pushed and verified successfully!', 'success');
+        this.renderStatusMessage(slot);
         
         // Poll entity state multiple times to track when it updates
         let pollAttempt = 0;
@@ -2015,14 +1990,9 @@ class YaleLockManagerCard extends HTMLElement {
           
           this._addDebugLog(`Entity State Poll #${pollAttempt}`, slot, {
             cached_code: currentCached.code || '',
-            cached_status: currentCached.cachedStatus || '',
-            expected_status: currentCached.cachedStatus || '', // What we pushed
             entity_code: currentEntity?.code || '',
             entity_lock_code: currentEntity?.lock_code || '',
-            entity_lock_status: currentEntity?.lock_status_from_lock || null,
             code_match: (currentCached.code === currentEntity?.lock_code),
-            status_match: (currentCached.cachedStatus === currentEntity?.lock_status_from_lock),
-            lock_status: currentEntity?.lock_status,
             synced: currentEntity?.synced_to_lock || false,
             elapsed_seconds: elapsed,
             note: `Polling entity state ${pollAttempt}/${maxPollAttempts} (${elapsed}s elapsed)`
@@ -2034,17 +2004,13 @@ class YaleLockManagerCard extends HTMLElement {
           
           if (actualLockCode === expectedCode && expectedCode !== '') {
             // Lock code matches - update UI and stop polling
-            const statusMatches = (currentCached.cachedStatus === currentEntity?.lock_status_from_lock);
             this._addDebugLog('Lock Code Updated!', slot, {
               cached_code: currentCached.code || '',
-              cached_status: currentCached.cachedStatus || '',
-              expected_status: currentCached.cachedStatus || '',
               entity_lock_code: currentEntity?.lock_code || '',
-              entity_lock_status: currentEntity?.lock_status_from_lock || null,
               code_match: true,
-              status_match: statusMatches,
+              synced: currentEntity?.synced_to_lock || false,
               elapsed_seconds: elapsed,
-              note: `Entity state now shows correct lock_code after ${elapsed}s. Status match: ${statusMatches}`
+              note: `Entity state now shows correct lock_code after ${elapsed}s`
             });
             
             // Update slot from entity state (with focus protection)

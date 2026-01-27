@@ -477,24 +477,34 @@ class YaleLockCoordinator(DataUpdateCoordinator):
             # Use provided status if available, otherwise default to Available
             lock_status = status if status is not None else USER_STATUS_AVAILABLE
 
-        # Calculate sync status: compare NEW cached code/status with EXISTING lock code/status
+        # Calculate sync status: based on code existence, not status
+        # Note: We can't check schedule here, so we use enabled flag
+        # Sync will be recalculated when we check the lock
+        cached_enabled = (lock_status == USER_STATUS_ENABLED) if existing_user else False
+        should_be_enabled = cached_enabled  # Can't check schedule here
+        
         if code_type == CODE_TYPE_PIN:
-            codes_match = (code == lock_code) if lock_code else False
-            # Compare cached status with lock status
-            if lock_status_from_lock is not None:
-                status_match = (lock_status == lock_status_from_lock)
+            if should_be_enabled:
+                # Should be enabled: code must exist and match
+                synced_to_lock = (
+                    lock_status_from_lock == USER_STATUS_ENABLED and
+                    code == lock_code and
+                    code != ""
+                )
             else:
-                # If we don't have lock status, assume not synced
-                status_match = False
-            synced_to_lock = codes_match and status_match
-            _LOGGER.info("Slot %s sync calculation - Cached code: %s, Lock code: %s, Codes match: %s, Status match: %s, Synced: %s",
-                        slot, "***" if code else "None", "***" if lock_code else "None", codes_match, status_match, synced_to_lock)
+                # Should be disabled: code must NOT exist
+                synced_to_lock = (
+                    lock_status_from_lock == USER_STATUS_AVAILABLE or
+                    lock_code == ""
+                )
+            _LOGGER.info("Slot %s sync calculation - Cached code: %s, Lock code: %s, Should be enabled: %s, Synced: %s",
+                        slot, "***" if code else "None", "***" if lock_code else "None", should_be_enabled, synced_to_lock)
         else:
-            # For FOBs, sync is based on status only
-            if lock_status_from_lock is not None:
-                synced_to_lock = (lock_status == lock_status_from_lock)
+            # For FOBs, check status only
+            if should_be_enabled:
+                synced_to_lock = (lock_status_from_lock == USER_STATUS_ENABLED)
             else:
-                synced_to_lock = False
+                synced_to_lock = (lock_status_from_lock == USER_STATUS_AVAILABLE)
         
         self._user_data["users"][str(slot)] = {
             "name": name,
@@ -633,27 +643,58 @@ class YaleLockCoordinator(DataUpdateCoordinator):
             await self.async_request_refresh()
 
     async def async_set_user_status(self, slot: int, status: int) -> None:
-        """Set user status (0=Available, 1=Enabled, 2=Disabled)."""
+        """Set user status (0=Available, 1=Enabled, 2=Disabled).
+        
+        With the new approach:
+        - ENABLED (1): Sets enabled=True (user must push to set code on lock)
+        - DISABLED (2): Sets enabled=False (user must push to clear code from lock)
+        - AVAILABLE (0): Not valid for cached status (this is what lock returns when cleared)
+        """
         slot_str = str(slot)
         if slot_str not in self._user_data["users"]:
             raise ValueError(f"User slot {slot} not found")
         
         user_data = self._user_data["users"][slot_str]
-        user_data["lock_status"] = status  # Store cached status (editable)
-        user_data["enabled"] = (status == USER_STATUS_ENABLED)  # For backward compatibility
         
-        # Check if status matches lock status
-        lock_status = user_data.get("lock_status_from_lock")
-        if lock_status is not None:
-            user_data["synced_to_lock"] = (status == lock_status)
+        # Map status to enabled flag
+        if status == USER_STATUS_ENABLED:
+            user_data["enabled"] = True
+            user_data["lock_status"] = USER_STATUS_ENABLED
+        elif status == USER_STATUS_DISABLED:
+            user_data["enabled"] = False
+            user_data["lock_status"] = USER_STATUS_DISABLED
+        elif status == USER_STATUS_AVAILABLE:
+            # AVAILABLE means cleared - set enabled=False
+            user_data["enabled"] = False
+            user_data["lock_status"] = USER_STATUS_AVAILABLE
         else:
-            user_data["synced_to_lock"] = False  # Unknown lock status, assume not synced
+            raise ValueError(f"Invalid status: {status}. Must be 0, 1, or 2")
+        
+        # Recalculate sync status based on new approach
+        cached_enabled = user_data["enabled"]
+        should_be_enabled = cached_enabled and self._is_code_valid(slot)
+        lock_status = user_data.get("lock_status_from_lock")
+        lock_code = user_data.get("lock_code", "")
+        
+        if should_be_enabled:
+            # Should be enabled: code must exist and match
+            user_data["synced_to_lock"] = (
+                lock_status == USER_STATUS_ENABLED and
+                user_data.get("code", "") == lock_code and
+                user_data.get("code", "") != ""
+            )
+        else:
+            # Should be disabled: code must NOT exist
+            user_data["synced_to_lock"] = (
+                lock_status == USER_STATUS_AVAILABLE or
+                lock_code == ""
+            )
         
         await self.async_save_user_data()
         await self.async_request_refresh()
         
-        _LOGGER.info("Set cached status for slot %s: %s (lock_status=%s, synced=%s)", 
-                     slot, status, lock_status, user_data["synced_to_lock"])
+        _LOGGER.info("Set cached status for slot %s: %s (enabled=%s, synced=%s)", 
+                     slot, status, user_data["enabled"], user_data["synced_to_lock"])
 
     async def async_set_user_schedule(
         self,
@@ -695,7 +736,7 @@ class YaleLockCoordinator(DataUpdateCoordinator):
             await self.async_enable_user(slot)
 
     async def async_push_code_to_lock(self, slot: int) -> None:
-        """Push a code to the lock using invoke_cc_api with read-back verification."""
+        """Push a code to the lock - set if enabled, clear if disabled."""
         user_data = self._user_data["users"].get(str(slot))
         if not user_data:
             raise ValueError(f"User slot {slot} not found")
@@ -705,7 +746,6 @@ class YaleLockCoordinator(DataUpdateCoordinator):
         # FOBs are added directly to the lock, so we don't push them
         if code_type == CODE_TYPE_FOB:
             _LOGGER.info("FOB/RFID cards are added directly to the lock - no push needed for slot %s", slot)
-            # Just update sync status to True since FOBs don't need syncing
             user_data["synced_to_lock"] = True
             await self.async_save_user_data()
             await self.async_request_refresh()
@@ -714,386 +754,92 @@ class YaleLockCoordinator(DataUpdateCoordinator):
         code = user_data["code"]
         enabled = user_data["enabled"]
         
-        # Check if this is a status-only change (code stays the same, only status changes)
-        lock_code = user_data.get("lock_code", "")
-        lock_status = user_data.get("lock_status_from_lock")
-        is_status_only_change = (code == lock_code) and (lock_code != "")
-
-        # Determine status based on enabled flag and schedule
-        # Ensure status is explicitly an integer (0, 1, or 2)
-        if enabled and self._is_code_valid(slot):
-            status = int(USER_STATUS_ENABLED)  # Explicitly convert to int
-        else:
-            status = int(USER_STATUS_DISABLED)  # Explicitly convert to int
+        # Determine if code should be on lock based on enabled flag and schedule
+        should_be_on_lock = enabled and self._is_code_valid(slot)
         
-        # Validate status is in valid range
-        if status not in (USER_STATUS_AVAILABLE, USER_STATUS_ENABLED, USER_STATUS_DISABLED):
-            raise ValueError(f"Invalid status value: {status}. Must be 0, 1, or 2")
-        
-        _LOGGER.info("Status determined for slot %s: %s (type=%s)", slot, status, type(status).__name__)
-        if is_status_only_change:
-            _LOGGER.info("Detected status-only change for slot %s (code unchanged: '%s', status: %s -> %s)", 
-                        slot, code, lock_status, status)
-
-        # CRITICAL: GET the current code from the lock first
-        # The lock may store codes in a different format (e.g., with leading zeros)
-        # We must use the exact format the lock has stored when setting status
-        lock_code = None
         try:
-            self._logger.info_operation("Getting current code from lock before setting status", slot)
-            lock_data = await self._zwave_client.get_user_code_data(slot)
-            if lock_data:
-                lock_code_raw = lock_data.get("userCode", "")
-                if lock_code_raw:
-                    lock_code = str(lock_code_raw)
-                    _LOGGER.info("Retrieved code from lock for slot %s: '%s' (cached: '%s')", slot, lock_code, code)
-                else:
-                    _LOGGER.warning("Lock returned empty code for slot %s - will use cached code", slot)
-            else:
-                _LOGGER.warning("Could not retrieve code from lock for slot %s - will use cached code", slot)
-        except Exception as err:
-            _LOGGER.warning("Failed to get code from lock for slot %s (will use cached code): %s", slot, err)
-        
-        # Use lock's code format if available, otherwise fallback to cached code
-        code_to_set = lock_code if lock_code else code
-        if lock_code and lock_code != code:
-            _LOGGER.info("Using lock's code format '%s' instead of cached '%s' for slot %s", lock_code, code, slot)
-        else:
-            _LOGGER.info("Using cached code '%s' for slot %s", code_to_set, slot)
-
-        # Use Z-Wave client to set the code
-        try:
-            self._logger.info_operation("Pushing code to lock", slot, code_type=code_type, status=status, code_format="lock" if lock_code else "cached")
-            
-            await self._zwave_client.set_user_code(slot, code_to_set, status)
-            _LOGGER.info("Code write command sent to lock for slot %s, waiting for lock to process...", slot)
-            
-            # Store expected status for verification
-            expected_status = status  # Store what we pushed
-            
-            # Wait for lock to process the write
-            # Some locks can take 5-10 seconds to write a code to memory
-            # Status changes may need more time than code changes
-            # We'll wait longer for status-only changes
-            if is_status_only_change:
-                initial_wait = 7.0  # Longer wait for status changes
-                retry_delay = 4.0  # Longer delay between retries for status changes
-                _LOGGER.info("Status-only change detected - using extended wait times (initial: %ss, retry: %ss)", 
-                            initial_wait, retry_delay)
-            else:
-                initial_wait = 5.0  # Increased from 3s for code changes
-                retry_delay = 3.0   # Increased from 2s for code changes
-                _LOGGER.info("Code change detected - using standard wait times (initial: %ss, retry: %ss)", 
-                            initial_wait, retry_delay)
-            
-            wait_start_time = time.time()
-            await asyncio.sleep(initial_wait)
-            wait_elapsed = time.time() - wait_start_time
-            _LOGGER.info("Initial wait completed for slot %s (elapsed: %.2fs)", slot, wait_elapsed)
-            
-            # VERIFY: Read back the code from the lock using _get_user_code_data to get both status and code
-            # Retry verification up to 3 times with delays, as locks can be slow to write
-            verification_data = None
-            max_retries = 3
-            
-            verification_start_time = time.time()
-            for attempt in range(1, max_retries + 1):
-                attempt_start_time = time.time()
-                elapsed_since_push = attempt_start_time - (verification_start_time - initial_wait)
+            if should_be_on_lock:
+                # Code should be on lock - set it
+                if not code:
+                    raise ValueError(f"Cannot set empty code for slot {slot}")
                 
-                self._logger.info_operation(f"Verifying code was written (attempt {attempt}/{max_retries})", slot)
-                _LOGGER.info("Verification attempt %s/%s for slot %s (%.2fs since push started)", 
-                            attempt, max_retries, slot, elapsed_since_push)
+                self._logger.info_operation("Setting code on lock", slot, code="***")
+                await self._zwave_client.set_user_code(slot, code)
                 
-                attempt_data = await self._zwave_client.get_user_code_data(slot)
-                attempt_elapsed = time.time() - attempt_start_time
+                # Wait for lock to process
+                await asyncio.sleep(5.0)
                 
-                # Only update verification_data if we got data (don't overwrite with None)
-                if attempt_data:
-                    verification_data = attempt_data
-                    verification_code = verification_data.get("userCode", "")
-                    if verification_code:
-                        verification_code = str(verification_code)
-                    else:
-                        verification_code = ""
-                    verification_status = verification_data.get("userIdStatus")
+                # Verify code was set
+                verification_data = await self._zwave_client.get_user_code_data(slot)
+                if verification_data:
+                    verification_code = str(verification_data.get("userCode", ""))
+                    verification_status = int(verification_data.get("userIdStatus", 0))
                     
-                    # Check BOTH code and status
-                    # Compare against code_to_set (the code we actually sent to the lock)
-                    code_matches = (verification_code == code_to_set)
-                    status_matches = (verification_status == expected_status)
-                    
-                    _LOGGER.info(
-                        "Verification attempt %s results for slot %s (query took %.2fs): "
-                        "code_match=%s (expected='%s', got='%s'), "
-                        "status_match=%s (expected=%s, got=%s)",
-                        attempt, slot, attempt_elapsed,
-                        code_matches, code_to_set, verification_code,
-                        status_matches, expected_status, verification_status
-                    )
-                    
-                    if code_matches and status_matches:
-                        total_elapsed = time.time() - (verification_start_time - initial_wait)
-                        _LOGGER.info("✓ Verification successful on attempt %s - code and status match! (total time: %.2fs)", 
-                                    attempt, total_elapsed)
-                        break  # Success - exit retry loop
-                    else:
-                        if not code_matches:
-                            _LOGGER.warning("Verification attempt %s: Code mismatch (expected: '%s', got: '%s')", 
-                                        attempt, code_to_set, verification_code)
-                        if not status_matches:
-                            _LOGGER.warning("Verification attempt %s: Status mismatch (expected: %s, got: %s)", 
-                                          attempt, expected_status, verification_status)
-                        
-                        if attempt < max_retries:
-                            _LOGGER.info("Lock may still be processing - waiting %s seconds before retry...", retry_delay)
-                            await asyncio.sleep(retry_delay)
-                else:
-                    _LOGGER.warning("Verification attempt %s: No data returned from lock (query took %.2fs)", 
-                                  attempt, attempt_elapsed)
-                    # Don't overwrite verification_data with None - keep last successful read
-                    if attempt < max_retries:
-                        _LOGGER.info("Waiting %s seconds before retry...", retry_delay)
-                        await asyncio.sleep(retry_delay)
-            
-            if not verification_data:
-                _LOGGER.warning("Could not verify slot %s after %s attempts - no data returned", slot, max_retries)
-                user_data["synced_to_lock"] = False
-            else:
-                verification_status = verification_data.get("userIdStatus")
-                verification_code = verification_data.get("userCode", "")
-                
-                if verification_code:
-                    verification_code = str(verification_code)
-                else:
-                    verification_code = ""
-                
-                # Check both code and status
-                # Compare against code_to_set (the code we actually sent to the lock)
-                code_matches = (verification_code == code_to_set) if verification_code else False
-                status_matches = (verification_status == expected_status)
-                
-                # Check if verification succeeded
-                if verification_status is None:
-                    _LOGGER.warning("Could not verify slot %s - status read returned None", slot)
-                    user_data["synced_to_lock"] = False
-                elif verification_status == USER_STATUS_AVAILABLE:
-                    _LOGGER.error("Verification failed: Slot %s is empty after push!", slot)
-                    user_data["synced_to_lock"] = False
-                    raise ValueError(f"Verification failed: Slot {slot} is empty after push")
-                elif not code_matches:
-                    # After retries, code still doesn't match - this is a real error
-                    _LOGGER.error("Verification failed after %s attempts: Code mismatch in slot %s (expected: %s, got: %s)", 
-                                max_retries, slot, code_to_set, verification_code)
-                    # Still update lock_code with what we got from the lock (might be old value)
-                    user_data["lock_code"] = verification_code
-                    user_data["lock_status_from_lock"] = verification_status
-                    user_data["lock_enabled"] = verification_status == USER_STATUS_ENABLED
-                    user_data["synced_to_lock"] = False
-                    raise ValueError(f"Verification failed: Code mismatch in slot {slot} after {max_retries} attempts")
-                elif not status_matches:
-                    # Status mismatch - try code modification approach for status-only changes
-                    if is_status_only_change:
-                        _LOGGER.warning(
-                            "Status mismatch after %s attempts for slot %s (expected: %s, got: %s). "
-                            "Lock may ignore status changes when code is unchanged. Trying code modification approach...",
-                            max_retries, slot, expected_status, verification_status
-                        )
-                        
-                        try:
-                            # Try modifying the code format to force the lock to process the status change
-                            # Strategy: Add a leading zero, then remove it with the new status
-                            modified_code = None
-                            
-                            # Try 1: Add leading zero if code is numeric
-                            if code_to_set.isdigit():
-                                modified_code = "0" + code_to_set
-                                _LOGGER.info("Step 1: Setting modified code for slot %s (added leading zero: '%s') with status=%s", 
-                                           slot, modified_code, expected_status)
-                                await self._zwave_client.set_user_code(slot, modified_code, expected_status)
-                                await asyncio.sleep(3.0)  # Wait for lock to process
-                                
-                                # Step 2: Set original code with desired status
-                                _LOGGER.info("Step 2: Setting original code for slot %s ('%s') with status=%s", 
-                                           slot, code_to_set, expected_status)
-                                await self._zwave_client.set_user_code(slot, code_to_set, expected_status)
-                                await asyncio.sleep(initial_wait)  # Wait for lock to process
-                            else:
-                                # Code is not purely numeric, try appending/removing a character
-                                modified_code = code_to_set + "0"
-                                _LOGGER.info("Step 1: Setting modified code for slot %s (appended zero: '%s') with status=%s", 
-                                           slot, modified_code, expected_status)
-                                await self._zwave_client.set_user_code(slot, modified_code, expected_status)
-                                await asyncio.sleep(3.0)  # Wait for lock to process
-                                
-                                # Step 2: Set original code with desired status
-                                _LOGGER.info("Step 2: Setting original code for slot %s ('%s') with status=%s", 
-                                           slot, code_to_set, expected_status)
-                                await self._zwave_client.set_user_code(slot, code_to_set, expected_status)
-                                await asyncio.sleep(initial_wait)  # Wait for lock to process
-                            
-                            # Step 3: Verify the status change
-                            _LOGGER.info("Step 3: Verifying status change for slot %s", slot)
-                            mod_verification_data = await self._zwave_client.get_user_code_data(slot)
-                            
-                            if mod_verification_data:
-                                mod_status = mod_verification_data.get("userIdStatus")
-                                mod_code = mod_verification_data.get("userCode", "")
-                                if mod_code:
-                                    mod_code = str(mod_code)
-                                
-                                if mod_status == expected_status and mod_code == code_to_set:
-                                    _LOGGER.info("✓ Code modification approach succeeded for slot %s!", slot)
-                                    verification_data = mod_verification_data
-                                    verification_code = mod_code
-                                    verification_status = mod_status
-                                    code_matches = True
-                                    status_matches = True
-                                else:
-                                    # Code modification failed - mark as limitation and continue gracefully
-                                    _LOGGER.warning(
-                                        "Code modification approach failed for slot %s: "
-                                        "status=%s (expected %s), code='%s' (expected '%s'). "
-                                        "This lock model appears to not support status changes via Z-Wave. "
-                                        "Updating cached status only.",
-                                        slot, mod_status, expected_status, mod_code, code_to_set
-                                    )
-                                    # Mark as limitation and update cached status
-                                    user_data["status_change_unsupported"] = True
-                                    user_data["lock_code"] = verification_code if verification_code else code_to_set
-                                    user_data["lock_status_from_lock"] = mod_status  # What lock actually has
-                                    user_data["lock_status"] = expected_status  # What user wants (cached)
-                                    user_data["lock_enabled"] = mod_status == USER_STATUS_ENABLED
-                                    user_data["synced_to_lock"] = False
-                                    user_data["sync_failure_reason"] = "lock_does_not_support_status_changes"
-                                    # Don't raise - continue gracefully
-                                    # Status limitation handled - will continue to save data below
-                            else:
-                                # No data returned - mark as limitation
-                                _LOGGER.warning(
-                                    "Code modification approach failed: No data returned from lock for slot %s. "
-                                    "This lock model appears to not support status changes via Z-Wave. "
-                                    "Updating cached status only.",
-                                    slot
-                                )
-                                user_data["status_change_unsupported"] = True
-                                user_data["lock_code"] = verification_code if verification_code else code_to_set
-                                user_data["lock_status_from_lock"] = verification_status  # What lock has
-                                user_data["lock_status"] = expected_status  # What user wants (cached)
-                                user_data["lock_enabled"] = verification_status == USER_STATUS_ENABLED
-                                user_data["synced_to_lock"] = False
-                                user_data["sync_failure_reason"] = "lock_does_not_support_status_changes"
-                                # Don't raise - continue gracefully
-                                # Status limitation handled - will continue to save data below
-                                
-                        except Exception as mod_err:
-                            # Code modification exception - mark as limitation
-                            _LOGGER.warning(
-                                "Code modification approach failed for slot %s: %s. "
-                                "This lock model appears to not support status changes via Z-Wave. "
-                                "Updating cached status only.",
-                                slot, mod_err
-                            )
-                            user_data["status_change_unsupported"] = True
-                            user_data["lock_code"] = verification_code if verification_code else code_to_set
-                            user_data["lock_status_from_lock"] = verification_status  # What lock has
-                            user_data["lock_status"] = expected_status  # What user wants (cached)
-                            user_data["lock_enabled"] = verification_status == USER_STATUS_ENABLED
-                            user_data["synced_to_lock"] = False
-                            user_data["sync_failure_reason"] = "lock_does_not_support_status_changes"
-                            # Don't raise - continue gracefully
-                    else:
-                        # Not a status-only change, but status mismatch - mark as limitation
-                        _LOGGER.warning(
-                            "Verification failed: Status mismatch in slot %s (expected: %s, got: %s). "
-                            "This lock model appears to not support status changes via Z-Wave. "
-                            "Updating cached status only.",
-                            slot, expected_status, verification_status
-                        )
-                        user_data["status_change_unsupported"] = True
+                    if verification_code == code:
+                        _LOGGER.info("✓ Code successfully set on lock for slot %s", slot)
                         user_data["lock_code"] = verification_code
-                        user_data["lock_status_from_lock"] = verification_status  # What lock has
-                        user_data["lock_status"] = expected_status  # What user wants (cached)
-                        user_data["lock_enabled"] = verification_status == USER_STATUS_ENABLED
-                        user_data["synced_to_lock"] = False
-                        user_data["sync_failure_reason"] = "lock_does_not_support_status_changes"
-                        # Don't raise - continue gracefully (code was updated successfully)
-                        
-                        # Update sync status even though status didn't change
-                        lock_data_for_sync = {"userIdStatus": verification_status, "userCode": verification_code if verification_code else code_to_set}
-                        self._sync_manager.update_sync_status(user_data, lock_data_for_sync)
-                        
-                        _LOGGER.info(
-                            "Status change limitation detected for slot %s. "
-                            "Cached status updated to %s (lock status remains %s). "
-                            "Code was successfully updated.",
-                            slot, expected_status, verification_status
+                        user_data["lock_status_from_lock"] = verification_status
+                        user_data["lock_enabled"] = (verification_status == USER_STATUS_ENABLED)
+                        user_data["synced_to_lock"] = True
+                    else:
+                        _LOGGER.warning(
+                            "Code mismatch after set for slot %s: expected '%s', got '%s'",
+                            slot, code, verification_code
                         )
+                        user_data["lock_code"] = verification_code
+                        user_data["lock_status_from_lock"] = verification_status
+                        user_data["lock_enabled"] = (verification_status == USER_STATUS_ENABLED)
+                        user_data["synced_to_lock"] = False
                 else:
-                    # Both code and status match - success!
-                    _LOGGER.info("✓ Verified: Code and status successfully written to slot %s", slot)
-                    user_data["lock_code"] = verification_code  # Update lock_code from lock
-                    user_data["lock_status_from_lock"] = verification_status  # Update lock_status_from_lock
-                    user_data["lock_enabled"] = verification_status == USER_STATUS_ENABLED  # Update lock_enabled
+                    _LOGGER.warning("Could not verify code set for slot %s", slot)
+                    user_data["synced_to_lock"] = False
+            else:
+                # Code should NOT be on lock - clear it
+                self._logger.info_operation("Clearing code from lock", slot)
+                await self._zwave_client.clear_user_code(slot)
+                
+                # Wait for lock to process
+                await asyncio.sleep(3.0)
+                
+                # Verify code was cleared
+                verification_data = await self._zwave_client.get_user_code_data(slot)
+                if verification_data:
+                    verification_code = str(verification_data.get("userCode", ""))
+                    verification_status = int(verification_data.get("userIdStatus", 0))
                     
-                    # Clear any previous limitation flags
-                    user_data.pop("status_change_unsupported", None)
-                    user_data.pop("sync_failure_reason", None)
-                    
-                    # Use sync manager to recalculate sync status after pull
-                    lock_data_for_sync = {"userIdStatus": verification_status, "userCode": verification_code}
-                    self._sync_manager.update_sync_status(user_data, lock_data_for_sync)
-                    
-                    self._logger.info_operation(
-                        "Sync after push",
-                        slot,
-                        synced=user_data["synced_to_lock"],
-                        cached_code="***" if user_data.get("code") else "None",
-                        lock_code="***" if verification_code else "None",
-                    )
-                    
-                    # Log the actual lock_code value for debugging (unmasked in logs)
-                    _LOGGER.info("Push verified - lock_code set to: %s (cached_code: %s)", 
-                                verification_code, user_data.get("code", ""))
-                    
-                    # Verify lock_code is actually set in user_data
-                    _LOGGER.info("After verification - user_data lock_code: %s", user_data.get("lock_code", "NOT SET"))
+                    if verification_status == USER_STATUS_AVAILABLE or not verification_code:
+                        _LOGGER.info("✓ Code successfully cleared from lock for slot %s", slot)
+                        user_data["lock_code"] = ""
+                        user_data["lock_status_from_lock"] = USER_STATUS_AVAILABLE
+                        user_data["lock_enabled"] = False
+                        user_data["synced_to_lock"] = True
+                    else:
+                        _LOGGER.warning(
+                            "Code not cleared for slot %s: status=%s, code='%s'",
+                            slot, verification_status, verification_code
+                        )
+                        user_data["lock_code"] = verification_code
+                        user_data["lock_status_from_lock"] = verification_status
+                        user_data["lock_enabled"] = (verification_status == USER_STATUS_ENABLED)
+                        user_data["synced_to_lock"] = False
+                else:
+                    _LOGGER.warning("Could not verify code cleared for slot %s", slot)
+                    user_data["synced_to_lock"] = False
             
             await self.async_save_user_data()
             _LOGGER.info("User data saved after push for slot %s", slot)
             
-            # Verify the data is in storage
-            slot_str = str(slot)
-            stored_user = self._storage.get_user(slot)
-            if stored_user:
-                _LOGGER.info("After save - stored lock_code: %s", stored_user.get("lock_code", "NOT SET"))
-            else:
-                _LOGGER.warning("After save - user not found in storage for slot %s", slot)
-            
-            # Update coordinator.data to trigger coordinator update cycle
-            # This ensures CoordinatorEntity sees the change
-            if self.data:
-                self.data["last_user_update"] = datetime.now().isoformat()
-                _LOGGER.debug("Updated coordinator.data timestamp: %s", self.data["last_user_update"])
-            
-            # Trigger listeners to notify CoordinatorEntity
+            # Update entity state
+            self.data["last_user_update"] = datetime.now().isoformat()
             self.async_update_listeners()
-            _LOGGER.debug("Coordinator listeners updated after push")
-            
-            # Schedule async_write_ha_state() to ensure state is written
-            # The new dict copy in extra_state_attributes will be detected as changed
             if self._lock_entity:
-                _LOGGER.debug("Scheduling entity state write in 0.2 seconds after push...")
-                
-                @callback
-                def _write_state_callback():
-                    """Callback to write entity state after delay."""
-                    _LOGGER.debug("Writing entity state to notify frontend after push...")
-                    self._lock_entity.async_write_ha_state()
-                    _LOGGER.info("Entity state written after push for slot %s", slot)
-                
-                # Use hass.loop.call_later() to schedule the callback
-                self.hass.loop.call_later(0.2, _write_state_callback)
+                self.hass.loop.call_later(0.2, self._lock_entity.async_write_ha_state)
+            
+        except Exception as err:
+            _LOGGER.error("Failed to push code to lock for slot %s: %s", slot, err, exc_info=True)
+            user_data["synced_to_lock"] = False
+            await self.async_save_user_data()
+            raise
                 _LOGGER.debug("Entity state write scheduled after push")
             else:
                 _LOGGER.warning("Lock entity not registered - cannot update entity state")
@@ -1153,37 +899,83 @@ class YaleLockCoordinator(DataUpdateCoordinator):
             
             _LOGGER.debug("Slot %s - Status: %s, Code: %s", slot, status, "***" if code else "None")
 
-            if status == USER_STATUS_AVAILABLE or status is None:
-                # Slot is empty
-                _LOGGER.debug("Slot %s is empty", slot)
-                continue
-
-            codes_found += 1
-            _LOGGER.info("Found code in slot %s (Status: %s)", slot, status)
-
-            # Check if we already have this slot
+            # Convert status to int for comparison
+            status_int = int(status) if status is not None else USER_STATUS_AVAILABLE
+            
             slot_str = str(slot)
+            
+            # Check if we already have this slot
             if slot_str in self._user_data["users"]:
-                # Update existing - store lock_code and check sync status
                 user_data = self._user_data["users"][slot_str]
-                user_data["lock_code"] = code if code else ""  # Store PIN from lock
-                user_data["lock_status_from_lock"] = status  # Store status from lock (read-only)
-                # Preserve cached status if it exists, otherwise set it to match lock
-                if "lock_status" not in user_data or user_data.get("lock_status") is None:
-                    user_data["lock_status"] = status  # Initialize cached status from lock
-                user_data["lock_enabled"] = status == USER_STATUS_ENABLED  # Store enabled status from lock (for compatibility)
                 
-                # Use sync manager to update sync status
-                lock_data_for_sync = {"userIdStatus": status, "userCode": code}
-                self._sync_manager.update_sync_status(user_data, lock_data_for_sync)
+                # Update lock state
+                user_data["lock_code"] = code if code else ""
+                user_data["lock_status_from_lock"] = status_int
+                user_data["lock_enabled"] = (status_int == USER_STATUS_ENABLED)
+                
+                # PIN Overwrite Logic:
+                # - If status = ENABLED (1) AND code exists: Overwrite cached PIN
+                # - If status = AVAILABLE (0) OR DISABLED (2): Preserve cached PIN
+                if status_int == USER_STATUS_ENABLED and code:
+                    # Lock is enabled with code - overwrite cached PIN (code was added directly to lock)
+                    old_code = user_data.get("code", "")
+                    if old_code != code:
+                        _LOGGER.info(
+                            "Slot %s: Lock enabled with code, overwriting cached PIN (old: '%s', new: '%s')",
+                            slot, "***" if old_code else "None", "***" if code else "None"
+                        )
+                        user_data["code"] = code
+                    else:
+                        _LOGGER.debug("Slot %s: Lock enabled, cached PIN matches lock code", slot)
+                    codes_found += 1
+                    codes_updated += 1
+                elif status_int in (USER_STATUS_AVAILABLE, USER_STATUS_DISABLED):
+                    # Lock is disabled/available - preserve cached PIN (don't overwrite)
+                    _LOGGER.debug(
+                        "Slot %s: Lock status=%s, preserving cached PIN '%s'",
+                        slot, status_int, "***" if user_data.get("code") else "None"
+                    )
+                    # Still count as found if there's a code (even if disabled)
+                    if code:
+                        codes_found += 1
+                        codes_updated += 1
+                else:
+                    # Unknown status
+                    _LOGGER.warning("Slot %s: Unknown status %s", slot, status_int)
+                
+                # Recalculate sync status
+                cached_enabled = user_data.get("enabled", False)
+                should_be_enabled = cached_enabled and self._is_code_valid(slot)
+                lock_is_enabled = (status_int == USER_STATUS_ENABLED)
+                
+                # Synced if: code matches AND enabled state matches
+                cached_code = user_data.get("code", "")
+                if should_be_enabled:
+                    # Should be enabled: code must exist and match
+                    user_data["synced_to_lock"] = (
+                        lock_is_enabled and
+                        cached_code == code and
+                        cached_code != ""
+                    )
+                else:
+                    # Should be disabled: code must NOT exist
+                    user_data["synced_to_lock"] = (
+                        status_int == USER_STATUS_AVAILABLE or
+                        code == ""
+                    )
                 
                 _LOGGER.info("Slot %s updated - Cached: %s, Lock: %s, Synced: %s", 
-                           slot, "***" if user_data.get("code") else "None", 
+                           slot, "***" if cached_code else "None", 
                            "***" if code else "None", user_data["synced_to_lock"])
-                codes_updated += 1
             else:
-                # New code we don't know about
-                _LOGGER.info("Slot %s is NEW (unknown code detected)", slot)
+                # New slot found on lock
+                if status_int == USER_STATUS_AVAILABLE:
+                    # Slot is empty - skip
+                    _LOGGER.debug("Slot %s is empty (AVAILABLE)", slot)
+                    continue
+                
+                codes_found += 1
+                _LOGGER.info("Slot %s is NEW (unknown code detected, status: %s)", slot, status_int)
                 
                 # Try to determine if it's a FOB
                 code_type = CODE_TYPE_PIN
@@ -1191,18 +983,20 @@ class YaleLockCoordinator(DataUpdateCoordinator):
                     code_type = CODE_TYPE_FOB
                     _LOGGER.debug("Detected as FOB based on code format")
 
+                # For new slots, use code from lock as cached code
                 self._user_data["users"][slot_str] = {
                     "name": f"User {slot}",
                     "code_type": code_type,
-                    "code": code if code else "",  # Cached code (same as lock for new codes)
-                    "lock_code": code if code else "",  # PIN from lock
-                    "enabled": status == USER_STATUS_ENABLED,
-                    "lock_status": status,  # Store full status (0=Available, 1=Enabled, 2=Disabled)
-                    "lock_enabled": status == USER_STATUS_ENABLED,  # Enabled status from lock (for compatibility)
+                    "code": code if code else "",  # Use code from lock for new slots
+                    "lock_code": code if code else "",
+                    "enabled": (status_int == USER_STATUS_ENABLED),
+                    "lock_status": status_int,
+                    "lock_status_from_lock": status_int,
+                    "lock_enabled": (status_int == USER_STATUS_ENABLED),
                     "schedule": {"start": None, "end": None},
                     "usage_limit": None,
                     "usage_count": 0,
-                    "synced_to_lock": True,  # New codes are synced by default
+                    "synced_to_lock": True,  # New codes are synced by definition
                     "last_used": None,
                 }
                 codes_new += 1

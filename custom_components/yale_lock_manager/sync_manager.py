@@ -23,6 +23,10 @@ class SyncManager:
     ) -> bool:
         """Calculate if cached data is synced with lock data.
         
+        Sync is based on code existence, not status:
+        - If enabled: code must exist on lock AND match cached code
+        - If disabled: code must NOT exist on lock (status = AVAILABLE)
+        
         Args:
             cached_data: User data from local storage
             lock_data: Data from the lock (status and code)
@@ -32,7 +36,7 @@ class SyncManager:
         """
         code_type = cached_data.get("code_type", CODE_TYPE_PIN)
         cached_code = cached_data.get("code", "")
-        cached_status = cached_data.get("lock_status")
+        cached_enabled = cached_data.get("enabled", False)
         
         lock_code = lock_data.get("userCode", "")
         if lock_code is not None:
@@ -41,16 +45,34 @@ class SyncManager:
             lock_code = ""
         
         lock_status = lock_data.get("userIdStatus")
+        if lock_status is not None:
+            lock_status = int(lock_status)
+        else:
+            lock_status = USER_STATUS_AVAILABLE
         
         if code_type == CODE_TYPE_PIN:
-            # For PINs, check both code and status
-            codes_match = (cached_code == lock_code)
-            status_match = (cached_status == lock_status)
-            synced = codes_match and status_match
+            # For PINs, sync is based on whether code should be on lock
+            # Note: We can't check schedule here, so we use cached_enabled
+            # The caller should check schedule if needed
+            should_be_enabled = cached_enabled
+            
+            if should_be_enabled:
+                # Should be enabled: code must exist and match
+                synced = (
+                    lock_status == 1 and  # USER_STATUS_ENABLED
+                    lock_code == cached_code and
+                    cached_code != ""
+                )
+            else:
+                # Should be disabled: code must NOT exist
+                synced = (lock_status == USER_STATUS_AVAILABLE or lock_code == "")
         else:
-            # For FOBs, only check status
-            status_match = (cached_status == lock_status)
-            synced = status_match
+            # For FOBs, check status only
+            should_be_enabled = cached_enabled
+            if should_be_enabled:
+                synced = (lock_status == 1)  # USER_STATUS_ENABLED
+            else:
+                synced = (lock_status == USER_STATUS_AVAILABLE)
         
         return synced
 
@@ -60,6 +82,10 @@ class SyncManager:
         lock_data: dict[str, Any] | None,
     ) -> None:
         """Update sync status in user data based on lock data.
+        
+        Sync is based on code existence, not status:
+        - If enabled: code must exist on lock AND match cached code
+        - If disabled: code must NOT exist on lock (status = AVAILABLE)
         
         Args:
             user_data: User data dictionary to update (modified in place)
@@ -71,7 +97,7 @@ class SyncManager:
         
         code_type = user_data.get("code_type", CODE_TYPE_PIN)
         cached_code = user_data.get("code", "")
-        cached_status = user_data.get("lock_status")
+        cached_enabled = user_data.get("enabled", False)
         
         lock_code = lock_data.get("userCode", "")
         if lock_code is not None:
@@ -80,20 +106,39 @@ class SyncManager:
             lock_code = ""
         
         lock_status = lock_data.get("userIdStatus")
+        if lock_status is not None:
+            lock_status = int(lock_status)
+        else:
+            lock_status = USER_STATUS_AVAILABLE
         
         # Update lock fields
         user_data["lock_code"] = lock_code
         user_data["lock_status_from_lock"] = lock_status
-        if lock_status is not None:
-            from .const import USER_STATUS_ENABLED
-            user_data["lock_enabled"] = (lock_status == USER_STATUS_ENABLED)
+        from .const import USER_STATUS_ENABLED
+        user_data["lock_enabled"] = (lock_status == USER_STATUS_ENABLED)
         
-        # Calculate sync status
+        # Calculate sync status based on code existence
+        # Note: We can't check schedule here, so we use cached_enabled
+        # The caller should check schedule if needed
+        should_be_enabled = cached_enabled
+        
         if code_type == CODE_TYPE_PIN:
-            codes_match = (cached_code == lock_code)
-            status_match = (cached_status == lock_status)
-            user_data["synced_to_lock"] = codes_match and status_match
+            if should_be_enabled:
+                # Should be enabled: code must exist and match
+                user_data["synced_to_lock"] = (
+                    lock_status == USER_STATUS_ENABLED and
+                    lock_code == cached_code and
+                    cached_code != ""
+                )
+            else:
+                # Should be disabled: code must NOT exist
+                user_data["synced_to_lock"] = (
+                    lock_status == USER_STATUS_AVAILABLE or
+                    lock_code == ""
+                )
         else:
-            # For FOBs, only check status
-            status_match = (cached_status == lock_status)
-            user_data["synced_to_lock"] = status_match
+            # For FOBs, check status only
+            if should_be_enabled:
+                user_data["synced_to_lock"] = (lock_status == USER_STATUS_ENABLED)
+            else:
+                user_data["synced_to_lock"] = (lock_status == USER_STATUS_AVAILABLE)

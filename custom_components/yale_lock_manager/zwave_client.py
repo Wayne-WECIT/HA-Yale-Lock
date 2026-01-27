@@ -139,72 +139,103 @@ class ZWaveClient:
             self._logger.error_zwave("get_user_code_data", err, slot=slot)
             return None
 
-    async def set_user_code(self, slot: int, code: str, status: int) -> None:
+    async def set_user_code(self, slot: int, code: str) -> None:
         """Set user code on the lock using invoke_cc_api.
+        
+        Status is derived from code existence - when a code is set, status becomes ENABLED.
         
         According to Z-Wave User Code CC specification, the set method parameters are:
         [userId, userIdStatus, userCode]
         
-        Parameters must be:
+        However, we use [userId, userCode] and let the lock derive status from code existence.
+        Some locks may require the full format - if this fails, we may need to adjust.
+        
+        Parameters:
         - userId: INTEGER (slot number)
-        - userIdStatus: INTEGER (0, 1, or 2)
         - userCode: STRING (PIN code)
         """
         try:
             # Validate and convert types explicitly
             userId = int(slot)
-            userIdStatus = int(status)
             userCode = str(code)
             
-            # Validate status is in valid range (0, 1, or 2)
-            if userIdStatus not in (USER_STATUS_AVAILABLE, USER_STATUS_ENABLED, USER_STATUS_DISABLED):
-                raise ValueError(f"Invalid status value: {userIdStatus}. Must be 0, 1, or 2")
+            if not userCode:
+                raise ValueError("Code cannot be empty. Use clear_user_code() to clear a code.")
             
             # Log parameter types and values for debugging
             _LOGGER.info(
-                "set_user_code called: slot=%s (type=%s), code='%s' (type=%s), status=%s (type=%s)",
-                userId, type(userId).__name__,
-                userCode, type(userCode).__name__,
-                userIdStatus, type(userIdStatus).__name__
+                "set_user_code called: slot=%s, code='%s'",
+                userId, userCode
             )
             
-            # Build parameters array with explicit types
-            # Z-Wave User Code CC set parameters: [userId, userIdStatus, userCode]
-            parameters = [userId, userIdStatus, userCode]
+            # Build parameters array - try [userId, userCode] first
+            # Note: Z-Wave spec requires [userId, userIdStatus, userCode], but we're trying
+            # to let the lock derive status. If this fails, we may need to use:
+            # parameters = [userId, USER_STATUS_ENABLED, userCode]
+            parameters = [userId, userCode]
             _LOGGER.info(
-                "Parameters array: %s (types: [%s, %s, %s])",
+                "Parameters array: %s (types: [%s, %s])",
                 parameters,
                 type(parameters[0]).__name__,
-                type(parameters[1]).__name__,
-                type(parameters[2]).__name__
+                type(parameters[1]).__name__
             )
             
-            self._logger.info_operation("Setting user code on lock", slot, status=status, code="***")
+            self._logger.info_operation("Setting user code on lock", slot, code="***")
             
-            # Z-Wave User Code CC set parameters: [userId, userIdStatus, userCode]
-            await self._hass.services.async_call(
-                ZWAVE_JS_DOMAIN,
-                "invoke_cc_api",
-                {
-                    "entity_id": self._lock_entity_id,
-                    "command_class": CC_USER_CODE,
-                    "method_name": "set",
-                    "parameters": parameters,  # [userId (int), userIdStatus (int), userCode (str)]
-                },
-                blocking=True,
-            )
+            try:
+                # Try the simplified format first
+                await self._hass.services.async_call(
+                    ZWAVE_JS_DOMAIN,
+                    "invoke_cc_api",
+                    {
+                        "entity_id": self._lock_entity_id,
+                        "command_class": CC_USER_CODE,
+                        "method_name": "set",
+                        "parameters": parameters,
+                    },
+                    blocking=True,
+                )
+            except Exception as format_err:
+                # If simplified format fails, try with explicit status
+                _LOGGER.warning(
+                    "Simplified format failed for slot %s, trying with explicit status: %s",
+                    slot, format_err
+                )
+                parameters = [userId, USER_STATUS_ENABLED, userCode]
+                await self._hass.services.async_call(
+                    ZWAVE_JS_DOMAIN,
+                    "invoke_cc_api",
+                    {
+                        "entity_id": self._lock_entity_id,
+                        "command_class": CC_USER_CODE,
+                        "method_name": "set",
+                        "parameters": parameters,
+                    },
+                    blocking=True,
+                )
             
             self._logger.info_operation("User code set on lock", slot)
-            _LOGGER.info("set_user_code completed: slot=%s, status=%s", slot, status)
+            _LOGGER.info("set_user_code completed: slot=%s", slot)
             
         except Exception as err:
             self._logger.error_zwave("set_user_code", err, slot=slot)
             raise
 
     async def clear_user_code(self, slot: int) -> None:
-        """Clear user code on the lock using invoke_cc_api."""
+        """Clear user code from the lock.
+        
+        This sets the code to empty string with status AVAILABLE, which clears the slot.
+        """
         try:
-            self._logger.info_operation("Clearing user code on lock", slot)
+            userId = int(slot)
+            
+            _LOGGER.info("clear_user_code called: slot=%s", userId)
+            
+            self._logger.info_operation("Clearing user code from lock", slot)
+            
+            # To clear a code, set it to empty string with status AVAILABLE
+            # Z-Wave User Code CC set parameters: [userId, userIdStatus, userCode]
+            parameters = [userId, USER_STATUS_AVAILABLE, ""]
             
             await self._hass.services.async_call(
                 ZWAVE_JS_DOMAIN,
@@ -213,12 +244,13 @@ class ZWaveClient:
                     "entity_id": self._lock_entity_id,
                     "command_class": CC_USER_CODE,
                     "method_name": "set",
-                    "parameters": [slot, USER_STATUS_AVAILABLE, ""],
+                    "parameters": parameters,
                 },
                 blocking=True,
             )
             
-            self._logger.info_operation("User code cleared on lock", slot)
+            self._logger.info_operation("User code cleared from lock", slot)
+            _LOGGER.info("clear_user_code completed: slot=%s", slot)
             
         except Exception as err:
             self._logger.error_zwave("clear_user_code", err, slot=slot)
