@@ -184,3 +184,182 @@ However, this is a significant architectural change that may not match user expe
 2. Consider push-based updates for better performance
 3. Keep current graceful degradation approach for status changes
 4. Document the limitation clearly for users
+
+---
+
+## Keymaster Usage Tracking Analysis
+
+Research into `keymaster` (https://github.com/FutureTense/keymaster) to compare PIN usage tracking implementation with our Yale Lock Manager.
+
+### Key Differences Identified
+
+#### 1. Storage Architecture
+
+**Keymaster:**
+- Uses Home Assistant entities (`input_number.accesscount_LOCKNAME_TEMPLATENUM`)
+- Uses `input_boolean.accesslimit_LOCKNAME_TEMPLATENUM` to enable/disable limits
+- Values are visible in Home Assistant UI as entities
+- Persisted automatically by Home Assistant
+
+**Our System:**
+- Uses JSON storage (`.storage/yale_lock_manager.users`)
+- Stores `usage_count` and `usage_limit` in user_data dictionary
+- Not exposed as separate entities
+- Requires manual save via `async_save_user_data()`
+
+#### 2. Usage Tracking Direction
+
+**Keymaster:**
+- **Decrements** count when unlock occurs (countdown approach)
+- Starts with a limit value (e.g., 10)
+- Decrements to 0, then code becomes invalid
+- Automation: `input_number.decrement` on keypad unlock events (action codes 6 or 19)
+
+**Our System:**
+- **Increments** count when access occurs (count-up approach)
+- Starts at 0
+- Increments until reaching limit, then auto-disables
+- Logic: `usage_count = user_data.get("usage_count", 0) + 1`
+
+#### 3. Enforcement Mechanism
+
+**Keymaster:**
+- Checks count **before** enabling code slot
+- Template condition: `(not is_access_limit_enabled or is_access_count_valid)`
+- Code slot binary sensor becomes `off` when count reaches 0
+- Prevents code from working when limit reached (preventive)
+
+**Our System:**
+- Checks count **after** access occurs
+- Auto-disables user when `usage_count >= usage_limit`
+- Fires `EVENT_USAGE_LIMIT_REACHED` event
+- Calls `async_disable_user()` to disable the slot (reactive)
+
+#### 4. Event Detection
+
+**Keymaster:**
+- Listens to `keymaster_lock_state_changed` events
+- Filters for action codes 6 or 19 (Keypad Unlock)
+- Uses Z-Wave alarm_type/access_control sensors
+- Automation in `keymaster_common.yaml` decrements count on unlock
+
+**Our System:**
+- Listens to `zwave_js_value_updated` events
+- Detects Notification CC events (access control notifications)
+- Extracts user slot from notification data
+- Handles in `_handle_access_event()` method in coordinator
+
+#### 5. Architecture Approach
+
+**Keymaster:**
+- YAML-based with template generation
+- Generates automations and entities dynamically
+- Uses Home Assistant's native entity system
+- More declarative, less programmatic
+- Each code slot gets its own set of entities
+
+**Our System:**
+- Python-based coordinator pattern
+- Centralized logic in `coordinator.py`
+- Custom storage system
+- More programmatic, centralized control
+- All slots managed in single data structure
+
+### Advantages of Each Approach
+
+#### Keymaster Advantages:
+1. **Visibility**: Usage counts visible as Home Assistant entities
+2. **Integration**: Can be used in other automations easily
+3. **Persistence**: Automatic persistence via Home Assistant
+4. **Countdown Logic**: More intuitive (starts with limit, counts down)
+5. **Preventive**: Prevents code from working when limit reached (proactive)
+6. **Entity-Based**: Each slot has dedicated entities for easy monitoring
+
+#### Our System Advantages:
+1. **Centralized**: All logic in one place (coordinator)
+2. **Event-Driven**: Fires events for automation integration
+3. **Flexible**: Can easily add more logic (schedules, validation)
+4. **Count-Up Logic**: Tracks actual usage (more intuitive for reporting)
+5. **Reactive**: Auto-disables after limit reached (can still track over-limit usage)
+6. **Simpler Storage**: Single JSON file vs multiple entities per slot
+
+### Implementation Details
+
+#### Keymaster Usage Tracking Flow:
+
+1. **Initialization**: `input_number.accesscount_LOCKNAME_TEMPLATENUM` created with min: 0, max: 100
+2. **Setting Limit**: User sets limit value in the input_number entity
+3. **Enabling Limit**: `input_boolean.accesslimit_LOCKNAME_TEMPLATENUM` turned on
+4. **Auto-Enable**: Automation turns on `accesslimit` boolean when count > 0
+5. **Decrement on Unlock**: Automation decrements count when keypad unlock detected
+6. **Validation**: Binary sensor checks `(not is_access_limit_enabled or is_access_count_valid)` before allowing code to work
+7. **Reset**: Script resets count to 0 when slot is reset
+
+#### Our Usage Tracking Flow:
+
+1. **Initialization**: `usage_count` and `usage_limit` stored in user_data dictionary
+2. **Setting Limit**: User sets limit via `set_usage_limit` service
+3. **Access Detection**: `_handle_access_event()` called on unlock notification
+4. **Increment**: `usage_count = user_data.get("usage_count", 0) + 1`
+5. **Check Limit**: If `usage_count >= usage_limit`, fire event and disable user
+6. **Auto-Disable**: `async_disable_user()` clears code from lock
+7. **Reset**: `reset_usage_count` service resets count to 0
+
+### Potential Improvements for Our System
+
+#### 1. Expose Usage Count as Entity (Optional)
+- Create `sensor.yale_lock_manager_slot_X_usage_count` entities
+- Sync with our internal `usage_count` values
+- Allows visibility and integration with other automations
+- **Trade-off**: More entities to manage, but better Home Assistant integration
+
+#### 2. Add Countdown Mode (Optional)
+- Allow user to choose count-up or countdown mode
+- Countdown: Start with limit, decrement to 0 (like keymaster)
+- Count-up: Start at 0, increment to limit (current)
+- **Trade-off**: More complexity, but matches keymaster's approach
+
+#### 3. Preventive Enforcement (Consider)
+- Check usage limit before allowing code to work
+- Similar to keymaster's template condition approach
+- Would require checking in `_is_code_valid()` method
+- **Trade-off**: Prevents over-limit usage, but requires validation on every access check
+
+#### 4. Better Event Integration
+- Our event system is already good (`EVENT_USAGE_LIMIT_REACHED`)
+- Could add more granular events (`usage_count_changed`, etc.)
+- **Trade-off**: More events, but better automation integration
+
+### Code References
+
+#### Keymaster Files:
+- `custom_components/keymaster/keymaster.yaml` - Template for usage tracking entities
+- `custom_components/keymaster/keymaster_common.yaml` - Decrement automation (lines 241-263)
+- Generated YAML files show full implementation with `accesscount` and `accesslimit` entities
+
+#### Our System Files:
+- `custom_components/yale_lock_manager/coordinator.py` - `_handle_access_event()` method (lines 158-217)
+- `custom_components/yale_lock_manager/services.py` - `set_usage_limit` and `reset_usage_count` services
+- `custom_components/yale_lock_manager/www/yale-lock-manager-card.js` - UI display of usage counts
+
+### Recommendations
+
+1. **Keep Current Approach**: Our count-up approach is more intuitive for reporting and tracking actual usage. It's easier to understand "used 5 times out of 10" than "5 uses remaining out of 10".
+
+2. **Consider Entity Exposure**: Optionally expose usage counts as sensors for better Home Assistant integration. This would allow users to create automations based on usage counts without needing to parse our events.
+
+3. **Maintain Event System**: Our event-driven approach is more flexible than keymaster's template-based system. Events can be used in automations, scripts, and other integrations.
+
+4. **Document Differences**: Create documentation explaining why we chose count-up vs countdown, and the advantages of each approach.
+
+5. **Preventive Enforcement**: Consider adding a check in `_is_code_valid()` to prevent codes from working when limit is reached, similar to keymaster's approach. This would be more secure but requires careful implementation to avoid race conditions.
+
+### Conclusion
+
+Keymaster's approach uses Home Assistant entities for visibility and a countdown system that prevents codes from working when the limit is reached. Our approach uses centralized storage with count-up tracking and reactive disabling.
+
+Both approaches have merit:
+- **Keymaster**: Better for users who want entity-based monitoring and preventive enforcement
+- **Our System**: Better for centralized management and flexible event-driven automations
+
+The main difference is architectural: keymaster is more declarative (YAML templates), while ours is more programmatic (Python coordinator). Neither is inherently better - they serve different use cases and preferences.
