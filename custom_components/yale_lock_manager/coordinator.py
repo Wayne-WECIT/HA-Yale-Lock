@@ -553,78 +553,29 @@ class YaleLockCoordinator(DataUpdateCoordinator):
         return False
 
     async def async_clear_user_code(self, slot: int) -> None:
-        """Clear a user code from storage and lock with verification.
+        """Clear a user code from storage and lock.
         
-        This clears the PIN on the lock and sets status to Available for both cached and lock.
+        This uses the lock_code_manager approach - clears the code from the lock,
+        then pulls data from the lock to update the cache with actual lock state.
         """
-        # Clear from lock using invoke_cc_api
         try:
             _LOGGER.info("Clearing slot %s from lock...", slot)
             
-            await self.hass.services.async_call(
-                ZWAVE_JS_DOMAIN,
-                "invoke_cc_api",
-                {
-                    "entity_id": self.lock_entity_id,
-                    "command_class": CC_USER_CODE,
-                    "method_name": "clear",
-                    "parameters": [slot],
-                },
-                blocking=True,
-            )
+            # Use Z-Wave client service (lock_code_manager approach)
+            await self._zwave_client.clear_user_code(slot)
             
             # Wait for lock to process the clear operation
-            await asyncio.sleep(2.0)
+            await asyncio.sleep(3.0)
             
-            # VERIFY: Read back the status to confirm it's cleared
-            _LOGGER.info("Verifying slot %s was cleared...", slot)
-            verification_status = await self._get_user_code_status(slot)
+            # Pull data from lock to get the actual state and update cache
+            _LOGGER.info("Pulling data from lock to update cache for slot %s...", slot)
+            await self.async_pull_codes_from_lock()
             
-            if verification_status == USER_STATUS_AVAILABLE or verification_status is None:
-                _LOGGER.info("✓ Verified: Slot %s successfully cleared", slot)
-                
-                # Update storage: set status to Available for both cached and lock
-                slot_str = str(slot)
-                if slot_str in self._user_data["users"]:
-                    # Update existing entry
-                    self._user_data["users"][slot_str].update({
-                        "code": "",  # Clear cached PIN
-                        "lock_code": "",  # Clear lock PIN
-                        "lock_status": USER_STATUS_AVAILABLE,  # Set cached status to Available
-                        "lock_status_from_lock": USER_STATUS_AVAILABLE,  # Set lock status to Available
-                        "lock_enabled": False,
-                        "enabled": False,
-                        "synced_to_lock": True,  # Both are Available, so synced
-                    })
-                else:
-                    # Create new entry with Available status
-                    self._user_data["users"][slot_str] = {
-                        "name": f"User {slot}",
-                        "code_type": CODE_TYPE_PIN,
-                        "code": "",  # No cached PIN
-                        "lock_code": "",  # No lock PIN
-                        "lock_status": USER_STATUS_AVAILABLE,  # Cached status: Available
-                        "lock_status_from_lock": USER_STATUS_AVAILABLE,  # Lock status: Available
-                        "lock_enabled": False,
-                        "enabled": False,
-                        "schedule": {"start": None, "end": None},
-                        "usage_limit": None,
-                        "usage_count": 0,
-                        "synced_to_lock": True,  # Both are Available, so synced
-                        "last_used": None,
-                    }
-                
-                await self.async_save_user_data()
-                await self.async_request_refresh()
-            else:
-                _LOGGER.warning("⚠️ Slot %s may not be fully cleared (status: %s)", slot, verification_status)
-                # Don't raise error - just log warning and continue
-                
+            _LOGGER.info("✓ Slot %s cleared and cache updated from lock", slot)
+            
         except Exception as err:
             _LOGGER.error("Error clearing slot %s from lock: %s", slot, err)
-            # Don't raise - allow storage clear to complete
-        
-        await self.async_request_refresh()
+            raise
 
     async def async_enable_user(self, slot: int) -> None:
         """Enable a user code."""
