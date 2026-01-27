@@ -550,57 +550,63 @@ class YaleLockCoordinator(DataUpdateCoordinator):
         # Get existing user data if slot exists
         existing_user = self._user_data["users"].get(str(slot))
 
-        # For FOBs, code can be empty or short
+        # For FOBs, only save name and code_type - no code, status, schedule, or usage_limit
         if code_type == CODE_TYPE_FOB:
-            # FOBs don't need a PIN code, use placeholder
-            if not code or len(code) < 4:
-                code = "00000000"  # 8-digit placeholder for FOBs
+            # FOBs don't need PIN code, status, schedule, or usage_limit
+            code = ""  # Empty code for FOBs
+            schedule = {"start": None, "end": None}
+            usage_limit = None
+            usage_count = 0
+            lock_status = USER_STATUS_AVAILABLE  # Default status for FOBs
+            # Preserve existing lock_code and lock_status_from_lock if updating
+            if existing_user:
+                lock_code = existing_user.get("lock_code", "")
+                lock_status_from_lock = existing_user.get("lock_status_from_lock")
+                lock_enabled = existing_user.get("lock_enabled", False)
+            else:
+                lock_code = ""
+                lock_status_from_lock = None
+                lock_enabled = False
+            # FOBs are always synced (they're managed directly on the lock)
+            synced_to_lock = True
         else:
             # For PINs, validate code length
             if not code or len(code) < 4:
                 raise ValueError("PIN code must be at least 4 digits")
 
-        # Check if slot exists in local storage
-        if existing_user:
-            _LOGGER.debug(
-                "Slot %s already in local storage: name=%s, enabled=%s", 
-                slot, existing_user.get("name"), existing_user.get("enabled")
-            )
+            # Check slot protection (unless override is True)
+            if not override_protection and not await self._is_slot_safe_to_write(slot):
+                raise ValueError(f"Slot {slot} is occupied by an unknown code. Use override_protection=True to overwrite.")
 
-        # Check slot protection (unless override is True)
-        if not override_protection and not await self._is_slot_safe_to_write(slot):
-            raise ValueError(f"Slot {slot} is occupied by an unknown code. Use override_protection=True to overwrite.")
+            # IMMEDIATE SAVE: Don't query lock - use existing lock_code/lock_status_from_lock from storage
+            # Preserve existing schedule/usage data if updating
+            if existing_user:
+                schedule = existing_user.get("schedule", {"start": None, "end": None})
+                usage_limit = existing_user.get("usage_limit")
+                usage_count = existing_user.get("usage_count", 0)
+                # Preserve existing lock_code and lock_status_from_lock (don't query lock)
+                lock_code = existing_user.get("lock_code", "")
+                lock_status_from_lock = existing_user.get("lock_status_from_lock")
+                lock_enabled = existing_user.get("lock_enabled", False)
+                # Use provided status if available, otherwise preserve existing cached status
+                lock_status = status if status is not None else existing_user.get("lock_status", USER_STATUS_AVAILABLE)
+            else:
+                schedule = {"start": None, "end": None}
+                usage_limit = None
+                usage_count = 0
+                # New user - no lock data yet
+                lock_code = ""
+                lock_status_from_lock = None
+                lock_enabled = False
+                # Use provided status if available, otherwise default to Available
+                lock_status = status if status is not None else USER_STATUS_AVAILABLE
 
-        # IMMEDIATE SAVE: Don't query lock - use existing lock_code/lock_status_from_lock from storage
-        # Preserve existing schedule/usage data if updating
-        if existing_user:
-            schedule = existing_user.get("schedule", {"start": None, "end": None})
-            usage_limit = existing_user.get("usage_limit")
-            usage_count = existing_user.get("usage_count", 0)
-            # Preserve existing lock_code and lock_status_from_lock (don't query lock)
-            lock_code = existing_user.get("lock_code", "")
-            lock_status_from_lock = existing_user.get("lock_status_from_lock")
-            lock_enabled = existing_user.get("lock_enabled", False)
-            # Use provided status if available, otherwise preserve existing cached status
-            lock_status = status if status is not None else existing_user.get("lock_status", USER_STATUS_AVAILABLE)
-        else:
-            schedule = {"start": None, "end": None}
-            usage_limit = None
-            usage_count = 0
-            # New user - no lock data yet
-            lock_code = ""
-            lock_status_from_lock = None
-            lock_enabled = False
-            # Use provided status if available, otherwise default to Available
-            lock_status = status if status is not None else USER_STATUS_AVAILABLE
-
-        # Calculate sync status: based on code existence, not status
-        # Note: We can't check schedule here, so we use enabled flag
-        # Sync will be recalculated when we check the lock
-        cached_enabled = (lock_status == USER_STATUS_ENABLED) if existing_user else False
-        should_be_enabled = cached_enabled  # Can't check schedule here
-        
-        if code_type == CODE_TYPE_PIN:
+            # Calculate sync status: based on code existence, not status
+            # Note: We can't check schedule here, so we use enabled flag
+            # Sync will be recalculated when we check the lock
+            cached_enabled = (lock_status == USER_STATUS_ENABLED) if existing_user else False
+            should_be_enabled = cached_enabled  # Can't check schedule here
+            
             if should_be_enabled:
                 # Should be enabled: code must exist and match
                 synced_to_lock = (
@@ -616,26 +622,20 @@ class YaleLockCoordinator(DataUpdateCoordinator):
                 )
             _LOGGER.info("Slot %s sync calculation - Cached code: %s, Lock code: %s, Should be enabled: %s, Synced: %s",
                         slot, "***" if code else "None", "***" if lock_code else "None", should_be_enabled, synced_to_lock)
-        else:
-            # For FOBs, check status only
-            if should_be_enabled:
-                synced_to_lock = (lock_status_from_lock == USER_STATUS_ENABLED)
-            else:
-                synced_to_lock = (lock_status_from_lock == USER_STATUS_AVAILABLE)
         
         self._user_data["users"][str(slot)] = {
             "name": name,
             "code_type": code_type,
-            "code": code,  # Cached code (editable) - this is the NEW code from the form
+            "code": code,  # Cached code (editable) - empty for FOBs
             "lock_code": lock_code,  # PIN from lock (read-only, updated from query above)
-            "enabled": lock_status == USER_STATUS_ENABLED,  # Derived from cached status
-            "lock_status": lock_status,  # Store cached status (editable)
+            "enabled": lock_status == USER_STATUS_ENABLED if code_type == CODE_TYPE_PIN else False,  # Derived from cached status (always False for FOBs)
+            "lock_status": lock_status,  # Store cached status (editable for PINs, default for FOBs)
             "lock_status_from_lock": lock_status_from_lock,  # Store actual status from lock (read-only, updated from query above)
             "lock_enabled": lock_enabled,  # Enabled status from lock (for compatibility)
-            "schedule": schedule if code_type == CODE_TYPE_PIN else {"start": None, "end": None},
-            "usage_limit": usage_limit if code_type == CODE_TYPE_PIN else None,
-            "usage_count": usage_count if code_type == CODE_TYPE_PIN else 0,
-            "synced_to_lock": synced_to_lock,  # Calculated based on code and status comparison
+            "schedule": schedule,  # Empty for FOBs
+            "usage_limit": usage_limit,  # None for FOBs
+            "usage_count": usage_count,  # 0 for FOBs
+            "synced_to_lock": synced_to_lock,  # Calculated based on code and status comparison (always True for FOBs)
             "last_used": None,
         }
 
@@ -976,13 +976,34 @@ class YaleLockCoordinator(DataUpdateCoordinator):
             # Check if we already have this slot
             if slot_str in self._user_data["users"]:
                 user_data = self._user_data["users"][slot_str]
+                cached_code_type = user_data.get("code_type", CODE_TYPE_PIN)
+                
+                # If slot is marked as FOB in cache, check if lock has PIN
+                if cached_code_type == CODE_TYPE_FOB:
+                    # If lock has no PIN (AVAILABLE or no code), skip overwriting
+                    if status_int == USER_STATUS_AVAILABLE or not code:
+                        _LOGGER.debug("Slot %s: Marked as FOB, lock has no PIN - skipping overwrite", slot)
+                        # Still update lock_code and lock_status_from_lock for reference
+                        user_data["lock_code"] = ""
+                        user_data["lock_status_from_lock"] = status_int
+                        user_data["lock_enabled"] = False
+                        # Recalculate sync status (FOBs are always synced)
+                        user_data["synced_to_lock"] = True
+                        continue  # Skip the overwrite logic
+                    
+                    # If lock has a PIN (ENABLED with code), it was changed from FOB to PIN on lock
+                    if status_int == USER_STATUS_ENABLED and code:
+                        _LOGGER.info("Slot %s: Marked as FOB but lock has PIN - updating to PIN type", slot)
+                        # Update code_type to PIN and proceed with normal overwrite logic
+                        user_data["code_type"] = CODE_TYPE_PIN
+                        # Continue with normal PIN overwrite logic below
                 
                 # Update lock state
                 user_data["lock_code"] = code if code else ""
                 user_data["lock_status_from_lock"] = status_int
                 user_data["lock_enabled"] = (status_int == USER_STATUS_ENABLED)
                 
-                # PIN Overwrite Logic:
+                # PIN Overwrite Logic (only for PIN slots, or FOB slots that were changed to PIN):
                 # - If status = ENABLED (1) AND code exists: Overwrite cached PIN
                 # - If status = AVAILABLE (0) OR DISABLED (2): Preserve cached PIN
                 if status_int == USER_STATUS_ENABLED and code:

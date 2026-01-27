@@ -1346,7 +1346,7 @@ class YaleLockManagerCard extends HTMLElement {
                           </div>
                         
                 ${!isFob ? `
-                        <div class="form-group">
+                        <div id="status-section-${user.slot}" class="form-group">
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
                       <div>
                         <label>📝 Cached Status (editable):</label>
@@ -1482,7 +1482,8 @@ class YaleLockManagerCard extends HTMLElement {
                           
                 <hr>
                           
-                          <div class="form-group">
+                ${!isFob ? `
+                          <div id="schedule-section-${user.slot}" class="form-group">
                   <label class="toggle-label">
                     <label class="toggle-switch">
                       <input 
@@ -1520,9 +1521,10 @@ class YaleLockManagerCard extends HTMLElement {
                             </div>
                   </div>
                           </div>
+                ` : ''}
                           
                 ${!isFob ? `
-                          <div class="form-group">
+                          <div id="limit-section-${user.slot}" class="form-group">
                     <label class="toggle-label">
                       <label class="toggle-switch">
                         <input 
@@ -2010,13 +2012,22 @@ class YaleLockManagerCard extends HTMLElement {
   changeType(slot, newType) {
     const codeField = this.shadowRoot.getElementById(`code-field-${slot}`);
     const fobNotice = this.shadowRoot.getElementById(`fob-notice-${slot}`);
+    const statusSection = this.shadowRoot.getElementById(`status-section-${slot}`);
+    const scheduleSection = this.shadowRoot.getElementById(`schedule-section-${slot}`);
+    const limitSection = this.shadowRoot.getElementById(`limit-section-${slot}`);
     
     if (newType === 'fob') {
       if (codeField) codeField.classList.add('hidden');
       if (fobNotice) fobNotice.classList.remove('hidden');
+      if (statusSection) statusSection.classList.add('hidden');
+      if (scheduleSection) scheduleSection.classList.add('hidden');
+      if (limitSection) limitSection.classList.add('hidden');
     } else {
       if (codeField) codeField.classList.remove('hidden');
       if (fobNotice) fobNotice.classList.add('hidden');
+      if (statusSection) statusSection.classList.remove('hidden');
+      if (scheduleSection) scheduleSection.classList.remove('hidden');
+      if (limitSection) limitSection.classList.remove('hidden');
     }
   }
 
@@ -2316,8 +2327,9 @@ class YaleLockManagerCard extends HTMLElement {
     // Get values from form fields (which are stored in _formValues)
     const name = this.shadowRoot.getElementById(`name-${slot}`).value.trim();
     const codeType = this.shadowRoot.getElementById(`type-${slot}`).value;
-    const code = codeType === 'pin' ? (this.shadowRoot.getElementById(`code-${slot}`)?.value.trim() || '') : '';
-    const cachedStatus = parseInt(this.shadowRoot.getElementById(`cached-status-${slot}`)?.value || '0', 10);
+    const isFob = codeType === 'fob';
+    const code = !isFob ? (this.shadowRoot.getElementById(`code-${slot}`)?.value.trim() || '') : '';
+    const cachedStatus = !isFob ? parseInt(this.shadowRoot.getElementById(`cached-status-${slot}`)?.value || '0', 10) : 0;
     
     // Log before update
     const beforeCached = { ...(this._formValues[slot] || {}) };
@@ -2334,7 +2346,9 @@ class YaleLockManagerCard extends HTMLElement {
     this._setFormValue(slot, 'name', name);
     this._setFormValue(slot, 'code', code);
     this._setFormValue(slot, 'type', codeType);
-    this._setFormValue(slot, 'cachedStatus', cachedStatus);
+    if (!isFob) {
+      this._setFormValue(slot, 'cachedStatus', cachedStatus);
+    }
 
     // Validation
     if (!name) {
@@ -2342,8 +2356,8 @@ class YaleLockManagerCard extends HTMLElement {
       return;
     }
 
-    // PIN validation
-    if (codeType === 'pin') {
+    // PIN validation (only for PIN slots)
+    if (!isFob) {
       if (cachedStatus === 1 && !code) {
         this.showStatus(slot, '⚠️ PIN is required when status is Enabled', 'error');
         return;
@@ -2366,63 +2380,68 @@ class YaleLockManagerCard extends HTMLElement {
       this.showStatus(slot, '⏳ Saving user data...', 'info');
       this.renderStatusMessage(slot);
       
-      await this._hass.callService('yale_lock_manager', 'set_user_code', {
+      // Build service data - for FOB slots, only send name and code_type
+      const serviceData = {
         entity_id: this._config.entity,
         slot: parseInt(slot, 10),
         name: name,
-        code: code,
-        code_type: codeType,
-        override_protection: false,
-        status: cachedStatus
-      });
+        code_type: codeType
+      };
+      
+      // Only include these for PIN slots
+      if (!isFob) {
+        serviceData.code = code;
+        serviceData.status = cachedStatus;
+      }
+      
+      await this._hass.callService('yale_lock_manager', 'set_user_code', serviceData);
 
-      // Save schedule
-      const scheduleToggle = this.shadowRoot.getElementById(`schedule-toggle-${slot}`);
-      const startInput = this.shadowRoot.getElementById(`start-${slot}`);
-      const endInput = this.shadowRoot.getElementById(`end-${slot}`);
-      
-      let start = null;
-      let end = null;
-      
-      if (scheduleToggle?.checked) {
-        const startVal = startInput?.value?.trim() || '';
-        const endVal = endInput?.value?.trim() || '';
+      // Save schedule (PINs only - FOBs don't have schedules)
+      if (!isFob) {
+        const scheduleToggle = this.shadowRoot.getElementById(`schedule-toggle-${slot}`);
+        const startInput = this.shadowRoot.getElementById(`start-${slot}`);
+        const endInput = this.shadowRoot.getElementById(`end-${slot}`);
         
-        if (startVal && endVal) {
-          start = startVal;
-          end = endVal;
+        let start = null;
+        let end = null;
+        
+        if (scheduleToggle?.checked) {
+          const startVal = startInput?.value?.trim() || '';
+          const endVal = endInput?.value?.trim() || '';
+          
+          if (startVal && endVal) {
+            start = startVal;
+            end = endVal;
+          }
         }
-      }
-      
-      if (start && end) {
-        const now = new Date();
-        if (new Date(start) < now) {
-          this.showStatus(slot, 'Start date must be in the future', 'error');
-          return;
+        
+        if (start && end) {
+          const now = new Date();
+          if (new Date(start) < now) {
+            this.showStatus(slot, 'Start date must be in the future', 'error');
+            return;
+          }
+          if (new Date(end) < now) {
+            this.showStatus(slot, 'End date must be in the future', 'error');
+            return;
+          }
+          if (new Date(end) <= new Date(start)) {
+            this.showStatus(slot, 'End date must be after start date', 'error');
+            return;
+          }
         }
-        if (new Date(end) < now) {
-          this.showStatus(slot, 'End date must be in the future', 'error');
-          return;
-        }
-        if (new Date(end) <= new Date(start)) {
-          this.showStatus(slot, 'End date must be after start date', 'error');
-          return;
-        }
-      }
 
-      await this._hass.callService('yale_lock_manager', 'set_user_schedule', {
-        entity_id: this._config.entity,
-        slot: parseInt(slot, 10),
-        start_datetime: start,
-        end_datetime: end
-      });
+        await this._hass.callService('yale_lock_manager', 'set_user_schedule', {
+          entity_id: this._config.entity,
+          slot: parseInt(slot, 10),
+          start_datetime: start,
+          end_datetime: end
+        });
 
-      // Save usage limit (PINs only)
-      // Declare limitToggle and limitInput outside the if block so they're available later
-      const limitToggle = codeType === 'pin' ? this.shadowRoot.getElementById(`limit-toggle-${slot}`) : null;
-      const limitInput = codeType === 'pin' ? this.shadowRoot.getElementById(`limit-${slot}`) : null;
-      
-      if (codeType === 'pin') {
+        // Save usage limit (PINs only)
+        const limitToggle = this.shadowRoot.getElementById(`limit-toggle-${slot}`);
+        const limitInput = this.shadowRoot.getElementById(`limit-${slot}`);
+        
         const limit = (limitToggle?.checked && limitInput?.value) ? parseInt(limitInput.value, 10) : null;
         
         await this._hass.callService('yale_lock_manager', 'set_usage_limit', {
