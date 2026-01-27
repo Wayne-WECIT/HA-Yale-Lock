@@ -2102,28 +2102,24 @@ class YaleLockManagerCard extends HTMLElement {
   async changeStatus(slot, statusValue) {
     const status = parseInt(statusValue, 10);
     
-    // CRITICAL: Check if user exists in entity state before trying to set status
-    // getUserData() returns users from entity state - if slot doesn't exist in entity, user will be undefined
-    const user = this.getUserData().find(u => u.slot === slot);
+    // CRITICAL: Check if user actually exists in entity state
+    // getUserData() returns all 20 slots with default objects, so we need to check the actual entity state
+    const stateObj = this._hass?.states[this._config?.entity];
+    const users = stateObj?.attributes?.users || {};
+    const slotStr = slot.toString();
+    const userExistsInEntity = slotStr in users && users[slotStr] && users[slotStr].name;
     
     // If user doesn't exist in entity state, don't call service
     // This happens when:
     // 1. Typing in username for an available slot and status changes programmatically
     // 2. Manually changing status for a slot that hasn't been saved yet
-    if (!user) {
+    if (!userExistsInEntity) {
       // User doesn't exist in entity state - just update form value, don't call service
       this._setFormValue(slot, 'cachedStatus', status);
       return; // Exit silently - no error message needed
     }
     
     // User exists in entity state - safe to call service
-    // But also verify user has a name (double-check it's a real user)
-    if (!user.name || user.name === `User ${slot}`) {
-      // User exists but has no real name - don't call service
-      this._setFormValue(slot, 'cachedStatus', status);
-      return;
-    }
-    
     try {
       await this._hass.callService('yale_lock_manager', 'set_user_status', {
         entity_id: this._config.entity,
