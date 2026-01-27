@@ -411,6 +411,123 @@ class YaleLockCoordinator(DataUpdateCoordinator):
             return code_str or ""
         return ""
 
+    async def _update_slot_from_lock(self, slot: int) -> None:
+        """Update a single slot's data from the lock.
+        
+        This is an optimized version that only queries and updates one slot,
+        used after operations like clear_user_code where we know which slot changed.
+        """
+        data = await self._get_user_code_data(slot)
+        
+        if not data:
+            _LOGGER.debug("Slot %s - No data returned (empty or timeout)", slot)
+            return
+        
+        status = data.get("userIdStatus")
+        code = data.get("userCode", "")
+        
+        # Convert code to string if it's not already
+        if code is not None:
+            code = str(code)
+        else:
+            code = ""
+        
+        _LOGGER.debug("Slot %s - Status: %s, Code: %s", slot, status, "***" if code else "None")
+        
+        # Convert status to int for comparison
+        status_int = int(status) if status is not None else USER_STATUS_AVAILABLE
+        slot_str = str(slot)
+        
+        # Check if we already have this slot
+        if slot_str in self._user_data["users"]:
+            user_data = self._user_data["users"][slot_str]
+            
+            # Update lock state
+            user_data["lock_code"] = code if code else ""
+            user_data["lock_status_from_lock"] = status_int
+            user_data["lock_enabled"] = (status_int == USER_STATUS_ENABLED)
+            
+            # PIN Overwrite Logic:
+            # - If status = ENABLED (1) AND code exists: Overwrite cached PIN
+            # - If status = AVAILABLE (0) with no code: Clear cached PIN and set status to DISABLED
+            if status_int == USER_STATUS_ENABLED and code:
+                # Lock is enabled with code - overwrite cached PIN (code was added directly to lock)
+                old_code = user_data.get("code", "")
+                if old_code != code:
+                    _LOGGER.info(
+                        "Slot %s: Lock enabled with code, overwriting cached PIN (old: '%s', new: '%s')",
+                        slot, "***" if old_code else "None", "***" if code else "None"
+                    )
+                    user_data["code"] = code
+                else:
+                    _LOGGER.debug("Slot %s: Lock enabled, cached PIN matches lock code", slot)
+                user_data["lock_status"] = USER_STATUS_ENABLED
+            elif status_int == USER_STATUS_AVAILABLE:
+                # Lock is available (cleared) - update cache to reflect cleared state
+                if not code or code == "":
+                    # Lock is cleared (no code) - clear cached PIN and set status to DISABLED
+                    old_cached_code = user_data.get("code", "")
+                    if old_cached_code:
+                        _LOGGER.info(
+                            "Slot %s: Lock cleared (AVAILABLE, no code), clearing cached PIN '%s' and setting status to DISABLED",
+                            slot, "***" if old_cached_code else "None"
+                        )
+                        user_data["code"] = ""  # Clear cached PIN
+                        user_data["lock_status"] = USER_STATUS_DISABLED  # Set cached status to DISABLED
+                    else:
+                        _LOGGER.debug("Slot %s: Lock is AVAILABLE, cached PIN already empty", slot)
+                        # Ensure cached status is DISABLED if not already set
+                        if user_data.get("lock_status") != USER_STATUS_DISABLED:
+                            user_data["lock_status"] = USER_STATUS_DISABLED
+                else:
+                    # Lock is AVAILABLE but has a code (shouldn't happen, but handle it)
+                    _LOGGER.warning("Slot %s: Lock status is AVAILABLE but has code '%s'", slot, "***" if code else "None")
+            elif status_int == USER_STATUS_DISABLED:
+                # Lock is disabled (but has code) - preserve cached PIN and status
+                _LOGGER.debug(
+                    "Slot %s: Lock status=DISABLED, preserving cached PIN '%s' and cached status",
+                    slot, "***" if user_data.get("code") else "None"
+                )
+            else:
+                # Unknown status
+                _LOGGER.warning("Slot %s: Unknown status %s", slot, status_int)
+            
+            # Recalculate sync status
+            cached_enabled = user_data.get("enabled", False)
+            should_be_enabled = cached_enabled and self._is_code_valid(slot)
+            lock_is_enabled = (status_int == USER_STATUS_ENABLED)
+            
+            # Synced if: code matches AND enabled state matches
+            cached_code = user_data.get("code", "")
+            if should_be_enabled:
+                # Should be enabled: code must exist and match
+                user_data["synced_to_lock"] = (
+                    lock_is_enabled and
+                    cached_code == code and
+                    cached_code != ""
+                )
+            else:
+                # Should be disabled: code must NOT exist
+                user_data["synced_to_lock"] = (
+                    status_int == USER_STATUS_AVAILABLE or
+                    code == ""
+                )
+            
+            _LOGGER.info("Slot %s updated - Cached: %s, Lock: %s, Synced: %s", 
+                       slot, "***" if cached_code else "None", 
+                       "***" if code else "None", user_data["synced_to_lock"])
+            
+            await self.async_save_user_data()
+            
+            # Update entity state
+            self.data["last_user_update"] = datetime.now().isoformat()
+            self.async_update_listeners()
+            if self._lock_entity:
+                self.hass.loop.call_later(0.2, self._lock_entity.async_write_ha_state)
+        else:
+            # Slot doesn't exist in cache - this shouldn't happen after a clear, but handle it
+            _LOGGER.debug("Slot %s not found in cache - skipping update", slot)
+
     async def async_set_user_code(
         self,
         slot: int,
@@ -556,7 +673,7 @@ class YaleLockCoordinator(DataUpdateCoordinator):
         """Clear a user code from storage and lock.
         
         This uses the lock_code_manager approach - clears the code from the lock,
-        then pulls data from the lock to update the cache with actual lock state.
+        then updates only that slot from the lock to refresh the cache.
         """
         try:
             _LOGGER.info("Clearing slot %s from lock...", slot)
@@ -567,9 +684,9 @@ class YaleLockCoordinator(DataUpdateCoordinator):
             # Wait for lock to process the clear operation
             await asyncio.sleep(3.0)
             
-            # Pull data from lock to get the actual state and update cache
-            _LOGGER.info("Pulling data from lock to update cache for slot %s...", slot)
-            await self.async_pull_codes_from_lock()
+            # Update only this slot from lock (optimized - no need to scan all slots)
+            _LOGGER.info("Updating slot %s from lock...", slot)
+            await self._update_slot_from_lock(slot)
             
             _LOGGER.info("✓ Slot %s cleared and cache updated from lock", slot)
             
