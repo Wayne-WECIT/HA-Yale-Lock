@@ -1296,7 +1296,7 @@ class YaleLockManagerCard extends HTMLElement {
                     id="name-${user.slot}" 
                     value="${formName}" 
                     placeholder="Enter name"
-                    oninput="card.setFormValue(${user.slot}, 'name', this.value)"
+                    oninput="card.setFormValue(${user.slot}, 'name', this.value); card._checkForUnsavedChanges(${user.slot})"
                   >
                         </div>
                         
@@ -1318,7 +1318,7 @@ class YaleLockManagerCard extends HTMLElement {
                         <label>📝 Cached Status (editable):</label>
                         <select 
                           id="cached-status-${user.slot}" 
-                          onchange="card.changeStatus(${user.slot}, this.value)" 
+                          onchange="card.changeStatus(${user.slot}, this.value); card._checkForUnsavedChanges(${user.slot})" 
                           style="width: 100%;"
                         >
                           <option value="1" ${formCachedStatus === 1 ? 'selected' : ''}>Enabled</option>
@@ -1403,7 +1403,7 @@ class YaleLockManagerCard extends HTMLElement {
                           maxlength="10" 
                           pattern="[0-9]*" 
                           style="width: 100%;"
-                          oninput="card.setFormValue(${user.slot}, 'code', this.value)"
+                          oninput="card.setFormValue(${user.slot}, 'code', this.value); card._checkForUnsavedChanges(${user.slot})"
                         >
                         <p style="color: var(--secondary-text-color); font-size: 0.75em; margin: 4px 0 0 0;">PIN stored locally</p>
                       </div>
@@ -2209,8 +2209,13 @@ class YaleLockManagerCard extends HTMLElement {
         this.showStatus(slot, '✅ User saved successfully!', 'success');
       }
       
-      // Clear unsaved changes flag
+      // Clear unsaved changes flag and hide warning
       delete this._unsavedChanges[slot];
+      const warningDiv = this.shadowRoot.getElementById(`unsaved-warning-${slot}`);
+      if (warningDiv) {
+        warningDiv.style.display = 'none';
+        warningDiv.innerHTML = '';
+      }
       
       // Log after update completed
       const afterCached = { ...(this._formValues[slot] || {}) };
@@ -2295,8 +2300,13 @@ class YaleLockManagerCard extends HTMLElement {
               }
             }
             
-            // Clear unsaved changes flag
+            // Clear unsaved changes flag and hide warning
             delete this._unsavedChanges[slot];
+            const warningDiv2 = this.shadowRoot.getElementById(`unsaved-warning-${slot}`);
+            if (warningDiv2) {
+              warningDiv2.style.display = 'none';
+              warningDiv2.innerHTML = '';
+            }
             
             // Wait for entity state to actually reflect the saved values before updating UI
             let attempts = 0;
