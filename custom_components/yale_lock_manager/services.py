@@ -15,6 +15,7 @@ from .const import (
     ATTR_END_DATETIME,
     ATTR_MAX_USES,
     ATTR_NAME,
+    ATTR_NOTIFICATION_SERVICE,
     ATTR_OVERRIDE_PROTECTION,
     ATTR_SLOT,
     ATTR_START_DATETIME,
@@ -31,6 +32,7 @@ from .const import (
     SERVICE_PULL_CODES_FROM_LOCK,
     SERVICE_PUSH_CODE_TO_LOCK,
     SERVICE_RESET_USAGE_COUNT,
+    SERVICE_SET_NOTIFICATION_ENABLED,
     SERVICE_SET_USAGE_LIMIT,
     SERVICE_SET_USER_CODE,
     SERVICE_SET_USER_SCHEDULE,
@@ -79,6 +81,15 @@ SET_USAGE_LIMIT_SCHEMA = vol.Schema(
         vol.Optional("entity_id"): cv.entity_id,
         vol.Required(ATTR_SLOT): vol.All(vol.Coerce(int), vol.Range(min=1, max=MAX_USER_SLOTS)),
         vol.Optional(ATTR_MAX_USES): vol.Any(None, vol.All(vol.Coerce(int), vol.Range(min=1))),
+    }
+)
+
+SET_NOTIFICATION_ENABLED_SCHEMA = vol.Schema(
+    {
+        vol.Optional("entity_id"): cv.entity_id,
+        vol.Required(ATTR_SLOT): vol.All(vol.Coerce(int), vol.Range(min=1, max=MAX_USER_SLOTS)),
+        vol.Required(ATTR_ENABLED): cv.boolean,
+        vol.Optional(ATTR_NOTIFICATION_SERVICE): cv.string,
     }
 )
 
@@ -317,6 +328,20 @@ async def async_setup_services(hass: HomeAssistant) -> None:
             _LOGGER.error("Error clearing local cache: %s", err)
             raise HomeAssistantError(f"Failed to clear local cache: {err}") from err
 
+    async def handle_set_notification_enabled(call: ServiceCall) -> None:
+        """Handle set notification enabled service call."""
+        coordinator = get_coordinator()
+        slot = call.data[ATTR_SLOT]
+        enabled = call.data[ATTR_ENABLED]
+        notification_service = call.data.get(ATTR_NOTIFICATION_SERVICE)
+
+        try:
+            await coordinator.async_set_notification_enabled(slot, enabled, notification_service)
+            _LOGGER.info("Set notification enabled for slot %s: %s", slot, enabled)
+        except Exception as err:
+            _LOGGER.error("Error setting notification enabled: %s", err)
+            raise HomeAssistantError(f"Failed to set notification enabled: {err}") from err
+
     # Register services
     hass.services.async_register(
         DOMAIN,
@@ -400,6 +425,13 @@ async def async_setup_services(hass: HomeAssistant) -> None:
         SERVICE_CLEAR_LOCAL_CACHE,
         handle_clear_local_cache,
         schema=vol.Schema({vol.Optional("entity_id"): cv.entity_id}),
+    )
+
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_SET_NOTIFICATION_ENABLED,
+        handle_set_notification_enabled,
+        schema=SET_NOTIFICATION_ENABLED_SCHEMA,
     )
 
     _LOGGER.debug("Registered Yale Lock Manager services")

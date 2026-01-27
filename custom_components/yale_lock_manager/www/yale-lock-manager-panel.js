@@ -361,6 +361,15 @@ class YaleLockManagerPanel extends HTMLElement {
         }
       }
       
+      // Update notification toggle
+      const notificationToggle = this.querySelector(`#notification-toggle-${slot}`);
+      if (notificationToggle) {
+        const notificationsEnabled = user.notifications_enabled || false;
+        if (notificationToggle.checked !== notificationsEnabled) {
+          notificationToggle.checked = notificationsEnabled;
+        }
+      }
+      
       // Update sync indicators and status badges
       this._updateNonEditableParts();
     } else {
@@ -540,7 +549,8 @@ class YaleLockManagerPanel extends HTMLElement {
         synced_to_lock: false,
         schedule: { start: null, end: null },
         usage_limit: null,
-        usage_count: 0
+        usage_count: 0,
+        notifications_enabled: false
       };
       usersArray.push({ slot, ...user });
     }
@@ -1180,6 +1190,25 @@ class YaleLockManagerPanel extends HTMLElement {
                 </div>
               ` : ''}
               
+              ${!isFob ? `
+                <div class="form-group">
+                  <label class="toggle-label">
+                    <label class="toggle-switch">
+                      <input 
+                        type="checkbox" 
+                        id="notification-toggle-${user.slot}" 
+                        ${user.notifications_enabled ? 'checked' : ''}
+                      >
+                      <span class="slider"></span>
+                    </label>
+                    <span>🔔 Enable Notifications</span>
+                  </label>
+                  <p style="color: var(--secondary-text-color); font-size: 0.85em; margin: 4px 0 8px 20px;">
+                    Send notification when this code is used to access the lock.
+                  </p>
+                </div>
+              ` : ''}
+              
               <hr>
               <div class="button-group">
                 <button onclick="panel.saveUser(${user.slot})">
@@ -1580,6 +1609,16 @@ class YaleLockManagerPanel extends HTMLElement {
           entity_id: this._config.entity,
           slot: parseInt(slot, 10),
           max_uses: limit
+        });
+
+        // Save notification setting (PINs only)
+        const notificationToggle = this.querySelector(`#notification-toggle-${slot}`);
+        const notificationsEnabled = notificationToggle?.checked || false;
+        
+        await this._hass.callService('yale_lock_manager', 'set_notification_enabled', {
+          entity_id: this._config.entity,
+          slot: parseInt(slot, 10),
+          enabled: notificationsEnabled
         });
       }
 

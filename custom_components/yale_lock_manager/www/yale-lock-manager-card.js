@@ -19,7 +19,7 @@ class YaleLockManagerCard extends HTMLElement {
     this._statusMessages = {}; // Per-slot status messages
     this._showClearCacheConfirm = false;
     this._formValues = {}; // Store form field values independently per slot
-    // Format: { slot: { name, code, type, cachedStatus, schedule, usageLimit } }
+    // Format: { slot: { name, code, type, cachedStatus, schedule, usageLimit, notificationsEnabled } }
     this._refreshProgressListener = null; // Event listener for refresh progress
     this._refreshProgress = null; // Current refresh progress data
     this._unsavedChanges = {}; // Track unsaved changes per slot
@@ -251,7 +251,8 @@ class YaleLockManagerCard extends HTMLElement {
                   ? user.lock_status 
                   : (user.enabled ? 1 : 2),
                 schedule: user.schedule || { start: null, end: null },
-                usageLimit: user.usage_limit || null
+                usageLimit: user.usage_limit || null,
+                notificationsEnabled: user.notifications_enabled || false
               };
             }
           });
@@ -450,6 +451,16 @@ class YaleLockManagerCard extends HTMLElement {
         }
       }
       
+      // Update notification toggle
+      const notificationToggle = this.shadowRoot.getElementById(`notification-toggle-${slot}`);
+      if (notificationToggle) {
+        const notificationsEnabled = user.notifications_enabled || false;
+        if (notificationToggle.checked !== notificationsEnabled) {
+          notificationToggle.checked = notificationsEnabled;
+          this._setFormValue(slot, 'notificationsEnabled', notificationsEnabled);
+        }
+      }
+      
       // Update _formValues - prefer localStorage values, fall back to entity state
       // This preserves user input even if entity state is stale
       const storedValues = this._formValues[slot] || {};
@@ -463,7 +474,8 @@ class YaleLockManagerCard extends HTMLElement {
             ? user.lock_status 
             : (user.enabled ? 1 : 2)),
         schedule: storedValues.schedule || (user.schedule || { start: null, end: null }),
-        usageLimit: storedValues.usageLimit !== undefined ? storedValues.usageLimit : (user.usage_limit || null)
+        usageLimit: storedValues.usageLimit !== undefined ? storedValues.usageLimit : (user.usage_limit || null),
+        notificationsEnabled: storedValues.notificationsEnabled !== undefined ? storedValues.notificationsEnabled : (user.notifications_enabled || false)
       };
       // Save to localStorage after merging
       this._saveFormValuesToStorage();
@@ -701,7 +713,8 @@ class YaleLockManagerCard extends HTMLElement {
             ? user.lock_status 
             : (user.enabled ? 1 : 2),
           schedule: user.schedule || { start: null, end: null },
-          usageLimit: user.usage_limit || null
+          usageLimit: user.usage_limit || null,
+          notificationsEnabled: user.notifications_enabled || false
         };
         // Save to localStorage after syncing from entity
         this._saveFormValuesToStorage();
@@ -1011,7 +1024,8 @@ class YaleLockManagerCard extends HTMLElement {
         synced_to_lock: false,
         schedule: { start: null, end: null },
         usage_limit: null,
-        usage_count: 0
+        usage_count: 0,
+        notifications_enabled: false
       };
       usersArray.push({ slot, ...user });
     }
@@ -1591,6 +1605,26 @@ class YaleLockManagerCard extends HTMLElement {
                           </div>
                   </div>
                 ` : ''}
+                          
+                ${!isFob ? `
+                          <div class="form-group">
+                    <label class="toggle-label">
+                      <label class="toggle-switch">
+                        <input 
+                          type="checkbox" 
+                          id="notification-toggle-${user.slot}" 
+                          onchange="card.toggleNotification(${user.slot}, this.checked)" 
+                          ${user.notifications_enabled ? 'checked' : ''}
+                        >
+                        <span class="slider"></span>
+                      </label>
+                      <span>🔔 Enable Notifications</span>
+                    </label>
+                    <p style="color: var(--secondary-text-color); font-size: 0.85em; margin: 4px 0 8px 20px;">
+                      Send notification when this code is used to access the lock.
+                    </p>
+                  </div>
+                ` : ''}
                 
                 <hr>
                 <div class="button-group">
@@ -2110,6 +2144,13 @@ class YaleLockManagerCard extends HTMLElement {
     this._checkForUnsavedChanges(slot);
   }
 
+  toggleNotification(slot, checked) {
+    // Store notification setting in form values
+    this._setFormValue(slot, 'notificationsEnabled', checked);
+    // Mark as having unsaved changes when notification toggle is changed
+    this._checkForUnsavedChanges(slot);
+  }
+
   // ========== ACTIONS ==========
 
   async toggleLock() {
@@ -2531,6 +2572,16 @@ class YaleLockManagerCard extends HTMLElement {
           entity_id: this._config.entity,
           slot: parseInt(slot, 10),
           max_uses: limit
+        });
+
+        // Save notification setting (PINs only)
+        const notificationToggle = this.shadowRoot.getElementById(`notification-toggle-${slot}`);
+        const notificationsEnabled = notificationToggle?.checked || false;
+        
+        await this._hass.callService('yale_lock_manager', 'set_notification_enabled', {
+          entity_id: this._config.entity,
+          slot: parseInt(slot, 10),
+          enabled: notificationsEnabled
         });
       }
 

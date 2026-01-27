@@ -2,6 +2,80 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.8.4.33] - 2026-01-27
+
+### ✨ Enhancement - Per-Slot Notifications for PIN Usage
+
+**User feedback**: How can we implement notifications? This should be enabled by the slot. How do we get HA to send us notifications when a PIN is used if the enable notification is set in the slot? Also when clear lock is manually clicked the enable notifications for that slot are set to disable.
+
+### The Solution
+
+Added per-slot notification functionality that automatically sends Home Assistant notifications when a slot (PIN/FOB) is used to access the lock. Notifications can be enabled/disabled per slot via a toggle in the UI, and are automatically cleared when manual clear slot is clicked.
+
+### Implementation
+
+**Backend:**
+- Added `notifications_enabled` field to user data (default `False`)
+- Added `notification_service` field to user data (default `"notify.persistent_notification"`)
+- When access event occurs, checks if notifications are enabled for that slot
+- If enabled, calls Home Assistant's `notify` service with formatted message
+- Notification includes: user name, slot number, access method, timestamp, and usage count
+- Added `async_set_notification_enabled()` method to coordinator
+- Added `set_notification_enabled` service for programmatic control
+- When `clear_local_cache=True`, notifications are disabled for that slot
+
+**Frontend:**
+- Added "Enable Notifications" toggle in expanded slot settings (both card and panel views)
+- Toggle state is saved when "Update User" is clicked
+- Notification setting is preserved in form values and synced with entity state
+
+### Changed
+
+- **Backend (`coordinator.py`)**:
+  - Added notification sending logic in `_handle_access_event()` after access event is fired
+  - Added `notifications_enabled` and `notification_service` fields to user data initialization
+  - Added `notifications_enabled = False` to clear logic when `clear_local_cache=True`
+  - Added `async_set_notification_enabled()` method to enable/disable notifications per slot
+- **Backend (`services.py`)**:
+  - Added `handle_set_notification_enabled()` service handler
+  - Registered `set_notification_enabled` service with schema validation
+- **Backend (`services.yaml`)**:
+  - Added service schema for `set_notification_enabled` with slot, enabled, and optional notification_service fields
+- **Backend (`const.py`)**:
+  - Added `SERVICE_SET_NOTIFICATION_ENABLED` constant
+  - Added `ATTR_NOTIFICATION_SERVICE` constant
+- **Frontend (`yale-lock-manager-card.js`)**:
+  - Added "Enable Notifications" toggle in expanded slot settings
+  - Added `toggleNotification()` method to handle toggle changes
+  - Added notification saving in `saveUser()` method
+  - Updated `_formValues` tracking to include `notificationsEnabled`
+  - Updated `_syncFormValuesFromEntity()` to include notification state
+  - Updated `_updateSlotFromEntityState()` to sync notification toggle
+- **Frontend (`yale-lock-manager-panel.js`)**:
+  - Added "Enable Notifications" toggle in expanded slot settings
+  - Added notification saving in `saveUser()` method
+  - Updated `_updateSlotFromEntityState()` to sync notification toggle
+- **Version (`const.py`, `manifest.json`)**:
+  - Updated `VERSION` to `1.8.4.33`
+
+### What's New
+
+- ✅ **Per-slot notifications**: Enable/disable notifications individually for each slot
+- ✅ **Automatic notifications**: When enabled, notifications are sent automatically when the slot is used
+- ✅ **Configurable service**: Defaults to `notify.persistent_notification`, can be customized per slot
+- ✅ **Rich notification data**: Includes user name, slot, method, timestamp, and usage count
+- ✅ **Auto-cleared on manual clear**: When manual clear slot is clicked, notifications are disabled
+- ✅ **UI integration**: Toggle in expanded slot settings for easy control
+
+### Notification Format
+
+When a slot with notifications enabled is used, a notification is sent with:
+- **Title**: "Lock Access"
+- **Message**: "{user_name} (Slot {user_slot}) unlocked the door via {method}"
+- **Data**: entity_id, user_name, user_slot, method, timestamp, usage_count
+
+---
+
 ## [1.8.4.32] - 2026-01-27
 
 ### ✨ Enhancement - Last Used Column in UI Table

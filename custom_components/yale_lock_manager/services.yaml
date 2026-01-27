@@ -180,3 +180,32 @@ reset_usage_count:
           min: 1
           max: 20
           mode: box
+
+set_notification_enabled:
+  name: Set Notification Enabled
+  description: Enable or disable notifications for when a user code is used to access the lock
+  fields:
+    slot:
+      name: Slot Number
+      description: User code slot number (1-20)
+      required: true
+      example: 1
+      selector:
+        number:
+          min: 1
+          max: 20
+          mode: box
+    enabled:
+      name: Enabled
+      description: Whether to send notifications when this slot is used
+      required: true
+      example: true
+      selector:
+        boolean:
+    notification_service:
+      name: Notification Service
+      description: Home Assistant notification service to use (e.g., notify.persistent_notification, notify.mobile_app). Defaults to notify.persistent_notification if not specified.
+      required: false
+      example: "notify.persistent_notification"
+      selector:
+        text:

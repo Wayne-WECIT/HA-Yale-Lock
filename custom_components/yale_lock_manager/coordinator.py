@@ -400,6 +400,51 @@ class YaleLockCoordinator(DataUpdateCoordinator):
             },
         )
 
+        # Send notification if enabled for this slot
+        notifications_enabled = user_data.get("notifications_enabled", False)
+        if notifications_enabled:
+            notification_service = user_data.get("notification_service", "notify.persistent_notification")
+            method_display = method.upper() if method else "Unknown"
+            message = f"{user_name} (Slot {user_slot}) unlocked the door via {method_display}"
+            
+            try:
+                # Split service into domain and service (e.g., "notify.persistent_notification" -> domain="notify", service="persistent_notification")
+                if "." in notification_service:
+                    domain, service = notification_service.split(".", 1)
+                else:
+                    domain = "notify"
+                    service = notification_service
+                
+                notification_data = {
+                    "title": "Lock Access",
+                    "message": message,
+                    "data": {
+                        "entity_id": self.lock_entity_id,
+                        "user_name": user_name,
+                        "user_slot": user_slot,
+                        "method": method,
+                        "timestamp": dt_util.utcnow().isoformat(),
+                        "usage_count": usage_count,
+                    },
+                }
+                
+                await self.hass.services.async_call(domain, service, notification_data)
+                _LOGGER.info(
+                    "Notification sent for user %s (slot %s) via %s",
+                    user_name,
+                    user_slot,
+                    notification_service,
+                )
+            except Exception as err:
+                # Log error but don't fail the access event processing
+                _LOGGER.warning(
+                    "Failed to send notification for user %s (slot %s) via %s: %s",
+                    user_name,
+                    user_slot,
+                    notification_service,
+                    err,
+                )
+
     def _is_code_valid(self, user_slot: int) -> bool:
         """Check if a user code is currently valid based on schedule."""
         user_data = self._user_data["users"].get(str(user_slot))
@@ -771,6 +816,10 @@ class YaleLockCoordinator(DataUpdateCoordinator):
                 lock_enabled = False
                 # Use provided status if available, otherwise default to Available
                 lock_status = status if status is not None else USER_STATUS_AVAILABLE
+            
+            # Preserve or initialize notification settings
+            notifications_enabled = existing_user.get("notifications_enabled", False) if existing_user else False
+            notification_service = existing_user.get("notification_service", "notify.persistent_notification") if existing_user else "notify.persistent_notification"
 
             # Calculate sync status: based on code existence, not status
             # Note: We can't check schedule here, so we use enabled flag
@@ -808,6 +857,8 @@ class YaleLockCoordinator(DataUpdateCoordinator):
             "usage_count": usage_count,  # 0 for FOBs
             "synced_to_lock": synced_to_lock,  # Calculated based on code and status comparison (always True for FOBs)
             "last_used": None,
+            "notifications_enabled": notifications_enabled,
+            "notification_service": notification_service,
         }
 
         await self.async_save_user_data()
@@ -875,6 +926,7 @@ class YaleLockCoordinator(DataUpdateCoordinator):
                 user_data["usage_limit"] = None
                 user_data["usage_count"] = 0
                 user_data["last_used"] = None
+                user_data["notifications_enabled"] = False
                 user_data["code_type"] = CODE_TYPE_PIN
                 user_data["synced_to_lock"] = False
                 _LOGGER.info("✓ All local cached details cleared for slot %s", slot)
@@ -995,6 +1047,23 @@ class YaleLockCoordinator(DataUpdateCoordinator):
 
         self._user_data["users"][str(slot)]["usage_count"] = 0
         await self.async_save_user_data()
+
+    async def async_set_notification_enabled(
+        self, slot: int, enabled: bool, notification_service: str | None = None
+    ) -> None:
+        """Set notification enabled status for a user code."""
+        if str(slot) not in self._user_data["users"]:
+            raise ValueError(f"User slot {slot} not found")
+
+        self._user_data["users"][str(slot)]["notifications_enabled"] = enabled
+        if notification_service is not None:
+            self._user_data["users"][str(slot)]["notification_service"] = notification_service
+        elif enabled and "notification_service" not in self._user_data["users"][str(slot)]:
+            # Set default service if enabling and no service is set
+            self._user_data["users"][str(slot)]["notification_service"] = "notify.persistent_notification"
+        
+        await self.async_save_user_data()
+        await self.async_request_refresh()  # Refresh entity state so card updates
         
         # Re-enable the user if they were disabled due to usage limit
         user_data = self._user_data["users"][str(slot)]
