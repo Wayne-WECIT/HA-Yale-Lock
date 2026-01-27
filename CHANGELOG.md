@@ -2,6 +2,53 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.8.4.23] - 2026-01-27
+
+### 🐛 Bug Fix - Notification Processing and Battery Alarm Handling
+
+**User feedback**: 
+1. PIN usage count was still not incrementing after unlocking the door with a PIN
+2. Battery low alarm notifications should be captured and displayed
+
+### The Problem
+
+1. **PIN usage not incrementing**: The notification handler was receiving events, but the node_id comparison was failing silently. The event structure uses `node_id`, but some events might use `nodeId`, and the comparison wasn't handling both cases properly.
+2. **Battery alarm not captured**: Battery low alarms come through Z-Wave JS notifications with command_class 128, but they weren't being detected or processed. The battery alarm structure is different from Access Control notifications.
+
+### The Fix
+
+1. **Fixed node_id comparison**:
+   - Updated to check both `node_id` and `nodeId` fields in the event data
+   - Added comprehensive logging to show node_id comparison failures
+   - Added explicit error handling for missing node_id fields
+   - This ensures notifications are properly matched to the correct lock node
+
+2. **Added battery alarm handling**:
+   - Detect battery notifications (command_class 128 or ccId 128)
+   - Extract battery event type and urgency from event args
+   - Fire `yale_lock_manager_battery_low` event when battery low alarm is detected
+   - Update coordinator data with `battery_low_alarm` and `battery_low_timestamp`
+   - Update entity state to reflect battery alarm status
+
+### Changed
+
+- **Backend (`coordinator.py`)**:
+  - Updated `_handle_notification()` to check both `node_id` and `nodeId` fields
+  - Added comprehensive logging for node_id comparison failures
+  - Added battery notification detection and processing
+  - Fire `yale_lock_manager_battery_low` event when battery low alarm is detected
+  - Update coordinator data with battery alarm status
+
+### What's Fixed
+
+- ✅ PIN usage count now increments correctly when door is unlocked with a PIN
+- ✅ Node_id comparison now handles both `node_id` and `nodeId` field names
+- ✅ Battery low alarms are now detected and processed
+- ✅ Battery low events are fired for automations and notifications
+- ✅ Better logging shows node_id comparison details for debugging
+
+---
+
 ## [1.8.4.22] - 2026-01-27
 
 ### 🐛 Bug Fix - Notification Event Structure Parsing
