@@ -325,7 +325,7 @@ class YaleLockCoordinator(DataUpdateCoordinator):
         max_uses = user_data.get("usage_limit")
         if max_uses and usage_count >= max_uses:
             _LOGGER.info(
-                "User %s (slot %s) reached usage limit",
+                "User %s (slot %s) reached usage limit - clearing code from lock",
                 user_name,
                 user_slot,
             )
@@ -337,8 +337,23 @@ class YaleLockCoordinator(DataUpdateCoordinator):
                     "user_slot": user_slot,
                 },
             )
-            # Disable the user
-            await self.async_disable_user(user_slot)
+            # Clear the code from the lock to prevent further access
+            try:
+                await self.async_clear_user_code(user_slot)
+                _LOGGER.info(
+                    "Code cleared from lock for user %s (slot %s) due to usage limit",
+                    user_name,
+                    user_slot,
+                )
+            except Exception as err:
+                _LOGGER.error(
+                    "Failed to clear code from lock for user %s (slot %s): %s",
+                    user_name,
+                    user_slot,
+                    err,
+                )
+                # Still update cached status even if lock clear fails
+                await self.async_disable_user(user_slot)
 
         # Update coordinator data for entity state
         self.data["last_access_user"] = user_name

@@ -2,6 +2,52 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.8.4.30] - 2026-01-27
+
+### 🐛 Bug Fix - Usage Limit Not Enforced on Lock
+
+**User feedback**: After opening the lock 4 times with a PIN that had a usage limit of 2, the UI showed "Limit reached!" but the code still worked on the lock. The status remained "Enabled" and the code continued to function.
+
+### The Problem
+
+When a user reached their usage limit (`usage_count >= usage_limit`), the system:
+1. ✅ Correctly detected the limit was reached
+2. ✅ Logged "User X reached usage limit"
+3. ✅ Fired `EVENT_USAGE_LIMIT_REACHED` event
+4. ❌ Only called `async_disable_user()` which set `enabled = False` in cached data
+5. ❌ Did NOT actually clear the code from the lock
+6. ❌ The code continued to work on the lock (3rd and 4th unlocks still succeeded)
+
+The `async_disable_user()` method only updated the cached status and marked it as needing a push, but didn't actually disable the code on the lock. The lock itself doesn't enforce usage limits - that's the integration's responsibility.
+
+### The Fix
+
+Modified `_handle_access_event()` in `coordinator.py` to call `async_clear_user_code()` instead of `async_disable_user()` when the usage limit is reached. This ensures:
+1. The code is actually cleared from the lock (preventing further access)
+2. The cached data is updated to reflect the cleared state
+3. The UI shows "Disabled" status
+4. The code stops working on the lock immediately
+
+Added error handling with a fallback to `async_disable_user()` if clearing from the lock fails, ensuring the cached status is still updated even if the lock operation fails.
+
+### Changed
+
+- **Backend (`coordinator.py`)**:
+  - Updated `_handle_access_event()` to call `async_clear_user_code()` instead of `async_disable_user()` when usage limit is reached
+  - Added try/except error handling with fallback to `async_disable_user()` if lock clear fails
+  - Updated log messages to indicate code is being cleared from lock due to usage limit
+- **Version (`const.py`, `manifest.json`)**:
+  - Updated `VERSION` to `1.8.4.30`
+
+### What's Fixed
+
+- ✅ **Usage limit enforced**: When a user reaches their usage limit, the code is automatically cleared from the lock
+- ✅ **Code stops working**: Attempting to unlock with a code that has reached its limit will fail (lock rejects it)
+- ✅ **UI reflects status**: The UI correctly shows "Disabled" status after the limit is reached
+- ✅ **Immediate enforcement**: The code is cleared immediately when the limit is reached, not just marked for future push
+
+---
+
 ## [1.8.4.29] - 2026-01-27
 
 ### 🐛 Bug Fix - Update User Button Not Enabling for Schedule/Usage Limit Changes
