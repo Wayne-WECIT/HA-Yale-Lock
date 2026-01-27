@@ -156,6 +156,9 @@ class YaleLockLastUserSensor(CoordinatorEntity, SensorEntity):
             if last_used:
                 try:
                     dt = datetime.fromisoformat(last_used)
+                    # Ensure timezone-aware (add UTC if naive)
+                    if dt.tzinfo is None:
+                        dt = dt.replace(tzinfo=timezone.utc)
                     if most_recent_time is None or dt > most_recent_time:
                         most_recent_time = dt
                         most_recent_name = user_data.get("name")
