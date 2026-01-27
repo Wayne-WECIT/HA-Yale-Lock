@@ -1948,12 +1948,21 @@ class YaleLockManagerCard extends HTMLElement {
       if (currentValue === '0') {
         const user = this.getUserData().find(u => u.slot === slot);
         if (user) {
-          // User exists - safe to change status
+          // User exists - safe to change status (will trigger onchange which calls changeStatus)
           statusSelect.value = '1';
         } else {
-          // User doesn't exist yet - just set form value, don't trigger onchange
+          // User doesn't exist yet - temporarily remove onchange handler, change value, then restore
+          // This prevents changeStatus from being called for non-existent users
+          const originalOnchange = statusSelect.getAttribute('onchange');
+          statusSelect.removeAttribute('onchange');
           this._setFormValue(slot, 'cachedStatus', 1);
           statusSelect.value = '1';
+          // Restore onchange handler after a brief delay
+          setTimeout(() => {
+            if (originalOnchange) {
+              statusSelect.setAttribute('onchange', originalOnchange);
+            }
+          }, 100);
         }
       }
     }
@@ -2097,9 +2106,15 @@ class YaleLockManagerCard extends HTMLElement {
     const user = this.getUserData().find(u => u.slot === slot);
     if (!user) {
       // User doesn't exist yet - just update form value, don't call service
+      // This happens when typing in username for an available slot and status changes programmatically
       this._setFormValue(slot, 'cachedStatus', status);
-      return;
+      return; // Exit silently - no error message needed
     }
+    
+    // Only call service if user exists and this is a real user change (not programmatic)
+    // Check if this change was triggered by updateStatusOptions by checking if status was '0' before
+    const statusField = this.shadowRoot.getElementById(`cached-status-${slot}`);
+    if (!statusField) return;
     
     try {
       await this._hass.callService('yale_lock_manager', 'set_user_status', {
@@ -2116,7 +2131,11 @@ class YaleLockManagerCard extends HTMLElement {
         }
       }, 2000);
     } catch (error) {
-      this.showStatus(slot, `Failed to set status: ${error.message}`, 'error');
+      // Only show error if user exists (real error, not just missing user)
+      if (user) {
+        this.showStatus(slot, `Failed to set status: ${error.message}`, 'error');
+      }
+      // If user doesn't exist, error is expected - don't show it
     }
   }
 
