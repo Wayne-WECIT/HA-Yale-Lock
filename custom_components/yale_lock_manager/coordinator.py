@@ -881,19 +881,34 @@ class YaleLockCoordinator(DataUpdateCoordinator):
                         _LOGGER.debug("Slot %s: Lock enabled, cached PIN matches lock code", slot)
                     codes_found += 1
                     codes_updated += 1
-                elif status_int in (USER_STATUS_AVAILABLE, USER_STATUS_DISABLED):
-                    # Lock is disabled/available - preserve cached PIN and status
-                    # When disabled: cached status = DISABLED (2), lock status = AVAILABLE (0)
+                elif status_int == USER_STATUS_AVAILABLE:
+                    # Lock is available (cleared) - update cache to reflect cleared state
+                    if not code or code == "":
+                        # Lock is cleared (no code) - clear cached PIN and set status to DISABLED
+                        old_cached_code = user_data.get("code", "")
+                        if old_cached_code:
+                            _LOGGER.info(
+                                "Slot %s: Lock cleared (AVAILABLE, no code), clearing cached PIN '%s' and setting status to DISABLED",
+                                slot, "***" if old_cached_code else "None"
+                            )
+                            user_data["code"] = ""  # Clear cached PIN
+                            user_data["lock_status"] = USER_STATUS_DISABLED  # Set cached status to DISABLED
+                        else:
+                            _LOGGER.debug("Slot %s: Lock is AVAILABLE, cached PIN already empty", slot)
+                            # Ensure cached status is DISABLED if not already set
+                            if user_data.get("lock_status") != USER_STATUS_DISABLED:
+                                user_data["lock_status"] = USER_STATUS_DISABLED
+                    else:
+                        # Lock is AVAILABLE but has a code (shouldn't happen, but handle it)
+                        _LOGGER.warning("Slot %s: Lock status is AVAILABLE but has code '%s'", slot, "***" if code else "None")
+                    codes_updated += 1
+                elif status_int == USER_STATUS_DISABLED:
+                    # Lock is disabled (but has code) - preserve cached PIN and status
                     _LOGGER.debug(
-                        "Slot %s: Lock status=%s (Available/Disabled), preserving cached PIN '%s' and cached status",
-                        slot, status_int, "***" if user_data.get("code") else "None"
+                        "Slot %s: Lock status=DISABLED, preserving cached PIN '%s' and cached status",
+                        slot, "***" if user_data.get("code") else "None"
                     )
                     # Update lock_status_from_lock but preserve cached lock_status
-                    # If cached status is DISABLED and lock is AVAILABLE, this is correct
-                    if user_data.get("lock_status") == USER_STATUS_DISABLED and status_int == USER_STATUS_AVAILABLE:
-                        # This is expected - cached is Disabled, lock is Available (synced)
-                        _LOGGER.debug("Slot %s: Cached=Disabled, Lock=Available (synced)", slot)
-                    # Still count as found if there's a code (even if disabled)
                     if code:
                         codes_found += 1
                         codes_updated += 1
