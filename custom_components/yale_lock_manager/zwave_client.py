@@ -39,6 +39,24 @@ class ZWaveClient:
         The response from invoke_cc_api is logged by Z-Wave JS but not stored in the node's cache.
         We capture the response by temporarily intercepting log messages from Z-Wave JS.
         """
+        # Validate entity exists and is available before attempting service call
+        lock_state = self._hass.states.get(self._lock_entity_id)
+        if not lock_state:
+            self._logger.error_zwave(
+                "get_user_code_data",
+                f"Lock entity '{self._lock_entity_id}' not found in Home Assistant state",
+                slot=slot
+            )
+            return None
+        
+        if lock_state.state in ("unknown", "unavailable"):
+            self._logger.error_zwave(
+                "get_user_code_data",
+                f"Lock entity '{self._lock_entity_id}' is {lock_state.state}",
+                slot=slot
+            )
+            return None
+        
         captured_response: dict[str, Any] | None = None
         log_capture_complete = asyncio.Event()
         
