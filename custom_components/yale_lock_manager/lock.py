@@ -155,6 +155,11 @@ class YaleLockManagerLock(CoordinatorEntity, LockEntity):
         # Expose full user data for the Lovelace card
         attrs["users"] = users
         
+        # Add last access information for activity log
+        attrs["last_access_user"] = self.coordinator.data.get("last_access_user", "Unknown")
+        attrs["last_access_method"] = self.coordinator.data.get("last_access_method", "Unknown")
+        attrs["last_access_timestamp"] = self.coordinator.data.get("last_access_timestamp")
+        
         _LOGGER.info("[REFRESH DEBUG] extra_state_attributes: returning %s users (total_users=%s, enabled_users=%s)", 
                      len(users), total_users, len(enabled_users))
 

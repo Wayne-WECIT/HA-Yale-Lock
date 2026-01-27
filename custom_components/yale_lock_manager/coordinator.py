@@ -133,37 +133,80 @@ class YaleLockCoordinator(DataUpdateCoordinator):
     @callback
     async def _handle_notification(self, event) -> None:
         """Handle Z-Wave JS notification events."""
+        # Log all notifications for debugging
+        _LOGGER.info("Received Z-Wave notification event: %s", event.data)
+        
         if event.data.get("node_id") != int(self.node_id):
+            _LOGGER.debug("Notification from different node, ignoring")
             return
 
-        alarm_type = event.data.get("event_parameters", {}).get("alarmType")
-        alarm_level = event.data.get("event_parameters", {}).get("alarmLevel")
+        event_params = event.data.get("event_parameters", {})
+        alarm_type = event_params.get("alarmType")
+        alarm_level = event_params.get("alarmLevel")
 
-        _LOGGER.debug("Notification - Type: %s, Level: %s", alarm_type, alarm_level)
+        _LOGGER.info("Notification - Type: %s, Level: %s, Full params: %s", 
+                     alarm_type, alarm_level, event_params)
 
         # Handle different alarm types
         if alarm_type in ALARM_TYPE_KEYPAD_UNLOCK:
-            # Keypad unlock - alarm_level is the user slot
-            user_slot = alarm_level
+            # Validate and convert alarm_level to int
+            try:
+                user_slot = int(alarm_level) if alarm_level is not None else None
+                if user_slot is None or user_slot < 1 or user_slot > MAX_USER_SLOTS:
+                    _LOGGER.warning("Invalid alarm_level for keypad unlock: %s", alarm_level)
+                    return
+            except (ValueError, TypeError) as err:
+                _LOGGER.error("Failed to convert alarm_level to int: %s", err)
+                return
+            
+            _LOGGER.info("Keypad unlock detected - User slot: %s", user_slot)
             await self._handle_access_event(user_slot, ACCESS_METHOD_PIN)
         elif alarm_type == ALARM_TYPE_AUTO_LOCK:
-            self._fire_event(EVENT_LOCKED, {"method": ACCESS_METHOD_AUTO})
+            self._fire_event(EVENT_LOCKED, {
+                "entity_id": self.lock_entity_id,
+                "method": ACCESS_METHOD_AUTO
+            })
         elif alarm_type == ALARM_TYPE_RF_LOCK:
             # Alarm 24: RF lock operation (Z-Wave/Remote locked the lock)
-            self._fire_event(EVENT_LOCKED, {"method": ACCESS_METHOD_REMOTE})
+            self._fire_event(EVENT_LOCKED, {
+                "entity_id": self.lock_entity_id,
+                "method": ACCESS_METHOD_REMOTE
+            })
         elif alarm_type == ALARM_TYPE_RF_UNLOCK:
             # Alarm 25: RF unlock operation (Z-Wave/Remote unlocked the lock)
-            self._fire_event(EVENT_UNLOCKED, {"method": ACCESS_METHOD_REMOTE})
+            self._fire_event(EVENT_UNLOCKED, {
+                "entity_id": self.lock_entity_id,
+                "method": ACCESS_METHOD_REMOTE
+            })
 
     async def _handle_access_event(self, user_slot: int, method: str) -> None:
         """Handle a user access event."""
+        _LOGGER.info("Access event received - Slot: %s, Method: %s", user_slot, method)
+        
         user_data = self._user_data["users"].get(str(user_slot))
 
         if not user_data:
-            _LOGGER.warning("Access by unknown user slot: %s", user_slot)
+            _LOGGER.warning(
+                "Access by unknown user slot: %s. Available slots: %s", 
+                user_slot, 
+                list(self._user_data["users"].keys())
+            )
+            # Fire event even for unknown users so it appears in activity log
+            self._fire_event(
+                EVENT_ACCESS,
+                {
+                    "entity_id": self.lock_entity_id,
+                    "user_name": f"Unknown User (Slot {user_slot})",
+                    "user_slot": user_slot,
+                    "method": method,
+                    "timestamp": datetime.now().isoformat(),
+                    "usage_count": None,
+                },
+            )
             return
 
         user_name = user_data.get("name", f"User {user_slot}")
+        _LOGGER.info("Processing access for user: %s (slot %s)", user_name, user_slot)
 
         # Check if code is within schedule
         if not self._is_code_valid(user_slot):
@@ -175,6 +218,7 @@ class YaleLockCoordinator(DataUpdateCoordinator):
             self._fire_event(
                 EVENT_CODE_EXPIRED,
                 {
+                    "entity_id": self.lock_entity_id,
                     "user_name": user_name,
                     "user_slot": user_slot,
                 },
@@ -197,6 +241,7 @@ class YaleLockCoordinator(DataUpdateCoordinator):
             self._fire_event(
                 EVENT_USAGE_LIMIT_REACHED,
                 {
+                    "entity_id": self.lock_entity_id,
                     "user_name": user_name,
                     "user_slot": user_slot,
                 },
@@ -204,13 +249,28 @@ class YaleLockCoordinator(DataUpdateCoordinator):
             # Disable the user
             await self.async_disable_user(user_slot)
 
+        # Update coordinator data for entity state
+        self.data["last_access_user"] = user_name
+        self.data["last_access_method"] = method
+        self.data["last_access_timestamp"] = datetime.now().isoformat()
+        self.data["last_user_update"] = datetime.now().isoformat()
+
         # Save updated data
         await self.async_save_user_data()
+        
+        # Update entity state so UI reflects new usage count
+        self.async_update_listeners()
+        if self._lock_entity:
+            self.hass.loop.call_later(0.2, self._lock_entity.async_write_ha_state)
+        
+        _LOGGER.info("Usage count updated for %s (slot %s): %s", 
+                     user_name, user_slot, usage_count)
 
         # Fire access event
         self._fire_event(
             EVENT_ACCESS,
             {
+                "entity_id": self.lock_entity_id,
                 "user_name": user_name,
                 "user_slot": user_slot,
                 "method": method,
@@ -223,6 +283,7 @@ class YaleLockCoordinator(DataUpdateCoordinator):
         self._fire_event(
             EVENT_UNLOCKED,
             {
+                "entity_id": self.lock_entity_id,
                 "user_name": user_name,
                 "user_slot": user_slot,
                 "method": method,
