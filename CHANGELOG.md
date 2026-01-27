@@ -2,6 +2,36 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.8.4.19] - 2026-01-27
+
+### 🐛 Bug Fix - scheduleToggle is not defined Error for FOB Slots
+
+**User feedback**: Error "Failed: scheduleToggle is not defined" when saving a FOB slot.
+
+### The Problem
+
+The `scheduleToggle`, `startInput`, `limitToggle`, and `limitInput` variables were only declared inside the `if (!isFob)` block, but were referenced later outside that block when saving to localStorage. When saving a FOB slot, these variables were never declared, causing a `ReferenceError`.
+
+### The Fix
+
+- Wrapped the localStorage save code for schedule and usage limit in an `if (!isFob)` check
+- Prevents accessing undefined variables when saving FOB slots
+- FOB slots don't have schedules or usage limits, so this code should only run for PIN slots
+
+### Changed
+
+- **Frontend (`yale-lock-manager-card.js`)**:
+  - Wrapped schedule and usage limit localStorage save code in `if (!isFob)` check
+  - Prevents `ReferenceError` when saving FOB slots
+
+### What's Fixed
+
+- ✅ No more "scheduleToggle is not defined" error when saving FOB slots
+- ✅ FOB slots save correctly without trying to access schedule/usage limit fields
+- ✅ Code only runs for PIN slots where these fields exist
+
+---
+
 ## [1.8.4.18] - 2026-01-27
 
 ### 🐛 Bug Fix - Sync Status Calculation for FOB Slots
