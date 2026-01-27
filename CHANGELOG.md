@@ -2,6 +2,104 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.8.4.21] - 2026-01-27
+
+### 🐛 Bug Fix - PIN Usage Tracking and Activity Log Display
+
+**User feedback**: When unlocking the door with a PIN, the usage count was not incrementing and the activity log did not show which user opened the lock.
+
+### The Problem
+
+1. **Usage count not incrementing**: The notification handler may not have been receiving events, or the user slot lookup was failing silently
+2. **Activity log not showing user**: Home Assistant's activity log was not displaying which user opened the lock
+
+### Root Causes
+
+1. **Silent failure in `_handle_access_event`**: If user slot didn't exist in cache, it returned early with only a warning log
+2. **No entity state update**: After incrementing usage count, the entity state wasn't explicitly updated, so UI didn't refresh
+3. **Missing error handling**: No validation that `alarm_level` was a valid integer or within expected range
+4. **No logging for notification receipt**: Couldn't verify if notifications were being received
+5. **Event structure**: Custom events may not appear in Home Assistant's activity log by default
+
+### The Fix
+
+1. **Enhanced Notification Handler Logging**:
+   - Added comprehensive logging at the start of `_handle_notification()` to log all received notifications
+   - Logs full event data structure for debugging
+   - Added validation for `alarm_type` and `alarm_level` before processing
+   - Converts `alarm_level` to int explicitly with error handling
+   - Added logging when keypad unlock is detected
+
+2. **Improved Access Event Handler**:
+   - Added logging at the start of `_handle_access_event()` to track all access attempts
+   - Improved handling when user slot doesn't exist: logs available slots and fires event for unknown users
+   - Updates coordinator data with last access information (`last_access_user`, `last_access_method`, `last_access_timestamp`)
+   - Updates entity state after usage count changes so UI reflects immediately
+   - Added logging after each step (validation, increment, save, event firing)
+
+3. **Entity State Attributes for Activity Log**:
+   - Added `last_access_user`, `last_access_method`, and `last_access_timestamp` to entity state attributes
+   - These appear in Home Assistant's activity log when the entity state changes
+
+4. **Enhanced Event Data Structure**:
+   - Added `entity_id` to all event data (EVENT_ACCESS, EVENT_UNLOCKED, EVENT_LOCKED, EVENT_CODE_EXPIRED, EVENT_USAGE_LIMIT_REACHED)
+   - Makes it clear which lock the event is for
+
+### Changed
+
+- **Backend (`coordinator.py`)**:
+  - Enhanced `_handle_notification()` with comprehensive logging and validation
+  - Improved `_handle_access_event()` with better error handling and entity state updates
+  - Updates `coordinator.data` with last access information when access events occur
+  - Added `entity_id` to all event data structures
+  - Converts `alarm_level` to int with proper error handling
+
+- **Backend (`lock.py`)**:
+  - Added `last_access_user`, `last_access_method`, and `last_access_timestamp` to `extra_state_attributes`
+  - These attributes appear in Home Assistant's activity log
+
+### What's Fixed
+
+- ✅ Usage count increments immediately when PIN is used
+- ✅ System logs show detailed information about notification receipt and processing
+- ✅ Activity log shows which user opened the lock (via entity state attributes)
+- ✅ Entity state updates reflect usage count changes in UI
+- ✅ Unknown user slots are logged with full details for debugging
+- ✅ Better error handling and validation for notification events
+
+---
+
+## [1.8.4.20] - 2026-01-27
+
+### 🐛 Bug Fix - scheduleToggle is not defined Error When Toggling Usage Limit
+
+**User feedback**: Error "Failed: scheduleToggle is not defined" when toggling the usage limit toggle.
+
+### The Problem
+
+The `scheduleToggle`, `startInput`, `endInput`, `limitToggle`, and `limitInput` variables were declared inside the first `if (!isFob)` block but were accessed in a second `if (!isFob)` block. Since these are separate scopes, the variables weren't accessible in the second block, causing a `ReferenceError`.
+
+### The Fix
+
+- Declared all schedule and limit-related variables at function scope (top of `saveUser()`) so they're accessible throughout the function
+- Added `oninput` handler to limit input field to detect unsaved changes
+- Added `_checkForUnsavedChanges(slot)` call in `toggleLimit()` to mark slot as having unsaved changes
+
+### Changed
+
+- **Frontend (`yale-lock-manager-card.js`)**:
+  - Moved variable declarations (`scheduleToggle`, `startInput`, `endInput`, `limitToggle`, `limitInput`) to function scope
+  - Added `oninput` handler to limit input field
+  - Added `_checkForUnsavedChanges()` call in `toggleLimit()` function
+
+### What's Fixed
+
+- ✅ No more "scheduleToggle is not defined" error when toggling usage limit
+- ✅ Variables are accessible in both `if (!isFob)` blocks
+- ✅ Usage limit changes are properly detected as unsaved changes
+
+---
+
 ## [1.8.4.19] - 2026-01-27
 
 ### 🐛 Bug Fix - scheduleToggle is not defined Error for FOB Slots
