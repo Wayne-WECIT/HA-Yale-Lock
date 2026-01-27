@@ -2506,14 +2506,14 @@ class YaleLockManagerCard extends HTMLElement {
       
       // Save form values to localStorage after successful save
       // This ensures values persist even if entity state is slow to update
-      // Variables are now declared above so they're available here
-      if (scheduleToggle?.checked && startInput?.value && endInput?.value) {
-        this._setFormValue(slot, 'schedule', { start: startInput.value, end: endInput.value });
-      } else {
-        this._setFormValue(slot, 'schedule', { start: null, end: null });
-      }
-      
-      if (codeType === 'pin') {
+      // Only save schedule and usage limit for PIN slots (FOBs don't have these)
+      if (!isFob) {
+        if (scheduleToggle?.checked && startInput?.value && endInput?.value) {
+          this._setFormValue(slot, 'schedule', { start: startInput.value, end: endInput.value });
+        } else {
+          this._setFormValue(slot, 'schedule', { start: null, end: null });
+        }
+        
         if (limitToggle?.checked && limitInput?.value) {
           this._setFormValue(slot, 'usageLimit', parseInt(limitInput.value, 10));
         } else {
