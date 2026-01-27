@@ -165,13 +165,17 @@ async def async_setup_services(hass: HomeAssistant) -> None:
             raise HomeAssistantError(f"Failed to set user code: {err}") from err
 
     async def handle_clear_user_code(call: ServiceCall) -> None:
-        """Handle clear user code service call."""
+        """Handle clear user code service call.
+        
+        Manual clears (from UI) should clear all local cached details.
+        """
         coordinator = get_coordinator()
         slot = call.data[ATTR_SLOT]
 
         try:
-            await coordinator.async_clear_user_code(slot)
-            _LOGGER.info("Cleared user code for slot %s", slot)
+            # Manual clears should clear all local cached details
+            await coordinator.async_clear_user_code(slot, clear_local_cache=True)
+            _LOGGER.info("Cleared user code for slot %s (local cache cleared)", slot)
         except Exception as err:
             _LOGGER.error("Error clearing user code: %s", err)
             raise HomeAssistantError(f"Failed to clear user code: {err}") from err

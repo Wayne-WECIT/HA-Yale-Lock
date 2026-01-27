@@ -338,10 +338,14 @@ class YaleLockCoordinator(DataUpdateCoordinator):
                 },
             )
             # Clear the code from the lock to prevent further access
+            # Use clear_local_cache=False to preserve local cache (name, schedule, usage_limit)
             try:
-                await self.async_clear_user_code(user_slot)
+                await self.async_clear_user_code(user_slot, clear_local_cache=False)
+                # Set cached status to disabled after clearing code
+                user_data["enabled"] = False
+                user_data["lock_status"] = USER_STATUS_DISABLED
                 _LOGGER.info(
-                    "Code cleared from lock for user %s (slot %s) due to usage limit",
+                    "Code cleared from lock and cached status set to disabled for user %s (slot %s) due to usage limit",
                     user_name,
                     user_slot,
                 )
@@ -836,20 +840,44 @@ class YaleLockCoordinator(DataUpdateCoordinator):
         )
         return False
 
-    async def async_clear_user_code(self, slot: int) -> None:
+    async def async_clear_user_code(self, slot: int, clear_local_cache: bool = False) -> None:
         """Clear a user code from storage and lock.
         
         This uses the lock_code_manager approach - clears the code from the lock,
         then updates only that slot from the lock to refresh the cache.
+        
+        Args:
+            slot: The slot number to clear
+            clear_local_cache: If True, clear all local cached details (name, schedule, usage_limit, etc.).
+                               If False, preserve local cache and only update from lock (for programmatic clears).
         """
         try:
-            _LOGGER.info("Clearing slot %s from lock...", slot)
+            _LOGGER.info("Clearing slot %s from lock... (clear_local_cache=%s)", slot, clear_local_cache)
             
             # Use Z-Wave client service (lock_code_manager approach)
             await self._zwave_client.clear_user_code(slot)
             
             # Wait for lock to process the clear operation
             await asyncio.sleep(3.0)
+            
+            slot_str = str(slot)
+            
+            # If clear_local_cache is True, clear all cached fields before updating from lock
+            if clear_local_cache and slot_str in self._user_data["users"]:
+                _LOGGER.info("Clearing all local cached details for slot %s", slot)
+                user_data = self._user_data["users"][slot_str]
+                # Clear all cached fields
+                user_data["name"] = f"User {slot}"
+                user_data["code"] = ""
+                user_data["enabled"] = False
+                user_data["lock_status"] = USER_STATUS_DISABLED
+                user_data["schedule"] = {"start": None, "end": None}
+                user_data["usage_limit"] = None
+                user_data["usage_count"] = 0
+                user_data["last_used"] = None
+                user_data["code_type"] = CODE_TYPE_PIN
+                user_data["synced_to_lock"] = False
+                _LOGGER.info("✓ All local cached details cleared for slot %s", slot)
             
             # Update only this slot from lock (optimized - no need to scan all slots)
             _LOGGER.info("Updating slot %s from lock...", slot)

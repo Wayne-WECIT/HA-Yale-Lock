@@ -1862,6 +1862,7 @@ class YaleLockManagerCard extends HTMLElement {
      * - If status is Enabled (1) and code type is PIN, PIN must be 4-8 characters
      * - If status is Enabled (1) and PIN is empty, show error and disable button
      * - If PIN is too short (< 4) or too long (> 8), show error and disable button
+     * - If status is Enabled and usage_count >= usage_limit, show error and disable button
      */
     const nameField = this.shadowRoot.getElementById(`name-${slot}`);
     const codeField = this.shadowRoot.getElementById(`code-${slot}`);
@@ -1878,6 +1879,11 @@ class YaleLockManagerCard extends HTMLElement {
     const code = codeField ? codeField.value.trim() || '' : '';
     const isEnabled = cachedStatus === 1;
     const isPin = codeType === 'pin';
+    
+    // Get current user data to check usage limit
+    const user = this.getUserData().find(u => u.slot === slot);
+    const usageCount = user ? (user.usage_count || 0) : 0;
+    const usageLimit = user ? (user.usage_limit || null) : null;
     
     let errorMessage = '';
     let isValid = true;
@@ -1902,6 +1908,12 @@ class YaleLockManagerCard extends HTMLElement {
           isValid = false;
         }
       }
+    }
+    
+    // Check usage limit: Cannot enable if usage_count >= usage_limit
+    if (isPin && isValid && isEnabled && usageLimit !== null && usageCount >= usageLimit) {
+      errorMessage = '⚠️ Cannot enable user: usage limit reached. Reset counter or increase limit.';
+      isValid = false;
     }
     
     // Update error display
@@ -2418,6 +2430,17 @@ class YaleLockManagerCard extends HTMLElement {
         }
         if (code.length > 8) {
           this.showStatus(slot, '⚠️ PIN cannot be longer than 8 digits', 'error');
+          return;
+        }
+      }
+      
+      // Check usage limit: Cannot enable if usage_count >= usage_limit
+      const user = this.getUserData().find(u => u.slot === slot);
+      if (user) {
+        const usageCount = user.usage_count || 0;
+        const usageLimit = user.usage_limit || null;
+        if (cachedStatus === 1 && usageLimit !== null && usageCount >= usageLimit) {
+          this.showStatus(slot, '⚠️ Cannot enable user: usage limit reached. Reset counter or increase limit.', 'error');
           return;
         }
       }

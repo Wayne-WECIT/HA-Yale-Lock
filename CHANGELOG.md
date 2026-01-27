@@ -2,6 +2,62 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.8.4.31] - 2026-01-27
+
+### 🐛 Bug Fix - Clear Lock Cache Behavior and Usage Limit Validation
+
+**User feedback**: 
+1. When clear lock is manually clicked, the local cached details must also be cleared for that slot. But when it is programmatically called (usage limit reached, disabled status, etc.), we should not clear the local cache but set the status to disabled.
+2. When a lock reaches the usage limit, the cached status should be set to disabled too. If set to enable and the current >= max, you cannot update/save the user until you either reset the counter or increase the max limit. We should show an error message to the user so they are aware they have to do one of the two solutions.
+
+### The Problem
+
+**Problem 1 - Clear Lock Cache:**
+- `async_clear_user_code()` always updated cache from lock, which preserved local cached details (name, schedule, usage_limit) even for manual clears
+- Manual clears should completely reset the slot, while programmatic clears (usage limit reached, etc.) should preserve local cache but disable the code
+
+**Problem 2 - Usage Limit Validation:**
+- When usage limit was reached, code was cleared from lock but cached status wasn't always set to disabled
+- UI allowed saving with Enabled status even when `usage_count >= usage_limit`, which would fail or cause confusion
+
+### The Fix
+
+**Problem 1 - Clear Lock Cache:**
+- Added `clear_local_cache: bool = False` parameter to `async_clear_user_code()` in `coordinator.py`
+- When `clear_local_cache=True` (manual clears): Clears all cached fields (name, code, schedule, usage_limit, usage_count, etc.)
+- When `clear_local_cache=False` (programmatic clears): Preserves local cache (name, schedule, usage_limit) and only updates from lock
+- Updated service handler to pass `clear_local_cache=True` for manual clears from UI
+
+**Problem 2 - Usage Limit Validation:**
+- Updated `_handle_access_event()` to set cached status to disabled after clearing code when usage limit is reached
+- Added usage limit validation to `_validateSlot()` in frontend: Prevents enabling if `usage_count >= usage_limit`
+- Added usage limit validation to `saveUser()` in frontend: Shows error message and prevents save if trying to enable when limit reached
+- Error message: "Cannot enable user: usage limit reached. Reset counter or increase limit."
+
+### Changed
+
+- **Backend (`coordinator.py`)**:
+  - Modified `async_clear_user_code()` to accept `clear_local_cache` parameter
+  - Added logic to clear all cached fields when `clear_local_cache=True`
+  - Updated `_handle_access_event()` to set cached status to disabled after clearing code when usage limit is reached
+- **Backend (`services.py`)**:
+  - Updated `handle_clear_user_code()` to pass `clear_local_cache=True` for manual clears
+- **Frontend (`yale-lock-manager-card.js`)**:
+  - Updated `_validateSlot()` to check usage limit when status is Enabled
+  - Updated `saveUser()` to validate usage limit before saving
+- **Version (`const.py`, `manifest.json`)**:
+  - Updated `VERSION` to `1.8.4.31`
+
+### What's Fixed
+
+- ✅ **Manual clear clears all cache**: When clear lock is manually clicked, all local cached details are cleared
+- ✅ **Programmatic clear preserves cache**: When clear is called programmatically (usage limit, etc.), local cache is preserved but status is set to disabled
+- ✅ **Usage limit sets status to disabled**: When usage limit is reached, cached status is automatically set to disabled
+- ✅ **Usage limit validation**: UI prevents saving with Enabled status when usage limit is reached
+- ✅ **Clear error messages**: Users see helpful error message explaining they need to reset counter or increase limit
+
+---
+
 ## [1.8.4.30] - 2026-01-27
 
 ### 🐛 Bug Fix - Usage Limit Not Enforced on Lock
