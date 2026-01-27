@@ -2,6 +2,48 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.8.4.41] - 2026-01-27
+
+### UI Enhancement - Move Notification Controls to Expanded Settings Pane
+
+**User feedback**: Move "Notifications" toggle and "Notification Service" chips from main table to expanded slot settings pane to keep the UI clean.
+
+### The Solution
+
+Moved notification controls from main table columns to the expanded slot settings pane. This cleans up the main table view while keeping notification settings easily accessible when a slot is expanded.
+
+### Changed
+
+- **Frontend (`yale-lock-manager-card.js`)**:
+  - Removed "Notifications" and "Notification Service" columns from main table header
+  - Removed notification toggle and service chips from main table row
+  - Added notification controls to expanded settings pane (after usage limit, before buttons)
+  - Updated expanded row `colspan` from `9` to `6` (6 columns remain: Slot, Name, Type, Status, Synced, Last Used)
+  - Removed column width CSS for notification service column
+- **Frontend (`yale-lock-manager-panel.js`)**:
+  - Removed "Notifications" and "Notification Service" columns from main table header
+  - Removed notification toggle and service chips from main table row
+  - Added notification controls to expanded settings pane
+  - Updated expanded row `colspan` from `8` to `6`
+  - Removed column width CSS for notification service column
+- **Version (`const.py`, `manifest.json`)**:
+  - Updated `VERSION` to `1.8.4.41`
+
+### What's Changed
+
+- Cleaner main table: Main table now shows only essential information (Slot, Name, Type, Status, Synced, Last Used)
+- Notification controls in settings: Notification toggle and service chips are now in the expanded slot settings pane
+- Better organization: All slot configuration options are now grouped together in the expanded pane
+- Instant save preserved: Notification controls still save instantly when clicked (functionality unchanged)
+
+### Technical Details
+
+- Notification control IDs remain the same, so existing JavaScript methods continue to work
+- Controls are only visible when slot is expanded
+- `_updateSlotFromEntityState()` can still find and update notification controls (they're in the DOM, just hidden when collapsed)
+
+---
+
 ## [1.8.4.40] - 2026-01-27
 
 ### 🐛 Bug Fix & ✨ Enhancement - Service Discovery and Instant Save for Notifications

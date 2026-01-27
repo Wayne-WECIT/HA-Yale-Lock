@@ -1196,11 +1196,6 @@ class YaleLockManagerCard extends HTMLElement {
           border-bottom: 1px solid var(--divider-color);
         }
       
-      td:nth-child(8) {
-        min-width: 180px;
-        max-width: 250px;
-      }
-      
       th {
         background: var(--table-header-background-color, var(--secondary-background-color));
         font-weight: bold;
@@ -1444,26 +1439,10 @@ class YaleLockManagerCard extends HTMLElement {
                   </td>
           <td>${user.synced_to_lock ? '✓' : '⚠️'}</td>
           <td>${this.formatLastUsed(user.last_used)}</td>
-          <td onclick="event.stopPropagation();">
-            <label class="toggle-switch">
-              <input 
-                type="checkbox" 
-                id="notification-toggle-${user.slot}" 
-                onchange="card.toggleNotification(${user.slot}, this.checked).catch(err => console.error('Error toggling notification:', err))" 
-                ${user.notifications_enabled ? 'checked' : ''}
-              >
-              <span class="slider"></span>
-            </label>
-          </td>
-          <td onclick="event.stopPropagation();">
-            <div class="notification-chips" id="notification-services-${user.slot}">
-              ${this.renderNotificationServiceChips(user.slot, user)}
-            </div>
-          </td>
                 </tr>
                 ${isExpanded ? `
                   <tr class="expanded-row">
-                    <td colspan="9">
+                    <td colspan="6">
               <div class="expanded-content">
                 <h3>Slot ${user.slot} Settings</h3>
                 
@@ -1724,6 +1703,26 @@ class YaleLockManagerCard extends HTMLElement {
                           </div>
                   </div>
                 ` : ''}
+                
+                <div class="form-group">
+                  <label>Notifications:</label>
+                  <label class="toggle-switch">
+                    <input 
+                      type="checkbox" 
+                      id="notification-toggle-${user.slot}" 
+                      onchange="card.toggleNotification(${user.slot}, this.checked).catch(err => console.error('Error toggling notification:', err))" 
+                      ${user.notifications_enabled ? 'checked' : ''}
+                    >
+                    <span class="slider"></span>
+                  </label>
+                </div>
+                
+                <div class="form-group">
+                  <label>Notification Service:</label>
+                  <div class="notification-chips" id="notification-services-${user.slot}">
+                    ${this.renderNotificationServiceChips(user.slot, user)}
+                  </div>
+                </div>
                           
                 <hr>
                 <div class="button-group">
@@ -1785,8 +1784,6 @@ class YaleLockManagerCard extends HTMLElement {
               <th>Status</th>
               <th>Synced</th>
               <th>Last Used</th>
-              <th>Notifications</th>
-              <th>Notification Service</th>
             </tr>
           </thead>
           <tbody>
