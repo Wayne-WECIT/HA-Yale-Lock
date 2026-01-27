@@ -642,6 +642,7 @@ class YaleLockManagerPanel extends HTMLElement {
               <th>Status</th>
               <th>Synced</th>
               <th>Last Used</th>
+              <th>Notifications</th>
             </tr>
           </thead>
           <tbody>
@@ -982,10 +983,21 @@ class YaleLockManagerPanel extends HTMLElement {
         </td>
         <td>${user.synced_to_lock ? '✓' : '⚠️'}</td>
         <td>${this.formatLastUsed(user.last_used)}</td>
+        <td onclick="event.stopPropagation();">
+          <label class="toggle-switch">
+            <input 
+              type="checkbox" 
+              id="notification-toggle-${user.slot}" 
+              onchange="panel.toggleNotification(${user.slot}, this.checked)" 
+              ${user.notifications_enabled ? 'checked' : ''}
+            >
+            <span class="slider"></span>
+          </label>
+        </td>
       </tr>
       ${isExpanded ? `
         <tr class="expanded-row">
-          <td colspan="6">
+          <td colspan="7">
             <div class="expanded-content">
               <h3>Slot ${user.slot} Settings</h3>
               
@@ -1187,25 +1199,6 @@ class YaleLockManagerPanel extends HTMLElement {
                       <button class="secondary" style="margin-top: 8px; width: 100%;" onclick="panel.resetCount(${user.slot})">Reset Counter</button>
                     ` : ''}
                   </div>
-                </div>
-              ` : ''}
-              
-              ${!isFob ? `
-                <div class="form-group">
-                  <label class="toggle-label">
-                    <label class="toggle-switch">
-                      <input 
-                        type="checkbox" 
-                        id="notification-toggle-${user.slot}" 
-                        ${user.notifications_enabled ? 'checked' : ''}
-                      >
-                      <span class="slider"></span>
-                    </label>
-                    <span>🔔 Enable Notifications</span>
-                  </label>
-                  <p style="color: var(--secondary-text-color); font-size: 0.85em; margin: 4px 0 8px 20px;">
-                    Send notification when this code is used to access the lock.
-                  </p>
                 </div>
               ` : ''}
               
@@ -1526,6 +1519,28 @@ class YaleLockManagerPanel extends HTMLElement {
     });
   }
 
+  async toggleNotification(slot, checked) {
+    try {
+      // Save immediately by calling the service
+      await this._hass.callService('yale_lock_manager', 'set_notification_enabled', {
+        entity_id: this._config.entity,
+        slot: parseInt(slot, 10),
+        enabled: checked
+      });
+      
+      // Show success message
+      this.showStatus(slot, checked ? '🔔 Notifications enabled' : '🔕 Notifications disabled', 'success');
+    } catch (error) {
+      // Show error message
+      this.showStatus(slot, `❌ Failed to update notifications: ${error.message}`, 'error');
+      // Revert toggle state
+      const toggle = this.querySelector(`#notification-toggle-${slot}`);
+      if (toggle) {
+        toggle.checked = !checked;
+      }
+    }
+  }
+
   async saveUser(slot) {
     // Get values from DOM (uncontrolled pattern - DOM is source of truth)
     const name = this._getFieldValue(`name-${slot}`).trim();
@@ -1609,16 +1624,6 @@ class YaleLockManagerPanel extends HTMLElement {
           entity_id: this._config.entity,
           slot: parseInt(slot, 10),
           max_uses: limit
-        });
-
-        // Save notification setting (PINs only)
-        const notificationToggle = this.querySelector(`#notification-toggle-${slot}`);
-        const notificationsEnabled = notificationToggle?.checked || false;
-        
-        await this._hass.callService('yale_lock_manager', 'set_notification_enabled', {
-          entity_id: this._config.entity,
-          slot: parseInt(slot, 10),
-          enabled: notificationsEnabled
         });
       }
 

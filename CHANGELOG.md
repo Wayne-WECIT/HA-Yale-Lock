@@ -2,6 +2,46 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.8.4.34] - 2026-01-27
+
+### ✨ Enhancement - Notification Toggle Moved to Main Table Column
+
+**User feedback**: The notification setting is not shown when the type is set to FOB/RFID. Also when the notification setting is changed, the Update User button is not enabled so the setting cannot be saved. Would it be easier to move the enable notification setting to the main panel in an additional column?
+
+### The Solution
+
+Moved the notification toggle from expanded slot settings to a new "Notifications" column in the main table. This makes notifications visible and toggleable for all slot types (PIN and FOB), allows immediate saving without the Update User button, and provides better UX with always-visible controls.
+
+### Changed
+
+- **Frontend (`yale-lock-manager-card.js`)**:
+  - Added "Notifications" column header to main table
+  - Added notification toggle cell in main table row (after "Last Used" column)
+  - Updated `toggleNotification()` method to save immediately via `set_notification_enabled` service
+  - Removed notification toggle from expanded slot settings
+  - Removed notification saving from `saveUser()` method (now saved immediately on toggle)
+  - Updated expanded row colspan from 7 to 8 to accommodate new column
+  - Toggle uses `event.stopPropagation()` to prevent row expansion when clicked
+- **Frontend (`yale-lock-manager-panel.js`)**:
+  - Added "Notifications" column header to main table
+  - Added notification toggle cell in `renderUserRow()` method (after "Last Used" column)
+  - Added `toggleNotification()` method to save immediately via `set_notification_enabled` service
+  - Removed notification toggle from expanded slot settings
+  - Removed notification saving from `saveUser()` method (now saved immediately on toggle)
+  - Updated expanded row colspan from 6 to 7 to accommodate new column
+  - Toggle uses `event.stopPropagation()` to prevent row expansion when clicked
+- **Version (`const.py`, `manifest.json`)**:
+  - Updated `VERSION` to `1.8.4.34`
+
+### What's Fixed
+
+- ✅ **Notification toggle now visible for FOB/RFID**: Toggle is always visible in main table, regardless of slot type
+- ✅ **Immediate saving**: Notification setting saves immediately when toggled (no Update User button needed)
+- ✅ **Better UX**: Notification control is always visible in main table, no need to expand slot to access it
+- ✅ **Consistent behavior**: Works the same way for both PIN and FOB slot types
+
+---
+
 ## [1.8.4.33] - 2026-01-27
 
 ### ✨ Enhancement - Per-Slot Notifications for PIN Usage

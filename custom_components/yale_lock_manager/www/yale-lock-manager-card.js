@@ -1341,10 +1341,21 @@ class YaleLockManagerCard extends HTMLElement {
                   </td>
           <td>${user.synced_to_lock ? '✓' : '⚠️'}</td>
           <td>${this.formatLastUsed(user.last_used)}</td>
+          <td onclick="event.stopPropagation();">
+            <label class="toggle-switch">
+              <input 
+                type="checkbox" 
+                id="notification-toggle-${user.slot}" 
+                onchange="card.toggleNotification(${user.slot}, this.checked)" 
+                ${user.notifications_enabled ? 'checked' : ''}
+              >
+              <span class="slider"></span>
+            </label>
+          </td>
                 </tr>
                 ${isExpanded ? `
                   <tr class="expanded-row">
-                    <td colspan="7">
+                    <td colspan="8">
               <div class="expanded-content">
                 <h3>Slot ${user.slot} Settings</h3>
                 
@@ -1606,26 +1617,6 @@ class YaleLockManagerCard extends HTMLElement {
                   </div>
                 ` : ''}
                           
-                ${!isFob ? `
-                          <div class="form-group">
-                    <label class="toggle-label">
-                      <label class="toggle-switch">
-                        <input 
-                          type="checkbox" 
-                          id="notification-toggle-${user.slot}" 
-                          onchange="card.toggleNotification(${user.slot}, this.checked)" 
-                          ${user.notifications_enabled ? 'checked' : ''}
-                        >
-                        <span class="slider"></span>
-                      </label>
-                      <span>🔔 Enable Notifications</span>
-                    </label>
-                    <p style="color: var(--secondary-text-color); font-size: 0.85em; margin: 4px 0 8px 20px;">
-                      Send notification when this code is used to access the lock.
-                    </p>
-                  </div>
-                ` : ''}
-                
                 <hr>
                 <div class="button-group">
                   <button id="save-button-${user.slot}" onclick="card.saveUser(${user.slot})">
@@ -1686,6 +1677,7 @@ class YaleLockManagerCard extends HTMLElement {
               <th>Status</th>
               <th>Synced</th>
               <th>Last Used</th>
+              <th>Notifications</th>
             </tr>
           </thead>
           <tbody>
@@ -2144,11 +2136,29 @@ class YaleLockManagerCard extends HTMLElement {
     this._checkForUnsavedChanges(slot);
   }
 
-  toggleNotification(slot, checked) {
-    // Store notification setting in form values
-    this._setFormValue(slot, 'notificationsEnabled', checked);
-    // Mark as having unsaved changes when notification toggle is changed
-    this._checkForUnsavedChanges(slot);
+  async toggleNotification(slot, checked) {
+    try {
+      // Save immediately by calling the service
+      await this._hass.callService('yale_lock_manager', 'set_notification_enabled', {
+        entity_id: this._config.entity,
+        slot: parseInt(slot, 10),
+        enabled: checked
+      });
+      
+      // Store notification setting in form values
+      this._setFormValue(slot, 'notificationsEnabled', checked);
+      
+      // Show success message
+      this.showStatus(slot, checked ? '🔔 Notifications enabled' : '🔕 Notifications disabled', 'success');
+    } catch (error) {
+      // Show error message
+      this.showStatus(slot, `❌ Failed to update notifications: ${error.message}`, 'error');
+      // Revert toggle state
+      const toggle = this.shadowRoot.getElementById(`notification-toggle-${slot}`);
+      if (toggle) {
+        toggle.checked = !checked;
+      }
+    }
   }
 
   // ========== ACTIONS ==========
@@ -2572,16 +2582,6 @@ class YaleLockManagerCard extends HTMLElement {
           entity_id: this._config.entity,
           slot: parseInt(slot, 10),
           max_uses: limit
-        });
-
-        // Save notification setting (PINs only)
-        const notificationToggle = this.shadowRoot.getElementById(`notification-toggle-${slot}`);
-        const notificationsEnabled = notificationToggle?.checked || false;
-        
-        await this._hass.callService('yale_lock_manager', 'set_notification_enabled', {
-          entity_id: this._config.entity,
-          slot: parseInt(slot, 10),
-          enabled: notificationsEnabled
         });
       }
 
