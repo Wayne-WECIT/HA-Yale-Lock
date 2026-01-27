@@ -1330,7 +1330,7 @@ class YaleLockManagerCard extends HTMLElement {
                     id="name-${user.slot}" 
                     value="${formName}" 
                     placeholder="Enter name"
-                    oninput="card.setFormValue(${user.slot}, 'name', this.value); card._checkForUnsavedChanges(${user.slot})"
+                    oninput="card.setFormValue(${user.slot}, 'name', this.value); card.updateStatusOptions(${user.slot}); card._checkForUnsavedChanges(${user.slot}); card._validateSlot(${user.slot})"
                   >
                         </div>
                         
@@ -1825,10 +1825,12 @@ class YaleLockManagerCard extends HTMLElement {
     /**Validate slot data and enable/disable save button accordingly.
      * 
      * Rules:
+     * - Username is always required
      * - If status is Enabled (1) and code type is PIN, PIN must be 4-8 characters
      * - If status is Enabled (1) and PIN is empty, show error and disable button
      * - If PIN is too short (< 4) or too long (> 8), show error and disable button
      */
+    const nameField = this.shadowRoot.getElementById(`name-${slot}`);
     const codeField = this.shadowRoot.getElementById(`code-${slot}`);
     const statusField = this.shadowRoot.getElementById(`cached-status-${slot}`);
     const typeField = this.shadowRoot.getElementById(`type-${slot}`);
@@ -1837,6 +1839,7 @@ class YaleLockManagerCard extends HTMLElement {
     
     if (!statusField || !typeField || !saveButton) return;
     
+    const name = nameField ? nameField.value.trim() || '' : '';
     const codeType = typeField.value;
     const cachedStatus = parseInt(statusField.value || '0', 10);
     const code = codeField ? codeField.value.trim() || '' : '';
@@ -1846,8 +1849,14 @@ class YaleLockManagerCard extends HTMLElement {
     let errorMessage = '';
     let isValid = true;
     
+    // Username is always required
+    if (!name || name === `User ${slot}`) {
+      errorMessage = '⚠️ Username is required';
+      isValid = false;
+    }
+    
     // Only validate PINs (FOBs don't need PIN validation)
-    if (isPin) {
+    if (isPin && isValid) {
       if (isEnabled && !code) {
         errorMessage = '⚠️ PIN is required when status is Enabled';
         isValid = false;
@@ -1935,8 +1944,17 @@ class YaleLockManagerCard extends HTMLElement {
       disabledOption.selected = currentValue === '2';
       statusSelect.appendChild(disabledOption);
       
+      // Only change value if it was '0' (Available) - but don't trigger changeStatus if user doesn't exist
       if (currentValue === '0') {
-        statusSelect.value = '1';
+        const user = this.getUserData().find(u => u.slot === slot);
+        if (user) {
+          // User exists - safe to change status
+          statusSelect.value = '1';
+        } else {
+          // User doesn't exist yet - just set form value, don't trigger onchange
+          this._setFormValue(slot, 'cachedStatus', 1);
+          statusSelect.value = '1';
+        }
       }
     }
   }
@@ -2074,6 +2092,14 @@ class YaleLockManagerCard extends HTMLElement {
 
   async changeStatus(slot, statusValue) {
     const status = parseInt(statusValue, 10);
+    
+    // Check if user exists before trying to set status
+    const user = this.getUserData().find(u => u.slot === slot);
+    if (!user) {
+      // User doesn't exist yet - just update form value, don't call service
+      this._setFormValue(slot, 'cachedStatus', status);
+      return;
+    }
     
     try {
       await this._hass.callService('yale_lock_manager', 'set_user_status', {
