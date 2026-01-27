@@ -12,6 +12,7 @@ import homeassistant.helpers.config_validation as cv
 from .const import (
     ATTR_CODE,
     ATTR_CODE_TYPE,
+    ATTR_ENABLED,
     ATTR_END_DATETIME,
     ATTR_MAX_USES,
     ATTR_NAME,
