@@ -2,6 +2,58 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.8.4.24] - 2026-01-27
+
+### 🐛 Bug Fix - Add Comprehensive Logging for Notification Processing
+
+**User feedback**: PIN usage count was still not incrementing after unlocking the door with a PIN, and no processing logs were appearing after the notification was received.
+
+### The Problem
+
+The notification handler was receiving events (as shown in logs), but no subsequent processing logs appeared. This made it impossible to diagnose where the processing was stopping. The code was likely:
+- Returning early at a check (node_id or command_class)
+- Raising an exception that was being silently caught
+- Using DEBUG-level logs that weren't visible
+
+### The Fix
+
+Added comprehensive INFO-level logging throughout the notification handler to diagnose exactly where processing stops:
+
+1. **Node ID Check Logging**:
+   - Added INFO log when node_id check passes: `"Node ID check passed: event_node_id=%s, self.node_id=%s"`
+   - Changed DEBUG log to INFO for node_id mismatches so it's always visible
+
+2. **Command Class Logging**:
+   - Added INFO log showing command_class value and comparison: `"Command class: %s (CC_NOTIFICATION=%s, CC_BATTERY=%s, ccId=%s)"`
+   - Added INFO log showing comparison result: `"Command class check: %s == CC_NOTIFICATION? %s"`
+   - Changed DEBUG log to INFO for unsupported command classes
+
+3. **Exception Handling**:
+   - Wrapped entire notification handler in try/except block
+   - Logs any exceptions with full traceback: `"Exception in notification handler: %s"`
+
+4. **Changed Debug to Info**:
+   - Changed all critical debug logs to INFO level so they're always visible
+   - Changed "Unhandled notification" from DEBUG to INFO
+
+### Changed
+
+- **Backend (`coordinator.py`)**:
+  - Added comprehensive INFO-level logging at each step of notification processing
+  - Wrapped notification handler in try/except to catch silent exceptions
+  - Changed critical DEBUG logs to INFO level for visibility
+  - Fixed indentation issue in notification handler
+
+### What's Fixed
+
+- ✅ Comprehensive logging now shows exactly where notification processing stops
+- ✅ Node ID check results are now visible in logs
+- ✅ Command class extraction and comparison are now logged
+- ✅ Any exceptions in notification handler are now caught and logged with full traceback
+- ✅ All critical diagnostic logs are now at INFO level and always visible
+
+---
+
 ## [1.8.4.23] - 2026-01-27
 
 ### 🐛 Bug Fix - Notification Processing and Battery Alarm Handling
