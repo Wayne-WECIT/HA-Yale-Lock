@@ -140,44 +140,42 @@ class YaleLockCoordinator(DataUpdateCoordinator):
             _LOGGER.debug("Notification from different node, ignoring")
             return
 
-        event_params = event.data.get("event_parameters", {})
-        alarm_type = event_params.get("alarmType")
-        alarm_level = event_params.get("alarmLevel")
+        # Z-Wave JS notification event structure:
+        # - 'type': notification type (6 = Access Control)
+        # - 'event': event number (6 = Keypad unlock operation, 9 = Auto lock locked operation)
+        # - 'parameters': dict with event-specific parameters (e.g., {'userId': 1})
+        event_type = event.data.get("type")
+        event_number = event.data.get("event")
+        event_parameters = event.data.get("parameters", {})
 
-        _LOGGER.info("Notification - Type: %s, Level: %s, Full params: %s", 
-                     alarm_type, alarm_level, event_params)
+        _LOGGER.info("Notification - Type: %s, Event: %s, Parameters: %s", 
+                     event_type, event_number, event_parameters)
 
-        # Handle different alarm types
-        if alarm_type in ALARM_TYPE_KEYPAD_UNLOCK:
-            # Validate and convert alarm_level to int
+        # Handle keypad unlock (event 6 = Keypad unlock operation)
+        if event_number == 6 and event_type == 6:  # Access Control notification, Keypad unlock event
+            # Get user slot from parameters
+            user_slot = event_parameters.get("userId")
+            
+            # Validate and convert user_slot to int
             try:
-                user_slot = int(alarm_level) if alarm_level is not None else None
+                user_slot = int(user_slot) if user_slot is not None else None
                 if user_slot is None or user_slot < 1 or user_slot > MAX_USER_SLOTS:
-                    _LOGGER.warning("Invalid alarm_level for keypad unlock: %s", alarm_level)
+                    _LOGGER.warning("Invalid userId for keypad unlock: %s", event_parameters.get("userId"))
                     return
             except (ValueError, TypeError) as err:
-                _LOGGER.error("Failed to convert alarm_level to int: %s", err)
+                _LOGGER.error("Failed to convert userId to int: %s", err)
                 return
             
             _LOGGER.info("Keypad unlock detected - User slot: %s", user_slot)
             await self._handle_access_event(user_slot, ACCESS_METHOD_PIN)
-        elif alarm_type == ALARM_TYPE_AUTO_LOCK:
+        # Handle auto lock (event 9 = Auto lock locked operation)
+        elif event_number == 9 and event_type == 6:  # Access Control notification, Auto lock event
             self._fire_event(EVENT_LOCKED, {
                 "entity_id": self.lock_entity_id,
                 "method": ACCESS_METHOD_AUTO
             })
-        elif alarm_type == ALARM_TYPE_RF_LOCK:
-            # Alarm 24: RF lock operation (Z-Wave/Remote locked the lock)
-            self._fire_event(EVENT_LOCKED, {
-                "entity_id": self.lock_entity_id,
-                "method": ACCESS_METHOD_REMOTE
-            })
-        elif alarm_type == ALARM_TYPE_RF_UNLOCK:
-            # Alarm 25: RF unlock operation (Z-Wave/Remote unlocked the lock)
-            self._fire_event(EVENT_UNLOCKED, {
-                "entity_id": self.lock_entity_id,
-                "method": ACCESS_METHOD_REMOTE
-            })
+        # Note: RF lock/unlock events may use different event numbers
+        # These will be handled when we see them in the logs
 
     async def _handle_access_event(self, user_slot: int, method: str) -> None:
         """Handle a user access event."""
