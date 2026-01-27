@@ -2,6 +2,49 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.8.4.25] - 2026-01-27
+
+### 🐛 Bug Fix - Node ID Comparison Mismatch
+
+**User feedback**: PIN usage count was still not incrementing after unlocking the door with a PIN. Logs showed: `Notification from different node (4 != 4061103099), ignoring`
+
+### The Problem
+
+The config entry was storing the Z-Wave `home_id` (4061103099) instead of the `node_id` (4). When notification events arrived with `node_id: 4`, the comparison failed because the coordinator was comparing against `home_id: 4061103099`, causing all notifications to be ignored.
+
+### The Fix
+
+1. **Added Diagnostic Logging**:
+   - Added logging at coordinator initialization to show what `node_id` value is stored in the config entry
+   - This helps identify when the config entry has the wrong value
+
+2. **Home ID Detection and Correction**:
+   - Added logic to detect when `self.node_id` matches the event's `home_id`
+   - If a match is found, the code now uses the event's `node_id` for comparison instead
+   - This allows the integration to work even if the config entry incorrectly stored the home_id
+
+3. **Enhanced Comparison Logic**:
+   - The comparison now uses `actual_node_id` which is either:
+     - `self.node_id` (if the config entry has the correct node_id)
+     - `event_node_id` (if the config entry has home_id instead)
+   - Added more detailed logging showing both `event_node_id`, `actual_node_id`, and `config_node_id` for debugging
+
+### Changed
+
+- **Backend (`coordinator.py`)**:
+  - Added logging at coordinator initialization to show stored `node_id` value
+  - Added logic to detect and handle config entries with `home_id` instead of `node_id`
+  - Updated node_id comparison to use `actual_node_id` which corrects for config errors
+  - Enhanced logging to show all node_id values during comparison
+
+### What's Fixed
+
+- ✅ **PIN usage tracking now works**: Notifications are no longer ignored due to node_id mismatch
+- ✅ **Config entry error handling**: Integration works even if config entry incorrectly stores home_id
+- ✅ **Better diagnostics**: Logging shows exactly what values are being compared
+
+---
+
 ## [1.8.4.24] - 2026-01-27
 
 ### 🐛 Bug Fix - Add Comprehensive Logging for Notification Processing
