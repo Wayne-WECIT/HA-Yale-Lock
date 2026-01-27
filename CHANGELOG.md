@@ -2,6 +2,46 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.8.4.27] - 2026-01-27
+
+### 🐛 Bug Fix - Reset Usage Count Not Updating UI
+
+**User feedback**: When clicking "Reset Counter", the usage count was reset to 0 in storage, but the UI didn't update to reflect the change.
+
+### The Problem
+
+The `async_reset_usage_count` method was resetting the usage count to 0 and saving the data, but it wasn't triggering UI updates because:
+1. The coordinator data timestamp (`last_user_update`) was not updated
+2. `async_update_listeners()` was not called to notify listeners
+3. The lock entity state was not written to trigger UI updates
+
+This meant users had to manually refresh the page to see the counter reset to 0.
+
+### The Fix
+
+Updated `async_reset_usage_count` to follow the same pattern as other methods that update user data:
+1. Update `self.data["last_user_update"]` with a timestamp using `dt_util.utcnow().isoformat()`
+2. Call `self.async_update_listeners()` to notify all coordinator listeners
+3. Schedule `self._lock_entity.async_write_ha_state()` with a 0.2 second delay to update the entity state
+
+### Changed
+
+- **Backend (`coordinator.py`)**:
+  - Updated `async_reset_usage_count()` to add entity state updates after resetting usage count
+  - Added `self.data["last_user_update"] = dt_util.utcnow().isoformat()` to trigger coordinator update cycle
+  - Added `self.async_update_listeners()` to notify all listeners
+  - Added scheduled `self._lock_entity.async_write_ha_state()` call to update entity state
+- **Version (`const.py`, `manifest.json`)**:
+  - Updated `VERSION` to `1.8.4.27`
+
+### What's Fixed
+
+- ✅ **UI updates immediately**: Usage count resets to 0 in the UI without requiring a page refresh
+- ✅ **Consistent behavior**: Reset counter now follows the same update pattern as other user data changes
+- ✅ **Better UX**: Users see the counter reset immediately after clicking the button
+
+---
+
 ## [1.8.4.26] - 2026-01-27
 
 ### 🐛 Bug Fix - Timezone-Aware Datetime for Timestamp Sensor
