@@ -475,6 +475,606 @@ When typing in the username field for an available slot, the status dropdown was
 
 ---
 
+## [1.8.3.29] - 2026-01-26
+
+### 🐛 Bug Fix - Syntax Error
+
+**User feedback**: `SyntaxError: 'break' outside loop` in `coordinator.py`
+
+### The Fix
+
+- Removed `break` statements that were incorrectly placed outside loops
+- Allow code to flow naturally after handling status limitation
+
+### Changed
+
+- **Backend (`coordinator.py`)**:
+  - Removed `break` statements outside loops
+
+---
+
+## [1.8.3.28] - 2026-01-26
+
+### 🐛 Bug Fix - Status Change Limitation Handling
+
+**User feedback**: Lock firmware limitation where status changes via Z-Wave are ignored.
+
+### The Fix
+
+- Implemented graceful degradation for status change limitation
+- Instead of raising error, log warning and update cached status
+- Set `status_change_unsupported = True` and `sync_failure_reason` flags
+- Frontend displays informational warning instead of error
+
+### Changed
+
+- **Backend (`coordinator.py`)**:
+  - Added graceful handling for status change failures
+  - Update cached status to user's desired state
+  - Set sync flags for frontend display
+
+- **Frontend (`yale-lock-manager-card.js`)**:
+  - Check for status change limitation flags
+  - Display informational warning instead of error
+
+---
+
+## [1.8.3.27] - 2026-01-26
+
+### 🐛 Bug Fix - Remove Failed ChatGPT Formats
+
+**User feedback**: Code modification approach also failed to change status.
+
+### The Fix
+
+- Removed failed ChatGPT parameter format attempts
+- Implemented "code modification" approach for status-only changes
+- Temporarily change code to force lock to process status change
+- Improved error messages
+
+### Changed
+
+- **Backend (`zwave_client.py`)**:
+  - Removed ChatGPT parameter format attempts
+  - Simplified to use original, correct parameter format
+
+- **Backend (`coordinator.py`)**:
+  - Implemented code modification approach for status-only changes
+
+---
+
+## [1.8.3.26] - 2026-01-26
+
+### 🐛 Bug Fix - Status Change Fixes
+
+**User feedback**: Status change not taking effect, verification shows status=1 after SET with status=2.
+
+### The Fix
+
+- Implemented increased wait times for status-only changes
+- Enhanced logging for status changes
+- Implemented clear-and-reset approach if status mismatch occurs
+
+### Changed
+
+- **Backend (`coordinator.py`)**:
+  - Added longer wait times for status-only changes
+  - Enhanced status change logging
+  - Added clear-and-reset retry logic
+
+---
+
+## [1.8.3.25] - 2026-01-26
+
+### 🐛 Bug Fix - Z-Wave Parameter Types
+
+**User feedback**: "the PIN should be an INT the status should also be an INT ONLY for both. the userstatus should be 0,1 or 2 it seems you are sending the PIN?"
+
+### The Fix
+
+- Added explicit type conversions (`int(slot)`, `int(status)`, `str(code)`)
+- Added validation for `userIdStatus` to be 0, 1, or 2
+- Added detailed logging of parameter types and values
+
+### Changed
+
+- **Backend (`zwave_client.py`)**:
+  - Added explicit type conversions
+  - Added status range validation
+  - Enhanced parameter logging
+
+- **Backend (`coordinator.py`)**:
+  - Explicitly convert status to `int(status)` before passing to `set_user_code`
+
+---
+
+## [1.8.3.24] - 2026-01-26
+
+### 🐛 Bug Fix - Parameter Order Revert
+
+**User feedback**: Error shows parameter type mismatch.
+
+### The Fix
+
+- Reverted parameter order back to `[slot, status, code]`
+- Original order was correct, issue was type mismatch
+
+### Changed
+
+- **Backend (`zwave_client.py`)**:
+  - Reverted to original parameter order `[slot, status, code]`
+
+---
+
+## [1.8.3.23] - 2026-01-26
+
+### 🐛 Bug Fix - Parameter Order
+
+**User feedback**: Investigating parameter format for `set` operations.
+
+### The Fix
+
+- Changed parameter order from `[slot, status, code]` to `[slot, code, status]`
+- Assumed Z-Wave spec required `[userId, userCode, userIdStatus]`
+
+### Changed
+
+- **Backend (`zwave_client.py`)**:
+  - Changed parameter order (later reverted in v1.8.3.24)
+
+---
+
+## [1.8.3.22] - 2026-01-26
+
+### 🐛 Bug Fix - GET Code Before SET
+
+**User feedback**: Status change not taking effect.
+
+### The Fix
+
+- Implemented "GET code before SET" logic
+- Retrieve current code from lock and use its exact format when setting status
+- Address potential issues with lock requiring specific code format (e.g., leading zeros)
+
+### Changed
+
+- **Backend (`coordinator.py`)**:
+  - Added GET code before SET logic
+  - Use exact code format from lock when setting status
+  - Updated verification comparisons to use `code_to_set`
+
+---
+
+## [1.8.3.21] - 2026-01-26
+
+### 🐛 Bug Fix - Status Verification Data Preservation
+
+**User feedback**: Status mismatch during verification.
+
+### The Fix
+
+- Modified to preserve `verification_data` from last successful attempt
+- Ensures status mismatch check uses last valid data even if subsequent attempts timeout
+- Correctly raises error if status never matched
+
+### Changed
+
+- **Backend (`coordinator.py`)**:
+  - Preserve verification data from last successful attempt
+  - Use last valid data for status mismatch check
+
+---
+
+## [1.8.3.20] - 2026-01-26
+
+### 🐛 Bug Fix - Status Verification
+
+**User feedback**: Status not updating after push, lock not setting status.
+
+### The Fix
+
+- Modified push verification to check both code and status
+- Store `expected_status` before verification loop
+- Added error handling to raise `ValueError` if status mismatch persists
+- Added frontend debug logging for status verification
+
+### Changed
+
+- **Backend (`coordinator.py`)**:
+  - Added status verification to push operation
+  - Check both `code_matches` and `status_matches`
+  - Raise error if status doesn't match after retries
+
+- **Frontend (`yale-lock-manager-card.js`)**:
+  - Added debug logging for status verification
+
+---
+
+## [1.8.3.19] - 2026-01-26
+
+### 🐛 Bug Fix - Lock PIN Update
+
+**User feedback**: Lock PIN in UI not updating after push, despite backend logs showing correct value.
+
+### The Fix
+
+- Modified `lock.py` to create deep copy of `users` dictionary in `extra_state_attributes`
+- Forces Home Assistant to detect changes and broadcast to frontend
+- Simplified push and refresh paths to use same mechanism
+
+### Changed
+
+- **Backend (`lock.py`)**:
+  - Create deep copy of users dictionary in `extra_state_attributes`
+  - Forces Home Assistant change detection
+
+- **Backend (`coordinator.py`)**:
+  - Simplified push and refresh paths to use same update mechanism
+
+---
+
+## [1.8.3.18] - 2026-01-26
+
+### 🐛 Bug Fix - Frontend State Update
+
+**User feedback**: Frontend not updating after push.
+
+### The Fix
+
+- Update `coordinator.data` timestamp immediately after push
+- Call `async_update_listeners()` to notify all listeners
+- Schedule `async_write_ha_state()` as backup
+
+### Changed
+
+- **Backend (`coordinator.py`)**:
+  - Update `coordinator.data` timestamp immediately
+  - Call `async_update_listeners()` after push
+  - Schedule state write as backup
+
+---
+
+## [1.8.3.17] - 2026-01-26
+
+### 🐛 Bug Fix - Frontend Logging
+
+**User feedback**: Need to see lock_code value when slot is expanded.
+
+### The Fix
+
+- Added logging in `set hass()` to show `lock_code` value when slot is expanded
+- Updated `coordinator.data` timestamp again in callback to ensure change is detected
+
+### Changed
+
+- **Frontend (`yale-lock-manager-card.js`)**:
+  - Added `lock_code` logging in `set hass()`
+
+- **Backend (`coordinator.py`)**:
+  - Update `coordinator.data` timestamp in callback
+
+---
+
+## [1.8.3.16] - 2026-01-26
+
+### 🐛 Bug Fix - Frontend Notification
+
+**User feedback**: Frontend not receiving state updates after push.
+
+### The Fix
+
+- Added `async_update_listeners()` after scheduled `async_write_ha_state()` call
+- Explicitly notify all coordinator listeners
+- Ensures Home Assistant broadcasts state change
+
+### Changed
+
+- **Backend (`coordinator.py`)**:
+  - Added `async_update_listeners()` call after push
+
+---
+
+## [1.8.3.15] - 2026-01-26
+
+### 🐛 Bug Fix - Entity State Update After Push
+
+**User feedback**: Frontend polls showing entity state not updating.
+
+### The Fix
+
+- Modified `coordinator.py` to schedule `async_write_ha_state()` with 0.2s delay
+- Mirror successful refresh pattern with delays
+- Ensure Home Assistant processes data update before notifying frontend
+
+### Changed
+
+- **Backend (`coordinator.py`)**:
+  - Schedule `async_write_ha_state()` with 0.2s delay after 0.1s delay post-save
+
+---
+
+## [1.8.3.14] - 2026-01-26
+
+### 🐛 Bug Fix - Frontend Polling Delays
+
+**User feedback**: "there doesnt seems to be any wait between the retries what do you think?"
+
+### The Fix
+
+- Fixed frontend polling logic to use recursive `setTimeout`
+- Ensures 1-second delay between each poll attempt
+- Increased initial delay before starting polls to 1 second
+- Added `elapsed_seconds` to logs for better timing analysis
+
+### Changed
+
+- **Frontend (`yale-lock-manager-card.js`)**:
+  - Fixed polling to use recursive `setTimeout` with 1-second delays
+  - Added elapsed time tracking to logs
+
+---
+
+## [1.8.3.13] - 2026-01-26
+
+### 🐛 Bug Fix - Lock Code Write Verification
+
+**User feedback**: Lock code verification timing issues.
+
+### The Fix
+
+- Added retry logic with longer delays for lock code write verification
+- Increased wait times between verification attempts
+
+### Changed
+
+- **Backend (`coordinator.py`)**:
+  - Added retry logic with longer delays
+  - Increased wait times for verification
+
+---
+
+## [1.8.3.12] - 2026-01-26
+
+### 🐛 Bug Fix - Frontend Debug Panel Logging
+
+**User feedback**: Need to see entity state polling in debug panel.
+
+### The Fix
+
+- Added frontend debug panel logging for entity state polling after push
+- Shows `lock_code` values at each poll and when it matches cached code
+
+### Changed
+
+- **Frontend (`yale-lock-manager-card.js`)**:
+  - Added debug logging for entity state polling
+  - Log `lock_code` values at each poll attempt
+
+---
+
+## [1.8.3.11] - 2026-01-26
+
+### 🐛 Bug Fix - Lock Code Update Logging
+
+**User feedback**: Backend logs show correct `lock_code` but frontend doesn't update.
+
+### The Fix
+
+- Added extensive logging in `coordinator.py` to trace `lock_code` value
+- Log through verification, saving to storage, and before entity state write
+- Pinpoint where value might be lost
+
+### Changed
+
+- **Backend (`coordinator.py`)**:
+  - Added detailed logging for `lock_code` through entire push flow
+
+---
+
+## [1.8.3.10] - 2026-01-26
+
+### 🐛 Bug Fix - Lock Code Entity State Update
+
+**User feedback**: Lock PIN in UI not updating after push.
+
+### The Fix
+
+- Removed `async_request_refresh()` after push
+- Update `coordinator.data["last_user_update"]` directly
+- Call `self._lock_entity.async_write_ha_state()` directly
+- Prevent full pull from overwriting `lock_code`
+
+### Changed
+
+- **Backend (`coordinator.py`)**:
+  - Removed `async_request_refresh()` after push
+  - Direct entity state update instead
+
+---
+
+## [1.8.3.9] - 2026-01-26
+
+### 🐛 Bug Fix - Debug Panel and Cached PIN Revert
+
+**User feedback**: Debug panel shows `***` for lock codes and cached PIN reverting after push.
+
+### The Fix
+
+- Modified `_addDebugLog` to remove masking of `code` and `lock_code` values
+- Allow actual PINs to be displayed in debug panel
+- Modified `_updateSlotFromEntityState` to accept `preserveCachedCode` parameter
+- Prevent cached PIN field from being overwritten after push
+
+### Changed
+
+- **Frontend (`yale-lock-manager-card.js`)**:
+  - Removed code masking in debug panel
+  - Added `preserveCachedCode` parameter to `_updateSlotFromEntityState`
+  - Set `preserveCachedCode = true` after push operations
+
+---
+
+## [1.8.3.8] - 2026-01-26
+
+### 🐛 Bug Fix - Logger Compatibility
+
+**User feedback**: `YaleLockLogger.error() takes 2 positional arguments but 4 were given`
+
+### The Fix
+
+- Updated `error()` method in `YaleLockLogger` to accept `*args`
+- Pass args to internal `_log_message` method for proper formatting
+- Made consistent with `info()` and `debug()` methods
+
+### Changed
+
+- **Backend (`logger.py`)**:
+  - Updated `error()` method to accept `*args`
+
+---
+
+## [1.8.3.7] - 2026-01-26
+
+### 🐛 Bug Fix - limitToggle Error and via_device Warning
+
+**User feedback**: `limitToggle is not defined` error and `via_device` deprecation warning.
+
+### The Fix
+
+- Moved `limitToggle` and `limitInput` declarations to top of `saveUser` function
+- Commented out `via_device` reference to address deprecation warning
+
+### Changed
+
+- **Frontend (`yale-lock-manager-card.js`)**:
+  - Moved variable declarations to function scope
+
+- **Backend (`lock.py`)**:
+  - Commented out `via_device` reference
+
+---
+
+## [1.8.3.6] - 2026-01-26
+
+### 🐛 Bug Fix - Refresh UI Update
+
+**User feedback**: "still no refresh after lock refresh"
+
+### The Fix
+
+- Improved refresh UI update logic
+- Always log refresh completion
+- Force UI update after 3 polling attempts if new users detected
+- Force update after `maxAttempts` if no changes detected
+
+### Changed
+
+- **Frontend (`yale-lock-manager-card.js`)**:
+  - Enhanced `_handleRefreshProgress` to force UI update
+  - Added fallback update logic
+
+---
+
+## [1.8.3.5] - 2026-01-26
+
+### 🎨 Feature - Debug Panel
+
+**User feedback**: "is there a way we can show in the UI of debug output of all the cached details before, after refresh?"
+
+### The Fix
+
+- Added comprehensive debug panel to UI
+- Chronological log of internal state changes
+- Shows cached and entity data at critical points (refresh, slot expansion, PIN changes, save, push)
+
+### Changed
+
+- **Frontend (`yale-lock-manager-card.js`)**:
+  - Added `_addDebugLog()` method
+  - Added debug panel HTML and styling
+  - Integrated debug logging into key operations
+
+---
+
+## [1.8.3.4] - 2026-01-26
+
+### 🐛 Bug Fix - Refresh UI Update
+
+**User feedback**: "after a refresh the page is still not refreshing"
+
+### The Fix
+
+- Fixed refresh UI update by forcing render after refresh completes
+- Ensure UI updates even if change detection doesn't immediately flag changes
+
+### Changed
+
+- **Frontend (`yale-lock-manager-card.js`)**:
+  - Force `render()` after refresh completion
+
+---
+
+## [1.8.3.3] - 2026-01-26
+
+### 🐛 Bug Fix - Duplicate Variable Declaration
+
+**User feedback**: JavaScript error with duplicate variable declaration.
+
+### The Fix
+
+- Fixed duplicate variable declaration error in frontend code
+
+### Changed
+
+- **Frontend (`yale-lock-manager-card.js`)**:
+  - Removed duplicate variable declaration
+
+---
+
+## [1.8.3.2] - 2026-01-26
+
+### 🎨 Feature - localStorage-Based Form Value Storage
+
+**User feedback**: "1 different storage method and saving method, this may help which why when the page refreshs it pulls old value as you can make it pull the values from storage instead"
+
+### The Fix
+
+- Implemented `localStorage`-based storage system for form field values
+- Form values persist across page loads
+- Independent of Home Assistant entity state
+- Prevents data loss during UI re-renders
+
+### Changed
+
+- **Frontend (`yale-lock-manager-card.js`)**:
+  - Added `localStorage` integration for form values
+  - Form values saved immediately upon change
+  - Loaded from `localStorage` on component initialization
+  - Cleaned up on slot deletion
+
+---
+
+## [1.8.3.1] - 2026-01-26
+
+### 🐛 Bug Fix - Logger Compatibility
+
+**User feedback**: `YaleLockLogger.info() takes 2 positional arguments but 3 were given`
+
+### The Fix
+
+- Modified `YaleLockLogger` to accept both keyword arguments and positional string formatting
+- Added `*args` support to all logger methods
+- Internal `_log_message` method handles both formats
+
+### Changed
+
+- **Backend (`logger.py`)**:
+  - Updated all logger methods to accept `*args`
+  - Added `_log_message` method to handle formatting
+  - Made backward compatible with existing code
+
+---
+
 ## [1.8.2.51] - 2026-01-26
 
 ### 🐛 Bug Fix - Frontend Update After Refresh (Timing Fix)
