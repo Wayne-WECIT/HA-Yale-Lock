@@ -1286,7 +1286,7 @@ class YaleLockManagerCard extends HTMLElement {
       
       // Determine status dropdown options
       const hasLockPin = user.lock_code && user.lock_code.trim() !== '' && user.lock_code.trim() !== 'No PIN on lock';
-      const hasCachedPin = formCode && formCode.trim() !== '';
+      // hasCachedPin already declared above
       const hasName = formName && formName.trim() !== '' && formName.trim() !== `User ${user.slot}`;
       const hasData = hasLockPin || hasCachedPin || hasName;
               
