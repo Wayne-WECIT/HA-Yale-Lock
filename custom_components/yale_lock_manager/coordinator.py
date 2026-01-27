@@ -24,6 +24,8 @@ from .const import (
     ALARM_TYPE_RF_LOCK,
     ALARM_TYPE_RF_UNLOCK,
     CC_BATTERY,
+    CC_NOTIFICATION,
+    CC_BATTERY,
     CC_DOOR_LOCK,
     CC_NOTIFICATION,
     CODE_TYPE_FOB,
@@ -136,14 +138,71 @@ class YaleLockCoordinator(DataUpdateCoordinator):
         # Log all notifications for debugging
         _LOGGER.info("Received Z-Wave notification event: %s", event.data)
         
-        if event.data.get("node_id") != int(self.node_id):
-            _LOGGER.debug("Notification from different node, ignoring")
+        # Check node_id - handle both int and string comparisons
+        # Also check for 'nodeId' (used in some event structures)
+        event_node_id = event.data.get("node_id") or event.data.get("nodeId")
+        if event_node_id is None:
+            _LOGGER.warning("Notification event missing node_id/nodeId: %s", event.data)
+            return
+        
+        try:
+            if int(event_node_id) != int(self.node_id):
+                _LOGGER.debug("Notification from different node (%s != %s), ignoring", event_node_id, self.node_id)
+                return
+        except (ValueError, TypeError) as err:
+            _LOGGER.warning("Failed to compare node_id: %s (event_node_id=%s, self.node_id=%s)", err, event_node_id, self.node_id)
             return
 
-        # Z-Wave JS notification event structure:
+        # Z-Wave JS notification event structure for Access Control (command_class 113):
         # - 'type': notification type (6 = Access Control)
         # - 'event': event number (6 = Keypad unlock operation, 9 = Auto lock locked operation)
         # - 'parameters': dict with event-specific parameters (e.g., {'userId': 1})
+        # 
+        # For Battery notifications (command_class 128), the structure is different:
+        # - 'command_class': 128
+        # - 'args': dict with 'eventType' (e.g., 'battery low') and 'urgency'
+        command_class = event.data.get("command_class")
+        
+        # Handle Battery notifications (command_class 128)
+        # Battery notifications may come in different formats:
+        # 1. As part of zwave_js_notification with command_class=128
+        # 2. As a separate event with 'ccId' or 'command_class' = 128
+        command_class_alt = event.data.get("ccId")  # Alternative field name
+        if command_class == CC_BATTERY or command_class_alt == CC_BATTERY:
+            # Try both 'args' and direct event.data fields
+            args = event.data.get("args", {})
+            if not args:
+                args = event.data  # Fallback to event.data itself
+            
+            event_type = args.get("eventType", "")
+            urgency = args.get("urgency")
+            
+            _LOGGER.info("Battery notification - EventType: %s, Urgency: %s, Full args: %s", event_type, urgency, args)
+            
+            if event_type == "battery low" or "battery low" in str(event_type).lower():
+                _LOGGER.warning("Battery low alarm detected for lock (urgency: %s)", urgency)
+                # Fire battery low event
+                self._fire_event(
+                    f"{DOMAIN}_battery_low",
+                    {
+                        "entity_id": self.lock_entity_id,
+                        "urgency": urgency,
+                        "timestamp": datetime.now().isoformat(),
+                    },
+                )
+                # Update coordinator data to reflect battery alarm
+                self.data["battery_low_alarm"] = True
+                self.data["battery_low_timestamp"] = datetime.now().isoformat()
+                self.async_update_listeners()
+                if self._lock_entity:
+                    self.hass.loop.call_later(0.2, self._lock_entity.async_write_ha_state)
+            return
+
+        # Handle Access Control notifications (command_class 113)
+        if command_class != CC_NOTIFICATION:
+            _LOGGER.debug("Notification from unsupported command class: %s", command_class)
+            return
+
         event_type = event.data.get("type")
         event_number = event.data.get("event")
         event_parameters = event.data.get("parameters", {})
@@ -174,8 +233,8 @@ class YaleLockCoordinator(DataUpdateCoordinator):
                 "entity_id": self.lock_entity_id,
                 "method": ACCESS_METHOD_AUTO
             })
-        # Note: RF lock/unlock events may use different event numbers
-        # These will be handled when we see them in the logs
+        else:
+            _LOGGER.debug("Unhandled notification - Type: %s, Event: %s", event_type, event_number)
 
     async def _handle_access_event(self, user_slot: int, method: str) -> None:
         """Handle a user access event."""
