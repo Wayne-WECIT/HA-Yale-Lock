@@ -957,6 +957,12 @@ class YaleLockCoordinator(DataUpdateCoordinator):
         user_data = self._user_data["users"][str(slot)]
         if not user_data.get("enabled", False):
             await self.async_enable_user(slot)
+        
+        # Update entity state so UI reflects the reset
+        self.data["last_user_update"] = dt_util.utcnow().isoformat()
+        self.async_update_listeners()
+        if self._lock_entity:
+            self.hass.loop.call_later(0.2, self._lock_entity.async_write_ha_state)
 
     async def async_push_code_to_lock(self, slot: int) -> None:
         """Push a code to the lock - set if enabled, clear if disabled."""
