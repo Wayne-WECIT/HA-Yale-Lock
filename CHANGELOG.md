@@ -2,6 +2,40 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.8.4.32] - 2026-01-27
+
+### ✨ Enhancement - Last Used Column in UI Table
+
+**User feedback**: Can we add another column to the main UI and show when that slot was last used to access the lock? Show the date time in the format YYYY-MM-DD HH:MM time in 24hr clock. If the slot has never been used the status should be "Never". When the manual clear slot is clicked ensure the last used time is also cleared.
+
+### The Solution
+
+Added a new "Last Used" column to the main UI table in both card and panel views. The column displays when each slot (PIN/FOB) was last used to access the lock, formatted as YYYY-MM-DD HH:MM (24-hour clock). If a slot has never been used, it displays "Never".
+
+### Changed
+
+- **Frontend (`yale-lock-manager-card.js`)**:
+  - Added "Last Used" column header in table thead
+  - Added last used cell in table row displaying formatted timestamp
+  - Added `formatLastUsed()` helper function to format timestamps as YYYY-MM-DD HH:MM
+  - Updated expanded row colspan from 6 to 7 to accommodate new column
+- **Frontend (`yale-lock-manager-panel.js`)**:
+  - Added "Last Used" column header in table thead
+  - Added last used cell in `renderUserRow()` method displaying formatted timestamp
+  - Added `formatLastUsed()` helper function to format timestamps as YYYY-MM-DD HH:MM
+  - Updated expanded row colspan from 5 to 6 to accommodate new column
+- **Version (`const.py`, `manifest.json`)**:
+  - Updated `VERSION` to `1.8.4.32`
+
+### What's New
+
+- ✅ **Last Used column**: New column shows when each slot was last used to access the lock
+- ✅ **Formatted timestamps**: Dates displayed in YYYY-MM-DD HH:MM format (24-hour clock)
+- ✅ **Never used indicator**: Slots that have never been used display "Never"
+- ✅ **Auto-cleared on manual clear**: When manual clear slot is clicked, last_used timestamp is cleared (already implemented in backend)
+
+---
+
 ## [1.8.4.31] - 2026-01-27
 
 ### 🐛 Bug Fix - Clear Lock Cache Behavior and Usage Limit Validation

@@ -631,6 +631,7 @@ class YaleLockManagerPanel extends HTMLElement {
               <th>Type</th>
               <th>Status</th>
               <th>Synced</th>
+              <th>Last Used</th>
             </tr>
           </thead>
           <tbody>
@@ -887,6 +888,23 @@ class YaleLockManagerPanel extends HTMLElement {
     `;
   }
 
+  formatLastUsed(lastUsed) {
+    /** Format last_used timestamp as YYYY-MM-DD HH:MM (24-hour clock) or "Never" if not used. */
+    if (!lastUsed) return 'Never';
+    try {
+      const dt = new Date(lastUsed);
+      if (isNaN(dt.getTime())) return 'Never';
+      const year = dt.getFullYear();
+      const month = String(dt.getMonth() + 1).padStart(2, '0');
+      const day = String(dt.getDate()).padStart(2, '0');
+      const hours = String(dt.getHours()).padStart(2, '0');
+      const minutes = String(dt.getMinutes()).padStart(2, '0');
+      return `${year}-${month}-${day} ${hours}:${minutes}`;
+    } catch (e) {
+      return 'Never';
+    }
+  }
+
   renderUserRow(user) {
     const isExpanded = this._expandedSlot === user.slot;
     const isFob = user.code_type === 'fob';
@@ -953,10 +971,11 @@ class YaleLockManagerPanel extends HTMLElement {
           ">${statusText}</span>
         </td>
         <td>${user.synced_to_lock ? '✓' : '⚠️'}</td>
+        <td>${this.formatLastUsed(user.last_used)}</td>
       </tr>
       ${isExpanded ? `
         <tr class="expanded-row">
-          <td colspan="5">
+          <td colspan="6">
             <div class="expanded-content">
               <h3>Slot ${user.slot} Settings</h3>
               
