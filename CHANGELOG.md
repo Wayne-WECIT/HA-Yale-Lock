@@ -2,6 +2,35 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.8.4.29] - 2026-01-27
+
+### 🐛 Bug Fix - Update User Button Not Enabling for Schedule/Usage Limit Changes
+
+**User feedback**: When changing the usage limit or time-based schedule, the Update User button stayed disabled. It only became enabled when the username was changed.
+
+### The Problem
+
+The `_checkForUnsavedChanges()` method correctly detected schedule and usage_limit changes and set `_unsavedChanges[slot] = true`, but it wasn't calling `_validateSlot()` to update the Save button state. The `_validateSlot()` method is responsible for enabling/disabling the Save button based on validation and unsaved changes, but it was only being called from specific input handlers (name, code, status fields) and not when schedule or usage_limit changed.
+
+### The Fix
+
+Updated `_checkForUnsavedChanges()` to call `_validateSlot()` after detecting changes. This ensures that whenever any field changes (including schedule and usage_limit), the Save button state is properly updated.
+
+### Changed
+
+- **Frontend (`yale-lock-manager-card.js`)**:
+  - Updated `_checkForUnsavedChanges()` to call `_validateSlot()` before `_updateButtonStates()` to ensure Save button state is updated for all change types
+- **Version (`const.py`, `manifest.json`)**:
+  - Updated `VERSION` to `1.8.4.29`
+
+### What's Fixed
+
+- ✅ **Update User button enables for schedule changes**: Changing the time-based schedule now properly enables the Update User button
+- ✅ **Update User button enables for usage limit changes**: Changing the usage limit now properly enables the Update User button
+- ✅ **Consistent behavior**: All field changes now trigger the same validation and button state update logic
+
+---
+
 ## [1.8.4.28] - 2026-01-27
 
 ### ✨ Enhancement - Smart Button State Management

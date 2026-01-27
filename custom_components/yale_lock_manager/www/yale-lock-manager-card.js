@@ -1819,7 +1819,8 @@ class YaleLockManagerCard extends HTMLElement {
       }
     }
     
-    // Update button states based on saved status
+    // Validate slot and update button states based on saved status
+    this._validateSlot(slot);
     this._updateButtonStates(slot);
   }
   
