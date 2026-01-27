@@ -1054,26 +1054,32 @@ class YaleLockCoordinator(DataUpdateCoordinator):
                     # Unknown status
                     _LOGGER.warning("Slot %s: Unknown status %s", slot, status_int)
                 
-                # Recalculate sync status
-                cached_enabled = user_data.get("enabled", False)
-                should_be_enabled = cached_enabled and self._is_code_valid(slot)
-                lock_is_enabled = (status_int == USER_STATUS_ENABLED)
-                
-                # Synced if: code matches AND enabled state matches
-                cached_code = user_data.get("code", "")
-                if should_be_enabled:
-                    # Should be enabled: code must exist and match
-                    user_data["synced_to_lock"] = (
-                        lock_is_enabled and
-                        cached_code == code and
-                        cached_code != ""
-                    )
+                # Recalculate sync status (only for PIN slots)
+                current_code_type = user_data.get("code_type", CODE_TYPE_PIN)
+                if current_code_type == CODE_TYPE_FOB:
+                    # FOBs are always synced (they're managed directly on the lock)
+                    user_data["synced_to_lock"] = True
                 else:
-                    # Should be disabled: code must NOT exist
-                    user_data["synced_to_lock"] = (
-                        status_int == USER_STATUS_AVAILABLE or
-                        code == ""
-                    )
+                    # PIN slots: calculate sync based on code and status
+                    cached_enabled = user_data.get("enabled", False)
+                    should_be_enabled = cached_enabled and self._is_code_valid(slot)
+                    lock_is_enabled = (status_int == USER_STATUS_ENABLED)
+                    
+                    # Synced if: code matches AND enabled state matches
+                    cached_code = user_data.get("code", "")
+                    if should_be_enabled:
+                        # Should be enabled: code must exist and match
+                        user_data["synced_to_lock"] = (
+                            lock_is_enabled and
+                            cached_code == code and
+                            cached_code != ""
+                        )
+                    else:
+                        # Should be disabled: code must NOT exist
+                        user_data["synced_to_lock"] = (
+                            status_int == USER_STATUS_AVAILABLE or
+                            code == ""
+                        )
                 
                 _LOGGER.info("Slot %s updated - Cached: %s, Lock: %s, Synced: %s", 
                            slot, "***" if cached_code else "None", 
