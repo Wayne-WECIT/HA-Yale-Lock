@@ -28,6 +28,7 @@ class YaleLockManagerCard extends HTMLElement {
     this._localStorageKey = null; // Will be set when config is available
     this._debugLog = []; // Array of debug log entries
     this._showDebugPanel = false; // Toggle debug panel visibility
+    this._savedSlots = {}; // Track which slots have been saved (enables Push button)
   }
 
   setConfig(config) {
@@ -1579,8 +1580,10 @@ class YaleLockManagerCard extends HTMLElement {
                 ${!isFob ? `
                   <div class="button-group" style="margin-top: 12px;">
                     <button 
+                      id="push-button-${user.slot}"
                       onclick="card.pushCode(${user.slot})"
                       style="${!user.synced_to_lock ? 'background: #ff9800; color: white; font-weight: bold;' : ''}"
+                      disabled
                     >${user.synced_to_lock ? 'Push' : 'Push Required'}</button>
                           </div>
                         ` : ''}
@@ -1740,14 +1743,23 @@ class YaleLockManagerCard extends HTMLElement {
       ? user.lock_status 
       : (user.enabled ? 1 : 2);
     
-    const hasChanges = (currentName !== savedName) || 
-                      (currentCode !== savedCode) || 
-                      (currentStatus !== savedStatus);
+    // Check if PIN or status changed (these affect Push button)
+    const pinChanged = (currentCode !== savedCode);
+    const statusChanged = (currentStatus !== savedStatus);
+    const hasChanges = (currentName !== savedName) || pinChanged || statusChanged;
     
     const warningDiv = this.shadowRoot.querySelector(`#unsaved-warning-${slot}`);
+    const saveButton = this.shadowRoot.getElementById(`save-button-${slot}`);
+    const pushButton = this.shadowRoot.getElementById(`push-button-${slot}`);
     
     if (hasChanges) {
       this._unsavedChanges[slot] = true;
+      
+      // If PIN or status changed, mark slot as unsaved (disables Push, enables Save)
+      if (pinChanged || statusChanged) {
+        delete this._savedSlots[slot];
+      }
+      
       // Show warning message
       if (warningDiv) {
         warningDiv.style.display = 'block';
@@ -1757,10 +1769,54 @@ class YaleLockManagerCard extends HTMLElement {
           </div>
         `;
       }
+      
+      // Enable Save button if validation passes
+      if (saveButton && !saveButton.disabled) {
+        // Button will be enabled/disabled by _validateSlot
+      }
+      
+      // Disable Push button if PIN or status changed
+      if (pushButton && (pinChanged || statusChanged)) {
+        pushButton.disabled = true;
+        pushButton.style.opacity = '0.5';
+        pushButton.style.cursor = 'not-allowed';
+      }
     } else {
       delete this._unsavedChanges[slot];
       if (warningDiv) {
         warningDiv.style.display = 'none';
+      }
+    }
+    
+    // Update button states based on saved status
+    this._updateButtonStates(slot);
+  }
+  
+  _updateButtonStates(slot) {
+    /**Update Save and Push button states based on saved status and validation.
+     * 
+     * Rules:
+     * - Save button: Enabled if validation passes AND there are unsaved changes
+     * - Push button: Enabled only if slot has been saved (no unsaved changes)
+     */
+    const saveButton = this.shadowRoot.getElementById(`save-button-${slot}`);
+    const pushButton = this.shadowRoot.getElementById(`push-button-${slot}`);
+    const hasUnsavedChanges = this._unsavedChanges[slot];
+    const isSaved = this._savedSlots[slot];
+    
+    // Save button: enabled if validation passes (handled by _validateSlot) AND has unsaved changes
+    // We don't disable it here - _validateSlot handles that
+    
+    // Push button: enabled only if slot is saved (no unsaved changes)
+    if (pushButton) {
+      if (isSaved && !hasUnsavedChanges) {
+        pushButton.disabled = false;
+        pushButton.style.opacity = '1';
+        pushButton.style.cursor = 'pointer';
+      } else {
+        pushButton.disabled = true;
+        pushButton.style.opacity = '0.5';
+        pushButton.style.cursor = 'not-allowed';
       }
     }
   }
@@ -1821,9 +1877,15 @@ class YaleLockManagerCard extends HTMLElement {
       }
     }
     
-    // Enable/disable save button
+    // Enable/disable save button based on validation AND unsaved changes
     if (saveButton) {
-      if (isValid) {
+      const hasUnsavedChanges = this._unsavedChanges[slot];
+      const isSaved = this._savedSlots[slot];
+      
+      // Save button is enabled if:
+      // - Validation passes AND
+      // - (Has unsaved changes OR slot hasn't been saved yet)
+      if (isValid && (hasUnsavedChanges || !isSaved)) {
         saveButton.disabled = false;
         saveButton.style.opacity = '1';
         saveButton.style.cursor = 'pointer';
@@ -1833,6 +1895,9 @@ class YaleLockManagerCard extends HTMLElement {
         saveButton.style.cursor = 'not-allowed';
       }
     }
+    
+    // Update Push button state
+    this._updateButtonStates(slot);
   }
 
   updateStatusOptions(slot) {
@@ -1899,7 +1964,10 @@ class YaleLockManagerCard extends HTMLElement {
       });
       
       // Validate slot after expansion to set initial button state
-      setTimeout(() => this._validateSlot(slot), 100);
+      setTimeout(() => {
+        this._validateSlot(slot);
+        this._updateButtonStates(slot);
+      }, 100);
     }
     
     this.render();
@@ -2339,10 +2407,25 @@ class YaleLockManagerCard extends HTMLElement {
       
       // Clear unsaved changes flag and hide warning
       delete this._unsavedChanges[slot];
+      this._savedSlots[slot] = true; // Mark slot as saved (enables Push button)
       const warningDiv = this.shadowRoot.getElementById(`unsaved-warning-${slot}`);
       if (warningDiv) {
         warningDiv.style.display = 'none';
         warningDiv.innerHTML = '';
+      }
+      
+      // Update button states: disable Save, enable Push
+      const saveButton = this.shadowRoot.getElementById(`save-button-${slot}`);
+      const pushButton = this.shadowRoot.getElementById(`push-button-${slot}`);
+      if (saveButton) {
+        saveButton.disabled = true;
+        saveButton.style.opacity = '0.5';
+        saveButton.style.cursor = 'not-allowed';
+      }
+      if (pushButton) {
+        pushButton.disabled = false;
+        pushButton.style.opacity = '1';
+        pushButton.style.cursor = 'pointer';
       }
       
       // Log after update completed
