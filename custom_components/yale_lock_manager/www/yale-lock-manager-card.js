@@ -1931,10 +1931,6 @@ class YaleLockManagerCard extends HTMLElement {
       savedNotificationServices = [savedNotificationServices];
     }
     
-    // Get current selected services from chips
-    const currentServices = this._formValues[slot]?.notificationServices || [];
-    const currentServicesArray = Array.isArray(currentServices) ? currentServices : (currentServices ? [currentServices] : []);
-    
     // Compare arrays (order doesn't matter)
     const servicesChanged = JSON.stringify([...currentServicesArray].sort()) !== JSON.stringify([...savedNotificationServices].sort());
     

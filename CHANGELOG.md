@@ -2,6 +2,30 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.8.4.39] - 2026-01-27
+
+### 🐛 Bug Fix - Duplicate Variable Declaration
+
+**Issue**: JavaScript syntax error: "Identifier 'currentServices' has already been declared" at line 1935 in `yale-lock-manager-card.js`.
+
+**Root Cause**: During the multi-select notification services implementation, `currentServices` and `currentServicesArray` were accidentally declared twice in the `_checkForUnsavedChanges()` method - once at line 1913 and again at line 1935.
+
+**Fix**: Removed the duplicate declaration at line 1935, keeping only the first declaration which is properly scoped for use throughout the function.
+
+### Changed
+
+- **Frontend (`yale-lock-manager-card.js`)**:
+  - Removed duplicate `const currentServices` and `const currentServicesArray` declarations in `_checkForUnsavedChanges()` method
+- **Version (`const.py`, `manifest.json`)**:
+  - Updated `VERSION` to `1.8.4.39`
+
+### What's Fixed
+
+- ✅ **JavaScript syntax error resolved**: No more "Identifier 'currentServices' has already been declared" error
+- ✅ **Code compiles correctly**: Frontend JavaScript now loads without syntax errors
+
+---
+
 ## [1.8.4.38] - 2026-01-27
 
 ### ✨ Enhancement - Multi-Select Notification Services with Chips UI and Column Width Fix
