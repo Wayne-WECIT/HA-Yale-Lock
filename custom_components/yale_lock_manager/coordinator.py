@@ -14,6 +14,7 @@ from homeassistant.config_entries import ConfigEntry, ConfigEntryState
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import device_registry as dr, entity_registry as er
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
+from homeassistant.util import dt as dt_util
 
 from .const import (
     ACCESS_METHOD_AUTO,
@@ -218,12 +219,12 @@ class YaleLockCoordinator(DataUpdateCoordinator):
                         {
                             "entity_id": self.lock_entity_id,
                             "urgency": urgency,
-                            "timestamp": datetime.now().isoformat(),
+                            "timestamp": dt_util.utcnow().isoformat(),
                         },
                     )
                     # Update coordinator data to reflect battery alarm
                     self.data["battery_low_alarm"] = True
-                    self.data["battery_low_timestamp"] = datetime.now().isoformat()
+                    self.data["battery_low_timestamp"] = dt_util.utcnow().isoformat()
                     self.async_update_listeners()
                     if self._lock_entity:
                         self.hass.loop.call_later(0.2, self._lock_entity.async_write_ha_state)
@@ -289,7 +290,7 @@ class YaleLockCoordinator(DataUpdateCoordinator):
                     "user_name": f"Unknown User (Slot {user_slot})",
                     "user_slot": user_slot,
                     "method": method,
-                    "timestamp": datetime.now().isoformat(),
+                    "timestamp": dt_util.utcnow().isoformat(),
                     "usage_count": None,
                 },
             )
@@ -318,7 +319,7 @@ class YaleLockCoordinator(DataUpdateCoordinator):
         # Update usage count
         usage_count = user_data.get("usage_count", 0) + 1
         user_data["usage_count"] = usage_count
-        user_data["last_used"] = datetime.now().isoformat()
+        user_data["last_used"] = dt_util.utcnow().isoformat()
 
         # Check usage limit
         max_uses = user_data.get("usage_limit")
@@ -342,8 +343,8 @@ class YaleLockCoordinator(DataUpdateCoordinator):
         # Update coordinator data for entity state
         self.data["last_access_user"] = user_name
         self.data["last_access_method"] = method
-        self.data["last_access_timestamp"] = datetime.now().isoformat()
-        self.data["last_user_update"] = datetime.now().isoformat()
+        self.data["last_access_timestamp"] = dt_util.utcnow().isoformat()
+        self.data["last_user_update"] = dt_util.utcnow().isoformat()
 
         # Save updated data
         await self.async_save_user_data()
@@ -364,7 +365,7 @@ class YaleLockCoordinator(DataUpdateCoordinator):
                 "user_name": user_name,
                 "user_slot": user_slot,
                 "method": method,
-                "timestamp": datetime.now().isoformat(),
+                "timestamp": dt_util.utcnow().isoformat(),
                 "usage_count": usage_count,
             },
         )
@@ -671,7 +672,7 @@ class YaleLockCoordinator(DataUpdateCoordinator):
             await self.async_save_user_data()
             
             # Update entity state
-            self.data["last_user_update"] = datetime.now().isoformat()
+            self.data["last_user_update"] = dt_util.utcnow().isoformat()
             self.async_update_listeners()
             if self._lock_entity:
                 self.hass.loop.call_later(0.2, self._lock_entity.async_write_ha_state)
@@ -1056,7 +1057,7 @@ class YaleLockCoordinator(DataUpdateCoordinator):
             _LOGGER.info("User data saved after push for slot %s", slot)
             
             # Update entity state
-            self.data["last_user_update"] = datetime.now().isoformat()
+            self.data["last_user_update"] = dt_util.utcnow().isoformat()
             self.async_update_listeners()
             if self._lock_entity:
                 self.hass.loop.call_later(0.2, self._lock_entity.async_write_ha_state)
@@ -1302,7 +1303,7 @@ class YaleLockCoordinator(DataUpdateCoordinator):
         
         # Update coordinator.data to trigger coordinator update cycle
         if self.data:
-            self.data["last_user_update"] = datetime.now().isoformat()
+            self.data["last_user_update"] = dt_util.utcnow().isoformat()
             _LOGGER.debug("[REFRESH DEBUG] Updated coordinator.data with timestamp: %s", self.data["last_user_update"])
         
         # Trigger listeners to notify CoordinatorEntity

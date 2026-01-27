@@ -1,7 +1,7 @@
 """Sensor platform for Yale Lock Manager."""
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 import logging
 from typing import Any
 
@@ -109,6 +109,9 @@ class YaleLockLastAccessSensor(CoordinatorEntity, SensorEntity):
             if last_used:
                 try:
                     dt = datetime.fromisoformat(last_used)
+                    # Ensure timezone-aware (add UTC if naive)
+                    if dt.tzinfo is None:
+                        dt = dt.replace(tzinfo=timezone.utc)
                     if most_recent is None or dt > most_recent:
                         most_recent = dt
                 except (ValueError, TypeError):
