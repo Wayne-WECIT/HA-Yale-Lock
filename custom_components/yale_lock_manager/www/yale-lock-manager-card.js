@@ -2102,32 +2102,28 @@ class YaleLockManagerCard extends HTMLElement {
   async changeStatus(slot, statusValue) {
     const status = parseInt(statusValue, 10);
     
-    // CRITICAL: Check if user exists before trying to set status
+    // CRITICAL: Check if user exists in entity state before trying to set status
     // getUserData() returns users from entity state - if slot doesn't exist in entity, user will be undefined
     const user = this.getUserData().find(u => u.slot === slot);
     
-    // Also check if user has a name (indicates it's a real user, not just an empty slot)
-    const nameField = this.shadowRoot.getElementById(`name-${slot}`);
-    const hasName = nameField && nameField.value.trim() && nameField.value.trim() !== `User ${slot}`;
-    
-    // If user doesn't exist in entity state AND doesn't have a name, don't call service
-    if (!user && !hasName) {
-      // User doesn't exist yet - just update form value, don't call service
-      // This happens when typing in username for an available slot and status changes programmatically
+    // If user doesn't exist in entity state, don't call service
+    // This happens when:
+    // 1. Typing in username for an available slot and status changes programmatically
+    // 2. Manually changing status for a slot that hasn't been saved yet
+    if (!user) {
+      // User doesn't exist in entity state - just update form value, don't call service
       this._setFormValue(slot, 'cachedStatus', status);
       return; // Exit silently - no error message needed
     }
     
-    // If user exists OR has a name, we can try to set status
-    // But if user doesn't exist in entity, we should create it first via set_user_code, not set_user_status
-    if (!user && hasName) {
-      // User has a name but doesn't exist in entity - this means they haven't saved yet
-      // Don't call set_user_status, just update form value
+    // User exists in entity state - safe to call service
+    // But also verify user has a name (double-check it's a real user)
+    if (!user.name || user.name === `User ${slot}`) {
+      // User exists but has no real name - don't call service
       this._setFormValue(slot, 'cachedStatus', status);
-      return; // Exit silently - user needs to save first
+      return;
     }
     
-    // User exists in entity - safe to call service
     try {
       await this._hass.callService('yale_lock_manager', 'set_user_status', {
         entity_id: this._config.entity,
@@ -2143,11 +2139,8 @@ class YaleLockManagerCard extends HTMLElement {
         }
       }, 2000);
     } catch (error) {
-      // Only show error if user exists (real error, not just missing user)
-      if (user) {
-        this.showStatus(slot, `Failed to set status: ${error.message}`, 'error');
-      }
-      // If user doesn't exist, error is expected - don't show it
+      // Show error - user exists so this is a real error
+      this.showStatus(slot, `Failed to set status: ${error.message}`, 'error');
     }
   }
 
