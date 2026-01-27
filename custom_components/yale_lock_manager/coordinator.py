@@ -62,6 +62,10 @@ class YaleLockCoordinator(DataUpdateCoordinator):
         self.node_id = entry.data[CONF_LOCK_NODE_ID]
         self.lock_entity_id = entry.data[CONF_LOCK_ENTITY_ID]
         
+        # Log node_id at initialization for debugging
+        _LOGGER.info("Coordinator initialized - node_id from config: %s (type: %s), lock_entity_id: %s", 
+                    self.node_id, type(self.node_id).__name__, self.lock_entity_id)
+        
         # Initialize specialized modules
         self._logger = YaleLockLogger("yale_lock_manager.coordinator")
         self._storage = UserDataStorage(hass, self.node_id)
@@ -142,19 +146,37 @@ class YaleLockCoordinator(DataUpdateCoordinator):
             # Check node_id - handle both int and string comparisons
             # Also check for 'nodeId' (used in some event structures)
             event_node_id = event.data.get("node_id") or event.data.get("nodeId")
+            event_home_id = event.data.get("home_id")
+            
             if event_node_id is None:
                 _LOGGER.warning("Notification event missing node_id/nodeId: %s", event.data)
                 return
             
+            # Handle case where config entry incorrectly stored home_id instead of node_id
+            # If self.node_id matches event's home_id, use event's node_id for comparison
+            actual_node_id = self.node_id
+            try:
+                if event_home_id and int(self.node_id) == int(event_home_id):
+                    _LOGGER.warning(
+                        "Config entry has home_id (%s) instead of node_id. Using event's node_id (%s) for comparison.",
+                        self.node_id, event_node_id
+                    )
+                    actual_node_id = event_node_id
+            except (ValueError, TypeError):
+                pass  # If conversion fails, use original self.node_id
+            
             try:
                 event_node_id_int = int(event_node_id)
-                self_node_id_int = int(self.node_id)
-                if event_node_id_int != self_node_id_int:
-                    _LOGGER.info("Notification from different node (%s != %s), ignoring", event_node_id, self.node_id)
+                actual_node_id_int = int(actual_node_id)
+                if event_node_id_int != actual_node_id_int:
+                    _LOGGER.info("Notification from different node (event_node_id=%s != actual_node_id=%s, config_node_id=%s), ignoring", 
+                                event_node_id, actual_node_id, self.node_id)
                     return
-                _LOGGER.info("Node ID check passed: event_node_id=%s, self.node_id=%s", event_node_id, self.node_id)
+                _LOGGER.info("Node ID check passed: event_node_id=%s, actual_node_id=%s (config_node_id=%s)", 
+                            event_node_id, actual_node_id, self.node_id)
             except (ValueError, TypeError) as err:
-                _LOGGER.warning("Failed to compare node_id: %s (event_node_id=%s, self.node_id=%s)", err, event_node_id, self.node_id)
+                _LOGGER.warning("Failed to compare node_id: %s (event_node_id=%s, actual_node_id=%s, config_node_id=%s)", 
+                               err, event_node_id, actual_node_id, self.node_id)
                 return
 
             # Z-Wave JS notification event structure for Access Control (command_class 113):
