@@ -29,6 +29,7 @@ class YaleLockManagerCard extends HTMLElement {
     this._debugLog = []; // Array of debug log entries
     this._showDebugPanel = false; // Toggle debug panel visibility
     this._savedSlots = {}; // Track which slots have been saved (enables Push button)
+    this._lockAffectingChanges = {}; // Track if PIN or status changed (requires push)
   }
 
   setConfig(config) {
@@ -1508,6 +1509,7 @@ class YaleLockManagerCard extends HTMLElement {
                           type="datetime-local" 
                           id="start-${user.slot}" 
                           value="${user.schedule?.start ? user.schedule.start.substring(0, 16) : ''}"
+                          onchange="card._checkForUnsavedChanges(${user.slot})"
                         >
                               </div>
                       <div style="flex: 1; min-width: 200px;">
@@ -1516,6 +1518,7 @@ class YaleLockManagerCard extends HTMLElement {
                           type="datetime-local" 
                           id="end-${user.slot}" 
                           value="${user.schedule?.end ? user.schedule.end.substring(0, 16) : ''}"
+                          onchange="card._checkForUnsavedChanges(${user.slot})"
                         >
                               </div>
                             </div>
@@ -1733,23 +1736,43 @@ class YaleLockManagerCard extends HTMLElement {
     const nameField = this.shadowRoot.getElementById(`name-${slot}`);
     const codeField = this.shadowRoot.getElementById(`code-${slot}`);
     const statusField = this.shadowRoot.getElementById(`cached-status-${slot}`);
+    const startField = this.shadowRoot.getElementById(`start-${slot}`);
+    const endField = this.shadowRoot.getElementById(`end-${slot}`);
+    const limitField = this.shadowRoot.getElementById(`limit-${slot}`);
+    const scheduleToggle = this.shadowRoot.getElementById(`schedule-toggle-${slot}`);
+    const limitToggle = this.shadowRoot.getElementById(`limit-toggle-${slot}`);
     
     if (!nameField || !statusField) return;
     
     const currentName = nameField.value.trim() || '';
     const currentCode = codeField ? codeField.value.trim() || '' : '';
     const currentStatus = parseInt(statusField.value || '0', 10);
+    const currentStart = startField ? startField.value : '';
+    const currentEnd = endField ? endField.value : '';
+    const currentLimit = limitField ? parseInt(limitField.value || '0', 10) : 0;
+    const scheduleEnabled = scheduleToggle ? scheduleToggle.checked : false;
+    const limitEnabled = limitToggle ? limitToggle.checked : false;
     
     const savedName = user.name || '';
     const savedCode = user.code || '';
     const savedStatus = user.lock_status !== null && user.lock_status !== undefined 
       ? user.lock_status 
       : (user.enabled ? 1 : 2);
+    const savedStart = user.schedule?.start ? user.schedule.start.substring(0, 16) : '';
+    const savedEnd = user.schedule?.end ? user.schedule.end.substring(0, 16) : '';
+    const savedLimit = user.usage_limit || 0;
+    const savedScheduleEnabled = !!(user.schedule?.start || user.schedule?.end);
     
     // Check if PIN or status changed (these affect Push button)
     const pinChanged = (currentCode !== savedCode);
     const statusChanged = (currentStatus !== savedStatus);
-    const hasChanges = (currentName !== savedName) || pinChanged || statusChanged;
+    const nameChanged = (currentName !== savedName);
+    const scheduleChanged = (currentStart !== savedStart) || (currentEnd !== savedEnd) || (scheduleEnabled !== savedScheduleEnabled);
+    const limitChanged = (currentLimit !== savedLimit) || (limitEnabled !== !!savedLimit);
+    const hasChanges = nameChanged || pinChanged || statusChanged || scheduleChanged || limitChanged;
+    
+    // Track lock-affecting changes (PIN or status) separately from non-lock changes (username, schedule, usage_limit)
+    const lockAffectingChanged = pinChanged || statusChanged;
     
     const warningDiv = this.shadowRoot.querySelector(`#unsaved-warning-${slot}`);
     const saveButton = this.shadowRoot.getElementById(`save-button-${slot}`);
@@ -1758,9 +1781,14 @@ class YaleLockManagerCard extends HTMLElement {
     if (hasChanges) {
       this._unsavedChanges[slot] = true;
       
-      // If PIN or status changed, mark slot as unsaved (disables Push, enables Save)
-      if (pinChanged || statusChanged) {
+      // Track lock-affecting changes (PIN or status)
+      if (lockAffectingChanged) {
+        this._lockAffectingChanges[slot] = true;
+        // If PIN or status changed, mark slot as unsaved (disables Push, enables Save)
         delete this._savedSlots[slot];
+      } else {
+        // Only non-lock changes (username, schedule, usage_limit) - don't affect Push button
+        this._lockAffectingChanges[slot] = false;
       }
       
       // Show warning message
@@ -1800,19 +1828,20 @@ class YaleLockManagerCard extends HTMLElement {
      * 
      * Rules:
      * - Save button: Enabled if validation passes AND there are unsaved changes
-     * - Push button: Enabled only if slot has been saved (no unsaved changes)
+     * - Push button: Enabled only if slot has been saved (no unsaved changes) AND lock-affecting changes (PIN/status) were made
      */
     const saveButton = this.shadowRoot.getElementById(`save-button-${slot}`);
     const pushButton = this.shadowRoot.getElementById(`push-button-${slot}`);
     const hasUnsavedChanges = this._unsavedChanges[slot];
     const isSaved = this._savedSlots[slot];
+    const hasLockAffectingChanges = this._lockAffectingChanges[slot] === true;
     
     // Save button: enabled if validation passes (handled by _validateSlot) AND has unsaved changes
     // We don't disable it here - _validateSlot handles that
     
-    // Push button: enabled only if slot is saved (no unsaved changes)
+    // Push button: enabled only if slot is saved (no unsaved changes) AND lock-affecting changes were made
     if (pushButton) {
-      if (isSaved && !hasUnsavedChanges) {
+      if (isSaved && !hasUnsavedChanges && hasLockAffectingChanges) {
         pushButton.disabled = false;
         pushButton.style.opacity = '1';
         pushButton.style.cursor = 'pointer';
@@ -1892,12 +1921,11 @@ class YaleLockManagerCard extends HTMLElement {
     // Enable/disable save button based on validation AND unsaved changes
     if (saveButton) {
       const hasUnsavedChanges = this._unsavedChanges[slot];
-      const isSaved = this._savedSlots[slot];
       
       // Save button is enabled if:
       // - Validation passes AND
-      // - (Has unsaved changes OR slot hasn't been saved yet)
-      if (isValid && (hasUnsavedChanges || !isSaved)) {
+      // - Has unsaved changes (stays disabled after save until new changes detected)
+      if (isValid && hasUnsavedChanges) {
         saveButton.disabled = false;
         saveButton.style.opacity = '1';
         saveButton.style.cursor = 'pointer';
@@ -2037,6 +2065,8 @@ class YaleLockManagerCard extends HTMLElement {
     if (fields) {
       fields.classList.toggle('hidden', !checked);
     }
+    // Mark as having unsaved changes when schedule toggle is changed
+    this._checkForUnsavedChanges(slot);
   }
 
   toggleLimit(slot, checked) {
@@ -2243,6 +2273,13 @@ class YaleLockManagerCard extends HTMLElement {
         // Step 5: All complete!
         this.showStatus(slot, '✅ All complete! Code pushed and verified successfully!', 'success');
         this.renderStatusMessage(slot);
+        
+        // Clear lock-affecting changes flag after successful push
+        delete this._lockAffectingChanges[slot];
+        // Clear saved slots flag so Push button disables until new changes are saved
+        delete this._savedSlots[slot];
+        // Update button states
+        this._updateButtonStates(slot);
         
         // Poll entity state multiple times to track when it updates
         let pollAttempt = 0;
@@ -2475,14 +2512,22 @@ class YaleLockManagerCard extends HTMLElement {
       
       // Clear unsaved changes flag and hide warning
       delete this._unsavedChanges[slot];
-      this._savedSlots[slot] = true; // Mark slot as saved (enables Push button)
+      
+      // Only mark slot as saved and enable Push if lock-affecting changes (PIN/status) were made
+      const hadLockAffectingChanges = this._lockAffectingChanges[slot] === true;
+      if (hadLockAffectingChanges) {
+        this._savedSlots[slot] = true; // Mark slot as saved (enables Push button)
+      }
+      // Clear lock-affecting flag after save
+      delete this._lockAffectingChanges[slot];
+      
       const warningDiv = this.shadowRoot.getElementById(`unsaved-warning-${slot}`);
       if (warningDiv) {
         warningDiv.style.display = 'none';
         warningDiv.innerHTML = '';
       }
       
-      // Update button states: disable Save, enable Push
+      // Update button states: disable Save, conditionally enable Push
       const saveButton = this.shadowRoot.getElementById(`save-button-${slot}`);
       const pushButton = this.shadowRoot.getElementById(`push-button-${slot}`);
       if (saveButton) {
@@ -2490,10 +2535,17 @@ class YaleLockManagerCard extends HTMLElement {
         saveButton.style.opacity = '0.5';
         saveButton.style.cursor = 'not-allowed';
       }
+      // Only enable Push if lock-affecting changes were made
       if (pushButton) {
-        pushButton.disabled = false;
-        pushButton.style.opacity = '1';
-        pushButton.style.cursor = 'pointer';
+        if (hadLockAffectingChanges) {
+          pushButton.disabled = false;
+          pushButton.style.opacity = '1';
+          pushButton.style.cursor = 'pointer';
+        } else {
+          pushButton.disabled = true;
+          pushButton.style.opacity = '0.5';
+          pushButton.style.cursor = 'not-allowed';
+        }
       }
       
       // Log after update completed

@@ -2,6 +2,51 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.8.4.28] - 2026-01-27
+
+### ✨ Enhancement - Smart Button State Management
+
+**User feedback**: When only username, schedule, or usage_limit changes, the Push button should not enable since these changes don't need to be pushed to the lock. The Update User button should stay disabled after being clicked until a new change is detected.
+
+### The Problem
+
+Previously, the Push button would enable whenever Update User was clicked, even if only non-lock-affecting fields (username, schedule, usage_limit) were changed. This was confusing because:
+- These fields are stored locally and don't need to be pushed to the lock
+- Users might think they need to push when they don't
+- The Update User button would re-enable immediately after being clicked, even without new changes
+
+### The Fix
+
+Implemented smart button state management that distinguishes between lock-affecting changes (PIN, status) and non-lock changes (username, schedule, usage_limit):
+
+1. **Added `_lockAffectingChanges` tracking**: Tracks whether PIN or status changed (requires push) vs. other changes (don't require push)
+2. **Push button logic**: Only enables when lock-affecting changes (PIN/status) were made AND Update User was clicked
+3. **Update User button logic**: Stays disabled after being clicked until a new change is detected
+4. **Change detection**: Enhanced to detect schedule and usage_limit changes in addition to name, PIN, and status
+
+### Changed
+
+- **Frontend (`yale-lock-manager-card.js`)**:
+  - Added `_lockAffectingChanges` property to track PIN/status changes separately
+  - Updated `_checkForUnsavedChanges()` to track lock-affecting changes and detect schedule/usage_limit changes
+  - Updated `saveUser()` to only enable Push button if lock-affecting changes were made
+  - Updated `_updateButtonStates()` to check `_lockAffectingChanges` before enabling Push
+  - Updated `_validateSlot()` to keep Save button disabled after save until new changes detected
+  - Added `onchange` handlers to schedule inputs to trigger change detection
+  - Updated `toggleSchedule()` to call `_checkForUnsavedChanges()`
+  - Updated `pushCode()` to clear flags after successful push
+- **Version (`const.py`, `manifest.json`)**:
+  - Updated `VERSION` to `1.8.4.28`
+
+### What's Improved
+
+- ✅ **Push button only appears when needed**: Only enables when PIN or status changes (things that need to be pushed to the lock)
+- ✅ **Clearer button behavior**: Update User button stays disabled after save until new changes are detected
+- ✅ **Better UX**: Users can distinguish between local-only changes and lock-affecting changes
+- ✅ **Reduced confusion**: No more unnecessary Push button for username/schedule/usage_limit changes
+
+---
+
 ## [1.8.4.27] - 2026-01-27
 
 ### 🐛 Bug Fix - Reset Usage Count Not Updating UI
