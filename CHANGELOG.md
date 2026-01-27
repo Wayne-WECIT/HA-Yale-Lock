@@ -257,6 +257,224 @@ When typing in the username field for an available slot, the status dropdown was
 
 ---
 
+## [1.8.4.10] - 2026-01-27
+
+### 🐛 Bug Fix - Username Validation and set_user_status Error
+
+**User feedback**: Error when typing in username box for an available slot: `Failed to set user status: User slot X not found`
+
+### The Fix
+
+- Fixed `changeStatus()` to check if user exists before calling service
+- Fixed `updateStatusOptions()` to prevent `onchange` event from firing when programmatically changing status
+- Only update form value if user doesn't exist (no service call)
+
+### Changed
+
+- **Frontend (`yale-lock-manager-card.js`)**:
+  - Added user existence check in `changeStatus()`
+  - Temporarily remove `onchange` handler when programmatically setting status
+  - Restore handler after a short delay
+
+---
+
+## [1.8.4.9] - 2026-01-27
+
+### 🎨 UI Improvement - Button State Management
+
+**User feedback**: "the push button should only become available after the update/save user has been pressed at which point the update/save user becomes disabled again"
+
+### The Fix
+
+- Implemented `_savedSlots` tracking to know which slots have been saved
+- "Update User" button is enabled only when there are unsaved changes and validation passes
+- "Push" button is enabled only when slot has been saved, no unsaved changes, and not synced
+- Buttons update dynamically based on form state
+
+### Changed
+
+- **Frontend (`yale-lock-manager-card.js`)**:
+  - Added `_savedSlots` property to track saved slots
+  - Added `_updateButtonStates()` method to manage button states
+  - Integrated button state updates into `saveUser()`, `pushCode()`, and `_checkForUnsavedChanges()`
+
+---
+
+## [1.8.4.8] - 2026-01-27
+
+### 🎨 UI Improvement - PIN Validation and Button Disable Logic
+
+**User feedback**: "a username must be entered always be entered. there is also a error that is shown when an available slot you type in the username box"
+
+### The Fix
+
+- Added real-time validation for username (required)
+- Added PIN validation: 4-8 digits, required when status is Enabled
+- Updated `MAX_CODE_LENGTH` from 10 to 8
+- Display validation errors in UI
+- Enable/disable "Update User" button based on validation
+
+### Changed
+
+- **Frontend (`yale-lock-manager-card.js`)**:
+  - Added `_validateSlot()` method for real-time validation
+  - Added validation error display
+  - Updated PIN input `maxlength` to 8
+  - Integrated validation into input handlers
+
+- **Backend (`const.py`)**:
+  - Updated `MAX_CODE_LENGTH` from 10 to 8
+
+---
+
+## [1.8.4.7] - 2026-01-27
+
+### ⚡ Performance Improvement - Clear Slot Optimization
+
+**User feedback**: "why are we doing 'Calls async_pull_codes_from_lock() to refresh all slots from the lock' as we only need to do it for that specific slot?"
+
+### The Fix
+
+- Created `_update_slot_from_lock(slot)` method to update only a single slot
+- Updated `async_clear_user_code()` to call the new method instead of `async_pull_codes_from_lock()`
+- Reduces Z-Wave queries from 20 to 1 for a clear operation
+
+### Changed
+
+- **Backend (`coordinator.py`)**:
+  - Added `_update_slot_from_lock(slot)` method
+  - Updated `async_clear_user_code()` to use the new method
+
+---
+
+## [1.8.4.6] - 2026-01-27
+
+### 🐛 Bug Fix - Clear Slot Cache Update
+
+**User feedback**: "Set slot 10 to clear lock but the cached pin was not reset of that from the lock (IE '') and the cached status was not set to disabled."
+
+### The Fix
+
+- Updated `async_pull_codes_from_lock()` to explicitly clear cached PIN when lock reports AVAILABLE with no code
+- Set cached status to DISABLED when lock is cleared
+
+### Changed
+
+- **Backend (`coordinator.py`)**:
+  - Updated PIN overwrite logic to clear cached PIN when lock is AVAILABLE with no code
+  - Set `lock_status` to DISABLED when clearing
+
+---
+
+## [1.8.4.5] - 2026-01-27
+
+### 🐛 Bug Fix - Duplicate Variable Declaration
+
+**User feedback**: JavaScript error: `SyntaxError: Identifier 'hasCachedPin' has already been declared`
+
+### The Fix
+
+- Removed duplicate `hasCachedPin` variable declaration in `getHTML` method
+
+### Changed
+
+- **Frontend (`yale-lock-manager-card.js`)**:
+  - Removed duplicate `hasCachedPin` declaration
+
+---
+
+## [1.8.4.4] - 2026-01-27
+
+### 🐛 Bug Fix - lock_code_manager Approach Implementation
+
+**User feedback**: Error when clearing slot: `Error: Cannot determine type name for error {"kind":"parameter","name":"userIdStatus","type":"literal","expected":"1","actual":"0"}`
+
+### The Fix
+
+- Updated `zwave_client.py` to use higher-level Z-Wave JS services (`set_lock_usercode`, `clear_lock_usercode`)
+- Removed `userIdStatus` parameter from `clear_user_code` (service doesn't expect it)
+- Updated status mapping logic to correctly handle AVAILABLE/DISABLED states
+
+### Changed
+
+- **Backend (`zwave_client.py`)**:
+  - Updated `set_user_code()` to use `zwave_js.set_lock_usercode` service
+  - Updated `clear_user_code()` to use `zwave_js.clear_lock_usercode` service
+  - Removed status parameter from both methods
+
+- **Backend (`coordinator.py`)**:
+  - Updated status mapping for push/pull operations
+  - Updated `async_set_user_status()` to treat AVAILABLE as DISABLED for cached status
+
+---
+
+## [1.8.4.3] - 2026-01-27
+
+### 🐛 Bug Fix - Unsaved Changes Warning
+
+**User feedback**: "once update user has been pressed the image above the status can be removed until another change is noticed"
+
+### The Fix
+
+- Clear `_unsavedChanges` flag after successful `saveUser()` operation
+- Hide unsaved changes warning div after save
+- Re-check for unsaved changes when form fields change
+
+### Changed
+
+- **Frontend (`yale-lock-manager-card.js`)**:
+  - Clear `_unsavedChanges[slot]` after successful save
+  - Hide warning div after save
+  - Added `_checkForUnsavedChanges()` calls to input handlers
+
+---
+
+## [1.8.4.2] - 2026-01-27
+
+### 🐛 Bug Fix - Status Display and Clear Slot
+
+**User feedback**: "if there is no local cache pin and the lock is available set the status in the ui to Available not disabled see image also the sync should be blank if the above is correct. if clear slot is click clear the slot on the lock and get the data from the lock and overwrite the cache with the new set values"
+
+### The Fix
+
+- Updated `getStatusText()` and `getStatusColor()` to show "Available" when no cached PIN and lock is available
+- Hide sync indicator when no cached PIN and lock is available
+- Updated `clearSlot()` to call `clear_user_code` and then `pull_codes_from_lock`
+
+### Changed
+
+- **Frontend (`yale-lock-manager-card.js`)**:
+  - Updated status display logic for available slots
+  - Updated sync status message logic
+  - Updated `clearSlot()` to refresh from lock after clearing
+
+- **Backend (`coordinator.py`)**:
+  - Updated `async_clear_user_code()` to use `zwave_client.clear_user_code()` and refresh cache
+
+---
+
+## [1.8.4.1] - 2026-01-27
+
+### 🐛 Bug Fix - Indentation Error
+
+**User feedback**: `IndentationError: unexpected indent` in `coordinator.py` at line 843
+
+### The Fix
+
+- Fixed indentation error in `coordinator.py`
+- Removed misplaced debug statement
+- Corrected `else` block alignment
+- Removed duplicate `except` block
+
+### Changed
+
+- **Backend (`coordinator.py`)**:
+  - Fixed indentation of debug statement
+  - Corrected `else` block alignment
+  - Removed duplicate `except` block
+
+---
+
 ## [1.8.2.51] - 2026-01-26
 
 ### 🐛 Bug Fix - Frontend Update After Refresh (Timing Fix)
