@@ -57,7 +57,7 @@ The `scheduleToggle`, `startInput`, `limitToggle`, and `limitInput` variables we
 
 ### 🎨 FOB/RFID Simplification - Hide Fields and Skip Refresh Overwrite
 
-**User feedback**: "when FOB/RFID is chosen for the code type, also hide the cached and lock status's, usage & time schedule too, all we save is the username, codetype for the slot. nothing is pushed to the lock at all... when a refresh occurs we dont overwrite slots sets as fob/rfid, unless a pin is set for that slot on the lock."
+**User feedback**: When FOB/RFID is chosen for the code type, hide the cached and lock status fields, usage limits, and time schedule. Only save the username and code type for the slot. Nothing is pushed to the lock. When a refresh occurs, don't overwrite slots set as FOB/RFID unless a PIN is set for that slot on the lock.
 
 ### The Problem
 
@@ -100,7 +100,7 @@ FOB/RFID slots were showing irrelevant fields (status dropdowns, schedules, usag
 
 ### 🐛 Bug Fix - Clear Slot Optimization
 
-**User feedback**: "after clear lock it looks like you are still pulling all the slots instead of the slot in question"
+**User feedback**: After clearing a slot, the system appears to be pulling all slots instead of just the cleared slot.
 
 ### The Problem
 
@@ -165,7 +165,7 @@ The Z-Wave JS device wasn't available when the integration tried to query it, ca
 
 ### 🐛 Bug Fix - changeStatus Entity State Check
 
-**User feedback**: "still getting the error" - `Failed to set user status: User slot X not found` error still occurring when changing status.
+**User feedback**: The `Failed to set user status: User slot X not found` error is still occurring when changing status.
 
 ### The Problem
 
@@ -312,7 +312,7 @@ When typing in the username field for an available slot, the status dropdown was
 
 ### 🎨 UI Improvement - Button State Management
 
-**User feedback**: "the push button should only become available after the update/save user has been pressed at which point the update/save user becomes disabled again"
+**User feedback**: The push button should only become available after the update/save user button has been pressed, at which point the update/save user button becomes disabled again.
 
 ### The Fix
 
@@ -334,7 +334,7 @@ When typing in the username field for an available slot, the status dropdown was
 
 ### 🎨 UI Improvement - PIN Validation and Button Disable Logic
 
-**User feedback**: "a username must be entered always be entered. there is also a error that is shown when an available slot you type in the username box"
+**User feedback**: A username must always be entered. There is also an error shown when typing in the username box for an available slot.
 
 ### The Fix
 
@@ -361,7 +361,7 @@ When typing in the username field for an available slot, the status dropdown was
 
 ### ⚡ Performance Improvement - Clear Slot Optimization
 
-**User feedback**: "why are we doing 'Calls async_pull_codes_from_lock() to refresh all slots from the lock' as we only need to do it for that specific slot?"
+**User feedback**: Why are we calling `async_pull_codes_from_lock()` to refresh all slots from the lock when we only need to refresh the specific slot?
 
 ### The Fix
 
@@ -381,7 +381,7 @@ When typing in the username field for an available slot, the status dropdown was
 
 ### 🐛 Bug Fix - Clear Slot Cache Update
 
-**User feedback**: "Set slot 10 to clear lock but the cached pin was not reset of that from the lock (IE '') and the cached status was not set to disabled."
+**User feedback**: Set slot 10 to clear lock, but the cached PIN was not reset to empty string and the cached status was not set to disabled.
 
 ### The Fix
 
@@ -442,7 +442,7 @@ When typing in the username field for an available slot, the status dropdown was
 
 ### 🐛 Bug Fix - Unsaved Changes Warning
 
-**User feedback**: "once update user has been pressed the image above the status can be removed until another change is noticed"
+**User feedback**: Once the update user button has been pressed, the warning image above the status can be removed until another change is detected.
 
 ### The Fix
 
@@ -463,7 +463,7 @@ When typing in the username field for an available slot, the status dropdown was
 
 ### 🐛 Bug Fix - Status Display and Clear Slot
 
-**User feedback**: "if there is no local cache pin and the lock is available set the status in the ui to Available not disabled see image also the sync should be blank if the above is correct. if clear slot is click clear the slot on the lock and get the data from the lock and overwrite the cache with the new set values"
+**User feedback**: If there is no local cache PIN and the lock is available, set the status in the UI to "Available" not "Disabled". The sync indicator should be blank if the above is correct. If clear slot is clicked, clear the slot on the lock and get the data from the lock, then overwrite the cache with the new values.
 
 ### The Fix
 
@@ -598,7 +598,7 @@ When typing in the username field for an available slot, the status dropdown was
 
 ### 🐛 Bug Fix - Z-Wave Parameter Types
 
-**User feedback**: "the PIN should be an INT the status should also be an INT ONLY for both. the userstatus should be 0,1 or 2 it seems you are sending the PIN?"
+**User feedback**: The PIN should be an integer, and the status should also be an integer only. The user status should be 0, 1, or 2. It seems the PIN is being sent where the status should be.
 
 ### The Fix
 
@@ -827,7 +827,7 @@ When typing in the username field for an available slot, the status dropdown was
 
 ### 🐛 Bug Fix - Frontend Polling Delays
 
-**User feedback**: "there doesnt seems to be any wait between the retries what do you think?"
+**User feedback**: There doesn't seem to be any wait between the retries. What do you think?
 
 ### The Fix
 
@@ -988,7 +988,7 @@ When typing in the username field for an available slot, the status dropdown was
 
 ### 🐛 Bug Fix - Refresh UI Update
 
-**User feedback**: "still no refresh after lock refresh"
+**User feedback**: The page still doesn't refresh after a lock refresh.
 
 ### The Fix
 
@@ -1009,7 +1009,7 @@ When typing in the username field for an available slot, the status dropdown was
 
 ### 🎨 Feature - Debug Panel
 
-**User feedback**: "is there a way we can show in the UI of debug output of all the cached details before, after refresh?"
+**User feedback**: Is there a way we can show in the UI a debug output of all the cached details before and after refresh?
 
 ### The Fix
 
@@ -1030,7 +1030,7 @@ When typing in the username field for an available slot, the status dropdown was
 
 ### 🐛 Bug Fix - Refresh UI Update
 
-**User feedback**: "after a refresh the page is still not refreshing"
+**User feedback**: After a refresh, the page is still not refreshing.
 
 ### The Fix
 
@@ -1065,7 +1065,7 @@ When typing in the username field for an available slot, the status dropdown was
 
 ### 🎨 Feature - localStorage-Based Form Value Storage
 
-**User feedback**: "1 different storage method and saving method, this may help which why when the page refreshs it pulls old value as you can make it pull the values from storage instead"
+**User feedback**: Use a different storage method and saving method. This may help because when the page refreshes it pulls old values. You can make it pull the values from storage instead.
 
 ### The Fix
 
