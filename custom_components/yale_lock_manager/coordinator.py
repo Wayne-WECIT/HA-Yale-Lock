@@ -12,6 +12,7 @@ if TYPE_CHECKING:
 from homeassistant.components.zwave_js import DOMAIN as ZWAVE_JS_DOMAIN
 from homeassistant.config_entries import ConfigEntry, ConfigEntryState
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import device_registry as dr, entity_registry as er
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
@@ -455,6 +456,60 @@ class YaleLockCoordinator(DataUpdateCoordinator):
                         notification_service,
                         err,
                     )
+
+    async def async_send_test_notification(self, slot: int) -> None:
+        """Send a test notification using the same path as access events (for testing)."""
+        user_data = self._user_data["users"].get(str(slot))
+        if not user_data:
+            raise ValueError(f"User slot {slot} not found")
+
+        user_name = user_data.get("name", f"User {slot}")
+        usage_count = user_data.get("usage_count", 0)
+
+        # Same notification_services logic as _handle_access_event
+        notification_services = user_data.get("notification_services")
+        if notification_services is None:
+            old_service = user_data.get("notification_service", "notify.persistent_notification")
+            notification_services = [old_service] if old_service else ["notify.persistent_notification"]
+        elif not isinstance(notification_services, list):
+            notification_services = [notification_services] if notification_services else ["notify.persistent_notification"]
+
+        notification_data = {
+            "title": "Lock Access (Test)",
+            "message": "Test notification from Yale Lock Manager",
+            "data": {
+                "entity_id": self.lock_entity_id,
+                "user_name": user_name,
+                "user_slot": slot,
+                "method": "test",
+                "timestamp": dt_util.utcnow().isoformat(),
+                "usage_count": usage_count,
+            },
+        }
+
+        for notification_service in notification_services:
+            try:
+                if "." in notification_service:
+                    domain, service = notification_service.split(".", 1)
+                else:
+                    domain = "notify"
+                    service = notification_service
+                await self.hass.services.async_call(domain, service, notification_data)
+                _LOGGER.info(
+                    "Test notification sent for slot %s via %s",
+                    slot,
+                    notification_service,
+                )
+            except Exception as err:
+                _LOGGER.warning(
+                    "Failed to send test notification for slot %s via %s: %s",
+                    slot,
+                    notification_service,
+                    err,
+                )
+                raise HomeAssistantError(
+                    f"Failed to send test notification via {notification_service}: {err}"
+                ) from err
 
     def _is_code_valid(self, user_slot: int) -> bool:
         """Check if a user code is currently valid based on schedule."""

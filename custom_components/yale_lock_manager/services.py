@@ -34,6 +34,7 @@ from .const import (
     SERVICE_PULL_CODES_FROM_LOCK,
     SERVICE_PUSH_CODE_TO_LOCK,
     SERVICE_RESET_USAGE_COUNT,
+    SERVICE_SEND_TEST_NOTIFICATION,
     SERVICE_SET_NOTIFICATION_ENABLED,
     SERVICE_SET_USAGE_LIMIT,
     SERVICE_SET_USER_CODE,
@@ -93,6 +94,13 @@ SET_NOTIFICATION_ENABLED_SCHEMA = vol.Schema(
         vol.Required(ATTR_ENABLED): cv.boolean,
         vol.Optional(ATTR_NOTIFICATION_SERVICE): cv.string,  # Deprecated, use ATTR_NOTIFICATION_SERVICES
         vol.Optional(ATTR_NOTIFICATION_SERVICES): vol.Any([cv.string], cv.string),  # Accept list or single string
+    }
+)
+
+SEND_TEST_NOTIFICATION_SCHEMA = vol.Schema(
+    {
+        vol.Optional("entity_id"): cv.entity_id,
+        vol.Required(ATTR_SLOT): vol.All(vol.Coerce(int), vol.Range(min=1, max=MAX_USER_SLOTS)),
     }
 )
 
@@ -351,6 +359,17 @@ async def async_setup_services(hass: HomeAssistant) -> None:
             _LOGGER.error("Error setting notification enabled: %s", err)
             raise HomeAssistantError(f"Failed to set notification enabled: {err}") from err
 
+    async def handle_send_test_notification(call: ServiceCall) -> None:
+        """Handle send test notification service call."""
+        coordinator = get_coordinator()
+        slot = call.data[ATTR_SLOT]
+        try:
+            await coordinator.async_send_test_notification(slot)
+            _LOGGER.info("Test notification sent for slot %s", slot)
+        except Exception as err:
+            _LOGGER.error("Error sending test notification: %s", err)
+            raise HomeAssistantError(f"Failed to send test notification: {err}") from err
+
     # Register services
     hass.services.async_register(
         DOMAIN,
@@ -441,6 +460,13 @@ async def async_setup_services(hass: HomeAssistant) -> None:
         SERVICE_SET_NOTIFICATION_ENABLED,
         handle_set_notification_enabled,
         schema=SET_NOTIFICATION_ENABLED_SCHEMA,
+    )
+
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_SEND_TEST_NOTIFICATION,
+        handle_send_test_notification,
+        schema=SEND_TEST_NOTIFICATION_SCHEMA,
     )
 
     _LOGGER.debug("Registered Yale Lock Manager services")

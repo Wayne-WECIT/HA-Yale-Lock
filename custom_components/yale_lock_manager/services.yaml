@@ -216,3 +216,26 @@ set_notification_enabled:
       example: ["notify.persistent_notification", "notify.mobile_app"]
       selector:
         object:
+
+send_test_notification:
+  name: Send Test Notification
+  description: Send a test notification using the slot's configured notification services (same code path as lock access notifications)
+  fields:
+    entity_id:
+      name: Entity
+      description: Lock entity (optional if only one lock)
+      required: false
+      selector:
+        entity:
+          domain: lock
+          integration: yale_lock_manager
+    slot:
+      name: Slot Number
+      description: User code slot number (1-20) whose notification settings to use
+      required: true
+      example: 1
+      selector:
+        number:
+          min: 1
+          max: 20
+          mode: box

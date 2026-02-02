@@ -650,6 +650,7 @@ class YaleLockManagerPanel extends HTMLElement {
           <div class="controls">
             <button onclick="panel.toggleLock()">${isLocked ? 'Unlock' : 'Lock'}</button>
             <button class="secondary" onclick="panel.refresh()">Refresh</button>
+            <button class="secondary" onclick="panel.sendTestNotification().catch(e => console.error(e))">Test notification</button>
           </div>
         </div>
         
@@ -682,6 +683,9 @@ class YaleLockManagerPanel extends HTMLElement {
         </table>
         
         <hr style="margin: 24px 0 16px 0;">
+        <div style="text-align: center; margin-bottom: 12px;">
+          <button class="secondary" onclick="panel.sendTestNotification().catch(e => console.error(e))">Test notification</button>
+        </div>
         <div id="clear-cache-section" style="text-align: center; padding: 16px 0;">
           ${this._showClearCacheConfirm ? `
             <div style="background: var(--warning-color-background, rgba(255, 152, 0, 0.1)); border: 1px solid var(--warning-color, #ff9800); border-radius: 4px; padding: 12px; margin-bottom: 12px;">
@@ -1674,44 +1678,23 @@ class YaleLockManagerPanel extends HTMLElement {
         type: 'get_services',
       });
       
-      // Filter for notify services
+      // Filter for notify services - treat any key containing mobile_app_ (except "mobile_app") as a device
       const notifyServices = [];
       if (services && services.notify) {
-        // Get all notify services
-        for (const [serviceId, serviceData] of Object.entries(services.notify)) {
-          // Handle individual mobile app devices
-          // Service IDs can be: "mobile_app_iphone" or "notify.mobile_app_iphone"
-          if (serviceId.startsWith('mobile_app_')) {
-            // Extract device name from service ID (e.g., "mobile_app_iphone" -> "iPhone")
-            const deviceName = serviceId.replace('mobile_app_', '').replace(/_/g, ' ');
+        const keys = Object.keys(services.notify);
+        for (const key of keys) {
+          const id = key.startsWith('notify.') ? key : `notify.${key}`;
+          if (key === 'persistent_notification') {
+            notifyServices.push({ id: 'notify.persistent_notification', name: 'UI', type: 'ui' });
+          } else if (key === 'mobile_app') {
+            notifyServices.push({ id: 'notify.mobile_app', name: 'All Mobiles', type: 'all' });
+          } else if (key.includes('mobile_app_') && key !== 'mobile_app') {
+            const afterPrefix = key.split('mobile_app_').slice(1).join('mobile_app_');
+            const deviceName = afterPrefix.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
             notifyServices.push({
-              id: `notify.${serviceId}`,
-              name: deviceName.charAt(0).toUpperCase() + deviceName.slice(1),
+              id: id,
+              name: deviceName || key,
               type: 'device'
-            });
-          } else if (serviceId.includes('mobile_app_') && serviceId !== 'mobile_app') {
-            // Handle case where service ID might already include "notify." prefix
-            // or has mobile_app_ in the middle (e.g., "notify.mobile_app_iphone")
-            const parts = serviceId.split('mobile_app_');
-            if (parts.length > 1) {
-              const deviceName = parts[1].replace(/_/g, ' ');
-              notifyServices.push({
-                id: serviceId.startsWith('notify.') ? serviceId : `notify.${serviceId}`,
-                name: deviceName.charAt(0).toUpperCase() + deviceName.slice(1),
-                type: 'device'
-              });
-            }
-          } else if (serviceId === 'mobile_app') {
-            notifyServices.push({
-              id: 'notify.mobile_app',
-              name: 'All Mobiles',
-              type: 'all'
-            });
-          } else if (serviceId === 'persistent_notification') {
-            notifyServices.push({
-              id: 'notify.persistent_notification',
-              name: 'UI',
-              type: 'ui'
             });
           }
         }
@@ -1802,6 +1785,21 @@ class YaleLockManagerPanel extends HTMLElement {
   changeNotificationService(slot, service) {
     // Legacy method - redirect to toggleNotificationService
     this.toggleNotificationService(slot, service);
+  }
+
+  async sendTestNotification() {
+    const slot = this._expandedSlot ?? 1;
+    try {
+      this.showStatus(0, 'Sending test notification...', 'info');
+      await this._hass.callService('yale_lock_manager', 'send_test_notification', {
+        entity_id: this._config.entity,
+        slot: parseInt(slot, 10)
+      });
+      this.showStatus(0, '✅ Test notification sent', 'success');
+    } catch (error) {
+      console.error('[Yale Lock Manager] Test notification failed:', error);
+      this.showStatus(0, `❌ Failed to send test notification: ${error.message}`, 'error');
+    }
   }
 
   async saveUser(slot) {

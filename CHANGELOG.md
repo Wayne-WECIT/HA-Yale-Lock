@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.8.4.42] - 2026-01-27
+
+### Test notification button and mobile service discovery fix
+
+- **Test notification**: Added "Test notification" button (header and bottom of page) that calls the same notification code path as lock access. Uses the current expanded slot or slot 1. Backend service `yale_lock_manager.send_test_notification` (entity_id, slot) sends a test message to the slot's configured notification services.
+- **Mobile discovery**: Fixed discovery of `notify.mobile_app_{phone_name}` services. Any key under `get_services().notify` that contains `mobile_app_` (and is not exactly `mobile_app`) is now treated as an individual device; id is normalized to `notify.` + key when needed; display name is derived from the part after `mobile_app_` (underscores to spaces, capitalized).
+- **Backend**: New constant `SERVICE_SEND_TEST_NOTIFICATION`, coordinator method `async_send_test_notification(slot)`, service registration and schema in services.py, and service definition in services.yaml.
+
+---
+
 ## [1.8.4.41] - 2026-01-27
 
 ### UI Enhancement - Move Notification Controls to Expanded Settings Pane

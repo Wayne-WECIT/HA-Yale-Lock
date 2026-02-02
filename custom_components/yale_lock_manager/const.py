@@ -2,7 +2,7 @@
 from typing import Final
 
 DOMAIN: Final = "yale_lock_manager"
-VERSION: Final = "1.8.4.41"
+VERSION: Final = "1.8.4.42"
 
 # Z-Wave JS Domain
 ZWAVE_JS_DOMAIN: Final = "zwave_js"
@@ -84,6 +84,7 @@ SERVICE_ENABLE_USER: Final = "enable_user"
 SERVICE_DISABLE_USER: Final = "disable_user"
 SERVICE_CLEAR_LOCAL_CACHE: Final = "clear_local_cache"
 SERVICE_SET_NOTIFICATION_ENABLED: Final = "set_notification_enabled"
+SERVICE_SEND_TEST_NOTIFICATION: Final = "send_test_notification"
 
 # Defaults
 DEFAULT_SCAN_INTERVAL: Final = 300  # 5 minutes
