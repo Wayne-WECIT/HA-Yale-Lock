@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## [1.8.4.55] - 2026-02-02
 
+### Fix: expanded slot no longer loses entered data on entity update
+- When a slot was expanded and `hass` updated (e.g. from another entity or lock state), the panel and card were calling **`_updateSlotFromEntityState()`**, which overwrote name, code, and other editable fields from entity state and caused typed-but-unsaved input to be lost.
+- **Fix**: When `hass` updates and a slot is expanded, call **`_updateNonEditableParts()`** again instead of `_updateSlotFromEntityState()`. **`_updateNonEditableParts()`** is extended to also update the **Cached Status** dropdown (and on the card, `_formValues[slot].cachedStatus` with `persist: false`) from entity, so the scheduler auto-enable case still shows the correct Cached Status without overwriting name/code. Lock read-only fields (lock code, lock status) continue to be updated.
+
 ### Card: Clear Slot persists cleared slot to localStorage
 - When you click **Clear Slot** on the card, the backend already cleared that slot and purged its cache. The card now also calls **`_saveFormValuesToStorage()`** after removing that slot from `_formValues`, so the card's localStorage no longer contains the old name/PIN/status for that slot. After a reload, the slot shows the cleared state instead of stale cached values.
 

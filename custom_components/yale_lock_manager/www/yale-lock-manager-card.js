@@ -99,11 +99,11 @@ class YaleLockManagerCard extends HTMLElement {
       }
     this.render();
     } else {
-      // Slot is expanded - sync editable and read-only fields from entity (e.g. after scheduler auto-enable)
+      // Slot is expanded - update only read-only and Cached Status from entity (preserve name/code/other edits)
       if (this._debugMode && entityChanged) {
-        console.log('[Yale Lock Manager] [REFRESH DEBUG] set hass() - calling _updateSlotFromEntityState() (slot expanded)');
+        console.log('[Yale Lock Manager] [REFRESH DEBUG] set hass() - calling _updateNonEditableParts() (slot expanded)');
       }
-      this._updateSlotFromEntityState(this._expandedSlot);
+      this._updateNonEditableParts();
     }
   }
   
@@ -605,10 +605,11 @@ class YaleLockManagerCard extends HTMLElement {
         `;
       }
       
-      // Update lock fields (read-only) in expanded slot
+      // Update lock fields (read-only) and Cached Status in expanded slot (do not overwrite name/code)
       if (this._expandedSlot === user.slot) {
         const lockCodeField = this.shadowRoot?.querySelector(`#lock-code-${user.slot}`);
         const lockStatusField = this.shadowRoot?.querySelector(`#lock-status-${user.slot}`);
+        const cachedStatusField = this.shadowRoot?.querySelector(`#cached-status-${user.slot}`);
         
         if (lockCodeField) {
           lockCodeField.value = user.lock_code || '';
@@ -616,6 +617,14 @@ class YaleLockManagerCard extends HTMLElement {
         if (lockStatusField) {
           const lockStatus = user.lock_status_from_lock ?? user.lock_status;
           lockStatusField.value = lockStatus !== null && lockStatus !== undefined ? lockStatus.toString() : '0';
+        }
+        // Sync Cached Status from entity (e.g. after scheduler auto-enable) without overwriting other edits
+        if (cachedStatusField && document.activeElement !== cachedStatusField) {
+          const cachedStatus = user.lock_status !== null && user.lock_status !== undefined
+            ? user.lock_status
+            : (user.enabled ? 1 : 2);
+          cachedStatusField.value = cachedStatus.toString();
+          this._setFormValue(user.slot, 'cachedStatus', cachedStatus, { persist: false });
         }
       }
     });

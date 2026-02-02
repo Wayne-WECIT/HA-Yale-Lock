@@ -80,10 +80,10 @@ class YaleLockManagerPanel extends HTMLElement {
         this.render();
       } else {
         if (this._debugMode && entityChanged) {
-          console.log('[Yale Lock Manager] [REFRESH DEBUG] set hass() - calling _updateSlotFromEntityState() (slot expanded)');
+          console.log('[Yale Lock Manager] [REFRESH DEBUG] set hass() - calling _updateNonEditableParts() (slot expanded)');
         }
-        // Slot is expanded - sync editable and read-only fields from entity (e.g. after scheduler auto-enable)
-        this._updateSlotFromEntityState(this._expandedSlot);
+        // Slot is expanded - update only read-only and Cached Status from entity (preserve name/code/other edits)
+        this._updateNonEditableParts();
       }
     }
   }
@@ -411,7 +411,7 @@ class YaleLockManagerPanel extends HTMLElement {
   }
 
   _updateNonEditableParts() {
-    // Update only non-editable parts when slot is expanded
+    // Update only non-editable parts and Cached Status when slot is expanded (do not overwrite name/code)
     if (!this._hass || !this._config?.entity) return;
     
     const stateObj = this._hass.states[this._config.entity];
@@ -419,12 +419,13 @@ class YaleLockManagerPanel extends HTMLElement {
     
     const users = this.getUserData();
     
-    // Update lock fields (read-only) in expanded slot
+    // Update lock fields (read-only) and Cached Status dropdown in expanded slot
     if (this._expandedSlot) {
       const user = users.find(u => u.slot === this._expandedSlot);
       if (user) {
         const lockCodeField = this.querySelector(`#lock-code-${this._expandedSlot}`);
         const lockStatusField = this.querySelector(`#lock-status-${this._expandedSlot}`);
+        const cachedStatusField = this.querySelector(`#cached-status-${this._expandedSlot}`);
         
         if (lockCodeField) {
           lockCodeField.value = user.lock_code || '';
@@ -432,6 +433,13 @@ class YaleLockManagerPanel extends HTMLElement {
         if (lockStatusField) {
           const lockStatus = user.lock_status_from_lock ?? user.lock_status;
           lockStatusField.value = lockStatus !== null && lockStatus !== undefined ? lockStatus.toString() : '0';
+        }
+        // Sync Cached Status from entity (e.g. after scheduler auto-enable) without overwriting other edits
+        if (cachedStatusField && document.activeElement !== cachedStatusField) {
+          const cachedStatus = user.lock_status !== null && user.lock_status !== undefined
+            ? user.lock_status
+            : (user.enabled ? 1 : 2);
+          cachedStatusField.value = cachedStatus.toString();
         }
       }
     }
