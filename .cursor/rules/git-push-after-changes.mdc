@@ -1,0 +1,14 @@
+---
+description: After code changes, always commit and push to git so the user can test remotely
+alwaysApply: true
+---
+
+# Git: Commit and Push After Changes
+
+After completing any code changes in this project:
+
+1. **Stage** all modified/added files that are part of the change (e.g. `git add <paths>` or `git add -A` if the whole change set is intended).
+2. **Commit** with a clear, descriptive message (e.g. what was fixed or added).
+3. **Push** to the remote: `git push origin main`.
+
+Do not leave pushing to the user. The user tests by pulling from the repo, so every change must be pushed. If `git push` fails (e.g. network/proxy), report the error and suggest they run `git push origin main` locally; still complete commit so changes are saved.
