@@ -11,4 +11,4 @@ After completing any code changes in this project:
 2. **Commit** with a clear, descriptive message (e.g. what was fixed or added).
 3. **Push** to the remote: `git push origin main`.
 
-Do not leave pushing to the user. The user tests by pulling from the repo, so every change must be pushed. If `git push` fails (e.g. network/proxy), report the error and suggest they run `git push origin main` locally; still complete commit so changes are saved.
+Do not leave pushing to the user. The user tests by pulling from the repo, so every change must be pushed. If `git push` fails with a proxy error (e.g. "Failed to connect to 127.0.0.1 port 9"), retry with proxy env vars cleared for the command (e.g. in PowerShell: `$env:HTTP_PROXY=""; $env:HTTPS_PROXY=""; git push origin main`). If it still fails, report the error and suggest they run `git push origin main` locally; still complete commit so changes are saved.
