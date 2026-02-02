@@ -1198,6 +1198,12 @@ class YaleLockManagerPanel extends HTMLElement {
                     }
                     return '';
                   })()}
+                  ${(user.enabled_by_scheduler || user.do_not_auto_enable) ? `
+                    <div style="margin-top: 8px; padding: 8px; background: var(--secondary-background-color); border-radius: 4px; font-size: 0.85em;">
+                      ${user.enabled_by_scheduler ? '<div style="color: var(--primary-color);">✓ Enabled by scheduler</div>' : ''}
+                      ${user.do_not_auto_enable ? '<div style="color: var(--secondary-text-color);">Scheduler will not re-enable this slot (you disabled it)</div>' : ''}
+                    </div>
+                  ` : ''}
                 </div>
               ` : ''}
               

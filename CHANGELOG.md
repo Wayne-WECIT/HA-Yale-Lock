@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.8.4.54] - 2026-01-27
+
+### Scheduler: auto-enable once at start, do not re-enable after user disables, clear slot at end
+
+- **Auto-enable once when schedule starts**: Slots default to Disabled when set up. The scheduler now **sets the slot to Enabled once** when the schedule becomes active and pushes the code, so you do not have to remember to enable the slot first. When the schedule starts (inside the window) and the slot has a name/code and is Disabled, the scheduler sets `enabled` and `enabled_by_scheduler`, then pushes the code.
+- **Do not re-enable after user disables**: If you later set the slot to **Disabled** (via UI or service), a flag `do_not_auto_enable` is set. The scheduler will **not** set the slot back to Enabled for the rest of that schedule window. When you set status to Enabled again, the flag is cleared so the scheduler can auto-enable again if needed.
+- **Clear slot and local cache when schedule ends**: When the schedule **ends** (current time past end), the scheduler clears the code from the lock (as before) and now also **clears the slot's local cache** (name, code, schedule, etc.) so the slot is available for reuse. The slot shows as available; you can configure it again with a new schedule.
+- **Flags in entity state and UI**: Per-slot attributes `enabled_by_scheduler` and `do_not_auto_enable` are exposed in the lock entity state (default false when missing). The panel and card show a read-only note when **Enabled by scheduler** or **Scheduler will not re-enable this slot (you disabled it)**.
+- **Manual clear slot**: When you use **Clear Slot** (clear_local_cache=True), the scheduler flags are cleared so a freshly configured slot does not carry over old flags. A helper `_clear_slot_local_cache(slot)` is used for both manual clear and schedule-end clear.
+
+---
+
 ## [1.8.4.53] - 2026-01-27
 
 ### Post-save message when outside schedule window

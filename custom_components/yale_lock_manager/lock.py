@@ -148,6 +148,8 @@ class YaleLockManagerLock(CoordinatorEntity, LockEntity):
             # Create a new dict for each user to ensure new object references
             users[slot_str] = dict(user_data)
             users[slot_str]["schedule_valid_now"] = self.coordinator._is_code_valid(int(slot_str))
+            users[slot_str].setdefault("enabled_by_scheduler", False)
+            users[slot_str].setdefault("do_not_auto_enable", False)
         
         enabled_users = [u for u in users.values() if u.get("enabled")]
         total_users = len([u for u in users.values() if u.get("name")])

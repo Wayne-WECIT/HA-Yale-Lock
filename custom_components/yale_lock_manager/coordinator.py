@@ -1013,6 +1013,12 @@ class YaleLockCoordinator(DataUpdateCoordinator):
             _LOGGER.info("Slot %s sync calculation - Cached code: %s, Lock code: %s, Should be enabled: %s, Synced: %s",
                         slot, "***" if code else "None", "***" if lock_code else "None", should_be_enabled, synced_to_lock)
         
+        do_not_auto_enable = (code_type == CODE_TYPE_PIN and lock_status == USER_STATUS_DISABLED)
+        enabled_by_scheduler = (
+            existing_user.get("enabled_by_scheduler", False)
+            if (code_type == CODE_TYPE_PIN and lock_status == USER_STATUS_ENABLED and existing_user)
+            else False
+        )
         self._user_data["users"][str(slot)] = {
             "name": name,
             "code_type": code_type,
@@ -1029,6 +1035,8 @@ class YaleLockCoordinator(DataUpdateCoordinator):
             "last_used": None,
             "notifications_enabled": notifications_enabled,
             "notification_services": notification_services,  # List of notification services
+            "do_not_auto_enable": do_not_auto_enable,
+            "enabled_by_scheduler": enabled_by_scheduler,
         }
 
         await self.async_save_user_data()
@@ -1086,20 +1094,7 @@ class YaleLockCoordinator(DataUpdateCoordinator):
             # If clear_local_cache is True, clear all cached fields before updating from lock
             if clear_local_cache and slot_str in self._user_data["users"]:
                 _LOGGER.info("Clearing all local cached details for slot %s", slot)
-                user_data = self._user_data["users"][slot_str]
-                # Clear all cached fields
-                user_data["name"] = f"User {slot}"
-                user_data["code"] = ""
-                user_data["enabled"] = False
-                user_data["lock_status"] = USER_STATUS_DISABLED
-                user_data["schedule"] = {"start": None, "end": None}
-                user_data["usage_limit"] = None
-                user_data["usage_count"] = 0
-                user_data["last_used"] = None
-                user_data["notifications_enabled"] = False
-                user_data["notification_services"] = []  # Clear notification services
-                user_data["code_type"] = CODE_TYPE_PIN
-                user_data["synced_to_lock"] = False
+                self._clear_slot_local_cache(slot)
                 _LOGGER.info("✓ All local cached details cleared for slot %s", slot)
             
             # Update only this slot from lock (optimized - no need to scan all slots)
@@ -1148,14 +1143,20 @@ class YaleLockCoordinator(DataUpdateCoordinator):
         if status == USER_STATUS_ENABLED:
             user_data["enabled"] = True
             user_data["lock_status"] = USER_STATUS_ENABLED
+            user_data["do_not_auto_enable"] = False
+            user_data.pop("enabled_by_scheduler", None)
         elif status == USER_STATUS_DISABLED:
             user_data["enabled"] = False
             user_data["lock_status"] = USER_STATUS_DISABLED
+            user_data["do_not_auto_enable"] = True
+            user_data.pop("enabled_by_scheduler", None)
         elif status == USER_STATUS_AVAILABLE:
             # AVAILABLE is not a valid cached status - treat as DISABLED
             # (Lock returns AVAILABLE when code is cleared, but we track it as DISABLED in cache)
             user_data["enabled"] = False
             user_data["lock_status"] = USER_STATUS_DISABLED
+            user_data["do_not_auto_enable"] = True
+            user_data.pop("enabled_by_scheduler", None)
         else:
             raise ValueError(f"Invalid status: {status}. Must be 0, 1, or 2")
         
@@ -1401,6 +1402,30 @@ class YaleLockCoordinator(DataUpdateCoordinator):
             await self.async_save_user_data()
             raise
 
+    def _clear_slot_local_cache(self, slot: int) -> None:
+        """Clear local cache for a slot (in-memory only; does not call the lock). Used when schedule ends or when user clears slot with clear_local_cache=True."""
+        slot_str = str(slot)
+        if slot_str not in self._user_data["users"]:
+            return
+        user_data = self._user_data["users"][slot_str]
+        user_data["name"] = f"User {slot}"
+        user_data["code"] = ""
+        user_data["enabled"] = False
+        user_data["lock_status"] = USER_STATUS_DISABLED
+        user_data["lock_code"] = ""
+        user_data["lock_status_from_lock"] = USER_STATUS_AVAILABLE
+        user_data["lock_enabled"] = False
+        user_data["schedule"] = {"start": None, "end": None}
+        user_data["usage_limit"] = None
+        user_data["usage_count"] = 0
+        user_data["last_used"] = None
+        user_data["notifications_enabled"] = False
+        user_data["notification_services"] = []
+        user_data["code_type"] = CODE_TYPE_PIN
+        user_data["synced_to_lock"] = False
+        user_data["enabled_by_scheduler"] = False
+        user_data["do_not_auto_enable"] = False
+
     async def async_check_schedules(self) -> None:
         """Check all slots with schedules; push or clear codes when schedule starts or ends."""
         for slot_str, user_data in list(self._user_data["users"].items()):
@@ -1414,17 +1439,30 @@ class YaleLockCoordinator(DataUpdateCoordinator):
                 continue
             valid_now = self._is_code_valid(slot)
             enabled = user_data.get("enabled", False)
+            do_not_auto_enable = user_data.get("do_not_auto_enable", False)
+            has_pin_or_name = bool((user_data.get("code") or "").strip() or (user_data.get("name") or "").strip())
             lock_status = user_data.get("lock_status_from_lock")
             lock_code = user_data.get("lock_code") or ""
             code_on_lock = (
                 lock_status == USER_STATUS_ENABLED and bool(lock_code)
             )
-            should_be_on_lock = enabled and valid_now
+            should_be_on_lock = valid_now and (enabled or (not do_not_auto_enable and has_pin_or_name))
             if code_on_lock == should_be_on_lock:
                 continue
             try:
-                await self._do_push_code_to_lock(slot)
                 user_name = user_data.get("name", f"User {slot}")
+                if should_be_on_lock and not enabled:
+                    user_data["enabled"] = True
+                    user_data["lock_status"] = USER_STATUS_ENABLED
+                    user_data["enabled_by_scheduler"] = True
+                await self._do_push_code_to_lock(slot)
+                if not should_be_on_lock:
+                    self._clear_slot_local_cache(slot)
+                    await self.async_save_user_data()
+                    self.data["last_user_update"] = dt_util.utcnow().isoformat()
+                    self.async_update_listeners()
+                    if self._lock_entity:
+                        self.hass.loop.call_later(0.2, self._lock_entity.async_write_ha_state)
                 event_type = EVENT_SCHEDULE_STARTED if should_be_on_lock else EVENT_SCHEDULE_ENDED
                 self._fire_event(
                     event_type,

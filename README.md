@@ -246,6 +246,8 @@ In **Settings → Devices & Services → Yale Lock Manager → Configure** you c
 
 When a slot has a **time-based schedule** and the current time is **outside** the schedule window (before start or after end), the card and panel only allow setting **Cached Status** to **Disabled** (Enabled is not an option), and the **Push** button is disabled—the scheduler pushes or clears the code when the schedule becomes active.
 
+The scheduler **auto-enables** a slot once when its schedule becomes active (you do not have to enable it first). If you later set the slot to **Disabled**, the scheduler will not re-enable it for that schedule window. When the schedule **ends**, the scheduler clears the code from the lock and clears the slot's local data so the slot is available for reuse. See [SCHEDULER_FLOW.md](SCHEDULER_FLOW.md) for details.
+
 ### Notifications (per-slot)
 
 Notifications are configured in the **expanded slot** in the card or panel:
