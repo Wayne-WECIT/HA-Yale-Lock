@@ -1290,12 +1290,26 @@ class YaleLockCoordinator(DataUpdateCoordinator):
                 "Time slot is not active; push is handled by the scheduler when the schedule is active."
             )
 
+        await self._do_push_code_to_lock(slot)
+
+    async def _do_push_code_to_lock(self, slot: int) -> None:
+        """Internal: set or clear code on lock and verify (no schedule-window check). Used by scheduler and by async_push_code_to_lock."""
+        user_data = self._user_data["users"].get(str(slot))
+        if not user_data:
+            raise ValueError(f"User slot {slot} not found")
+
+        code_type = user_data.get("code_type", CODE_TYPE_PIN)
+        if code_type == CODE_TYPE_FOB:
+            _LOGGER.info("FOB/RFID cards are added directly to the lock - no push needed for slot %s", slot)
+            user_data["synced_to_lock"] = True
+            await self.async_save_user_data()
+            await self.async_request_refresh()
+            return
+
         code = user_data["code"]
         enabled = user_data["enabled"]
-        
-        # Determine if code should be on lock based on enabled flag and schedule
         should_be_on_lock = enabled and self._is_code_valid(slot)
-        
+
         try:
             if should_be_on_lock:
                 # Code should be on lock - set it
@@ -1409,7 +1423,7 @@ class YaleLockCoordinator(DataUpdateCoordinator):
             if code_on_lock == should_be_on_lock:
                 continue
             try:
-                await self.async_push_code_to_lock(slot)
+                await self._do_push_code_to_lock(slot)
                 user_name = user_data.get("name", f"User {slot}")
                 event_type = EVENT_SCHEDULE_STARTED if should_be_on_lock else EVENT_SCHEDULE_ENDED
                 self._fire_event(

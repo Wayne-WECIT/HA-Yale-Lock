@@ -636,6 +636,8 @@ class YaleLockManagerPanel extends HTMLElement {
     const boltStatus = stateObj.attributes.bolt_status || 'unknown';
     const totalUsers = stateObj.attributes.total_users || 0;
     const enabledUsers = stateObj.attributes.enabled_users || 0;
+    const currentTimeIso = stateObj.attributes.current_time_iso;
+    const haTime = currentTimeIso ? new Date(currentTimeIso).toISOString().slice(0, 16).replace('T', ' ') : '—';
 
     this.innerHTML = `
       <style>${this.getStyles()}</style>
@@ -645,6 +647,7 @@ class YaleLockManagerPanel extends HTMLElement {
             <div class="status-icon">${isLocked ? '🔒' : '🔓'}</div>
             <div class="status-info">
               <h1>Yale Lock Manager</h1>
+              <div class="status-line">HA time: ${haTime}</div>
               <div class="status-line">🔋 ${batteryLevel}% Battery</div>
               <div class="status-line">• Bolt: ${boltStatus} • Door: ${doorStatus}</div>
             </div>
@@ -2041,7 +2044,8 @@ class YaleLockManagerPanel extends HTMLElement {
         const isSynced = codesMatch && statusMatch;
         
         if (!isSynced && codeType === 'pin') {
-          this.showStatus(slot, '✅ User saved! ⚠️ Push required to sync with lock.', 'warning');
+          const outsideWindow = user.schedule && (user.schedule.start || user.schedule.end) && user.schedule_valid_now === false;
+          this.showStatus(slot, outsideWindow ? '✅ User saved. Scheduler will push when schedule is active.' : '✅ User saved! ⚠️ Push required to sync with lock.', 'warning');
         } else {
           this.showStatus(slot, '✅ User saved successfully!', 'success');
         }
@@ -2071,7 +2075,8 @@ class YaleLockManagerPanel extends HTMLElement {
           const isSynced = codesMatch && statusMatch;
           
           if (!isSynced && codeType === 'pin') {
-            this.showStatus(slot, '✅ User saved! ⚠️ Push required to sync with lock.', 'warning');
+            const outsideWindow = updatedUser.schedule && (updatedUser.schedule.start || updatedUser.schedule.end) && updatedUser.schedule_valid_now === false;
+            this.showStatus(slot, outsideWindow ? '✅ User saved. Scheduler will push when schedule is active.' : '✅ User saved! ⚠️ Push required to sync with lock.', 'warning');
           } else {
             this.showStatus(slot, '✅ User saved successfully!', 'success');
           }
@@ -2120,7 +2125,8 @@ class YaleLockManagerPanel extends HTMLElement {
                 const isSynced = codesMatch && statusMatch;
                 
                 if (!isSynced && codeType === 'pin') {
-                  this.showStatus(slot, '✅ User saved! ⚠️ Push required to sync with lock.', 'warning');
+                  const outsideWindow = updatedUser.schedule && (updatedUser.schedule.start || updatedUser.schedule.end) && updatedUser.schedule_valid_now === false;
+                  this.showStatus(slot, outsideWindow ? '✅ User saved. Scheduler will push when schedule is active.' : '✅ User saved! ⚠️ Push required to sync with lock.', 'warning');
                 } else {
                   this.showStatus(slot, '✅ User saved successfully!', 'success');
                 }

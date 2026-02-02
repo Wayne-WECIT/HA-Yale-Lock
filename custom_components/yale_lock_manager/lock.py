@@ -9,6 +9,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from homeassistant.util import dt as dt_util
 import homeassistant.helpers.device_registry as dr
 
 from .const import CONF_LOCK_NAME, DOMAIN, ZWAVE_JS_DOMAIN
@@ -160,6 +161,9 @@ class YaleLockManagerLock(CoordinatorEntity, LockEntity):
         attrs["last_access_user"] = self.coordinator.data.get("last_access_user", "Unknown")
         attrs["last_access_method"] = self.coordinator.data.get("last_access_method", "Unknown")
         attrs["last_access_timestamp"] = self.coordinator.data.get("last_access_timestamp")
+
+        # Expose current HA system time for schedule debugging
+        attrs["current_time_iso"] = dt_util.now().isoformat()
         
         _LOGGER.info("[REFRESH DEBUG] extra_state_attributes: returning %s users (total_users=%s, enabled_users=%s)", 
                      len(users), total_users, len(enabled_users))

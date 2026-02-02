@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.8.4.53] - 2026-01-27
+
+### Post-save message when outside schedule window
+- When a slot has a time-based schedule and the current time is **outside** the schedule window, saving the user now shows **"User saved. Scheduler will push when schedule is active."** instead of "Push required to sync with lock." in both panel and card (all save-success paths). This clarifies that manual push is not needed or allowed; the scheduler will push when the schedule becomes active.
+
+### Scheduler: allow clear when schedule ends
+- **Bug**: When the schedule **ended**, the scheduler called `async_push_code_to_lock(slot)` to clear the code, but that method raises when the slot has a schedule and the current time is outside the window, so the code was never cleared.
+- **Fix**: Refactored coordinator: core set/clear and verify logic is in a new internal method `_do_push_code_to_lock(slot)` (no schedule-window check). `async_push_code_to_lock(slot)` still does the "outside window → raise" check for service/frontend, then calls `_do_push_code_to_lock(slot)`. `async_check_schedules` now calls `_do_push_code_to_lock(slot)` directly so it can both set (when schedule starts) and clear (when schedule ends) codes on the lock. Verification and state updates after push are unchanged (same as manual push).
+
+### HA system time in header
+- Lock entity now exposes **`current_time_iso`** in `extra_state_attributes` (HA system time when state is built) for schedule debugging.
+- Panel and card headers now show **"HA time: YYYY-MM-DD HH:mm"** (or "—" if the attribute is missing). This helps confirm the HA clock when debugging schedule behaviour.
+
+---
+
 ## [1.8.4.52] - 2026-02-02
 
 ### Fix: offset-naive and offset-aware datetime in schedule validation
