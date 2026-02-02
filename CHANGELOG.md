@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.8.4.50] - 2026-01-27
+
+### Options UI: schedule check interval
+
+- **Schedule check interval (minutes)** in integration options (Settings → Devices & Services → Yale Lock Manager → Configure) is now an **editable number with up/down arrows** (box/stepper) instead of a slider. Range and behaviour (1–60, default 5, reload on save) are unchanged.
+
+---
+
 ## [1.8.4.49] - 2026-01-27
 
 ### Auto-schedule checker

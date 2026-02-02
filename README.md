@@ -242,7 +242,7 @@ action:
 
 ### Options (schedule check interval)
 
-In **Settings → Devices & Services → Yale Lock Manager → Configure** you can set **Schedule check interval (minutes)** (1–60, default 5). This is how often the integration checks schedules and automatically pushes or clears codes when a schedule starts or ends. Saving options reloads the integration so the new interval takes effect.
+In **Settings → Devices & Services → Yale Lock Manager → Configure** you can set **Schedule check interval (minutes)** (1–60, default 5). The value is set with an editable number field and up/down arrows. This is how often the integration checks schedules and automatically pushes or clears codes when a schedule starts or ends. Saving options reloads the integration so the new interval takes effect.
 
 ### Notifications (per-slot)
 

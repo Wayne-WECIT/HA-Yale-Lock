@@ -12,7 +12,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_NAME
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.data_entry_flow import FlowResult
-from homeassistant.helpers import device_registry as dr, entity_registry as er
+from homeassistant.helpers import device_registry as dr, entity_registry as er, selector
 
 from .const import (
     CONF_LOCK_ENTITY_ID,
@@ -183,7 +183,17 @@ class YaleLockManagerOptionsFlowHandler(config_entries.OptionsFlow):
                     vol.Required(
                         OPTION_SCHEDULE_CHECK_INTERVAL_MINUTES,
                         default=interval,
-                    ): vol.All(vol.Coerce(int), vol.Range(min=1, max=60)),
+                    ): vol.All(
+                        selector.NumberSelector(
+                            {
+                                "min": 1,
+                                "max": 60,
+                                "step": 1,
+                                "mode": selector.NumberSelectorMode.BOX,
+                            }
+                        ),
+                        vol.Coerce(int),
+                    ),
                 }
             ),
         )
