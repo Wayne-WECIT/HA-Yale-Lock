@@ -1,6 +1,7 @@
 """User data storage management for Yale Lock Manager."""
 from __future__ import annotations
 
+import copy
 from typing import Any
 
 from homeassistant.core import HomeAssistant
@@ -72,6 +73,10 @@ class UserDataStorage:
         slot_str = str(slot)
         if slot_str in self._user_data["users"]:
             del self._user_data["users"][slot_str]
+
+    def replace_users(self, users: dict[str, Any]) -> None:
+        """Replace all users with a deep copy of the given users dict (for import/restore)."""
+        self._user_data["users"] = copy.deepcopy(users)
 
     @property
     def data(self) -> dict[str, Any]:

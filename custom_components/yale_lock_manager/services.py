@@ -42,6 +42,7 @@ from .const import (
     SERVICE_CHECK_SYNC_STATUS,
     SERVICE_SET_USER_STATUS,
     SERVICE_CLEAR_LOCAL_CACHE,
+    SERVICE_IMPORT_USER_DATA,
     USER_STATUS_AVAILABLE,
     USER_STATUS_DISABLED,
     USER_STATUS_ENABLED,
@@ -370,6 +371,21 @@ async def async_setup_services(hass: HomeAssistant) -> None:
             _LOGGER.error("Error sending test notification: %s", err)
             raise HomeAssistantError(f"Failed to send test notification: {err}") from err
 
+    async def handle_import_user_data(call: ServiceCall) -> None:
+        """Handle import user data service call (restore from backup)."""
+        coordinator = get_coordinator()
+        data = call.data.get("data")
+        if data is None:
+            raise HomeAssistantError("Import data is required")
+        try:
+            await coordinator.async_import_user_data(data)
+            _LOGGER.info("Import user data completed")
+        except ValueError as err:
+            raise HomeAssistantError(f"Invalid import data: {err}") from err
+        except Exception as err:
+            _LOGGER.error("Error importing user data: %s", err)
+            raise HomeAssistantError(f"Failed to import user data: {err}") from err
+
     # Register services
     hass.services.async_register(
         DOMAIN,
@@ -467,6 +483,16 @@ async def async_setup_services(hass: HomeAssistant) -> None:
         SERVICE_SEND_TEST_NOTIFICATION,
         handle_send_test_notification,
         schema=SEND_TEST_NOTIFICATION_SCHEMA,
+    )
+
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_IMPORT_USER_DATA,
+        handle_import_user_data,
+        schema=vol.Schema({
+            vol.Optional("entity_id"): cv.entity_id,
+            vol.Required("data"): dict,
+        }),
     )
 
     _LOGGER.debug("Registered Yale Lock Manager services")

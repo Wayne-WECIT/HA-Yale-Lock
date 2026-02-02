@@ -1681,6 +1681,19 @@ class YaleLockCoordinator(DataUpdateCoordinator):
         await self._storage.clear()
         await self.async_request_refresh()
 
+    async def async_import_user_data(self, data: dict[str, Any]) -> None:
+        """Replace user data with imported backup (restore from export)."""
+        if not isinstance(data, dict) or "users" not in data:
+            raise ValueError("Invalid import data: must be a dict with a 'users' key")
+        users = data["users"]
+        if not isinstance(users, dict):
+            raise ValueError("Invalid import data: 'users' must be a dict")
+        # Replace all users with deep copy (storage handles deep copy)
+        self._storage.replace_users(users)
+        await self.async_save_user_data()
+        await self.async_request_refresh()
+        _LOGGER.info("Imported user data: %s slots", len(users))
+
     @property
     def user_data(self) -> dict[str, Any]:
         """Get user data."""

@@ -1780,7 +1780,7 @@ class YaleLockManagerCard extends HTMLElement {
           <div class="controls">
             <button onclick="card.toggleLock()">${isLocked ? 'Unlock' : 'Lock'}</button>
             <button class="secondary" onclick="card.refresh()">Refresh</button>
-            <button class="secondary" onclick="card.sendTestNotification().catch(e => console.error(e))">Test notification</button>
+            <button class="secondary" onclick="card.exportBackup().catch(e => console.error(e))">Export</button>
           </div>
         </div>
         
@@ -1812,8 +1812,10 @@ class YaleLockManagerCard extends HTMLElement {
         
         <hr style="margin: 24px 0 16px 0;">
         <div style="text-align: center; margin-bottom: 12px;">
-          <button class="secondary" onclick="card.sendTestNotification().catch(e => console.error(e))">Test notification</button>
+          <button class="secondary" onclick="card.exportBackup().catch(e => console.error(e))">Export backup</button>
+          <button class="secondary" onclick="card.triggerImportBackup()">Import backup</button>
         </div>
+        <input type="file" id="import-file-input" accept=".json" style="display: none;">
         <div id="clear-cache-section" style="text-align: center; padding: 16px 0;">
           ${this._showClearCacheConfirm ? `
             <div style="background: var(--warning-color-background, rgba(255, 152, 0, 0.1)); border: 1px solid var(--warning-color, #ff9800); border-radius: 4px; padding: 12px; margin-bottom: 12px;">
@@ -2442,19 +2444,57 @@ class YaleLockManagerCard extends HTMLElement {
     this.toggleNotificationService(slot, service);
   }
 
-  async sendTestNotification() {
-    const slot = this._expandedSlot ?? 1;
+  async exportBackup() {
     try {
-      this.showStatus(0, 'Sending test notification...', 'info');
-      await this._hass.callService('yale_lock_manager', 'send_test_notification', {
-        entity_id: this._config.entity,
-        slot: parseInt(slot, 10)
-      });
-      this.showStatus(0, '✅ Test notification sent', 'success');
+      this.showStatus(0, 'Exporting...', 'info');
+      const res = await this._hass.callWS({ type: 'yale_lock_manager/export_user_data' });
+      const data = res?.result?.data ?? res?.data;
+      if (data == null) {
+        this.showStatus(0, 'No data to export', 'error');
+        return;
+      }
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const date = new Date().toISOString().slice(0, 10);
+      a.download = `yale_lock_manager_backup_${date}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      this.showStatus(0, 'Backup exported', 'success');
     } catch (error) {
-      console.error('[Yale Lock Manager] Test notification failed:', error);
-      this.showStatus(0, `❌ Failed to send test notification: ${error.message}`, 'error');
+      console.error('[Yale Lock Manager] Export failed:', error);
+      this.showStatus(0, `Export failed: ${error.message}`, 'error');
     }
+  }
+
+  triggerImportBackup() {
+    const input = this.shadowRoot.getElementById('import-file-input');
+    if (input) {
+      input.value = '';
+      input.onchange = (e) => this.importBackupFromFile(e);
+      input.click();
+    }
+  }
+
+  async importBackupFromFile(event) {
+    const file = event.target?.files?.[0];
+    if (!file) return;
+    try {
+      this.showStatus(0, 'Importing...', 'info');
+      const text = await file.text();
+      const data = JSON.parse(text);
+      await this._hass.callService('yale_lock_manager', 'import_user_data', {
+        entity_id: this._config.entity,
+        data: data
+      });
+      this.showStatus(0, 'Backup imported successfully', 'success');
+      this.render();
+    } catch (error) {
+      console.error('[Yale Lock Manager] Import failed:', error);
+      this.showStatus(0, `Import failed: ${error.message}`, 'error');
+    }
+    event.target.value = '';
   }
 
   // ========== ACTIONS ==========

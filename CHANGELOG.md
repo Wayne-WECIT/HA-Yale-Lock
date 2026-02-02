@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.8.4.46] - 2026-01-27
+
+### Remove test notification buttons; add Export/Import backup
+
+- **UI**: Removed "Test notification" buttons from the card and panel (header and bottom). The backend service `yale_lock_manager.send_test_notification` remains available for use from Developer Tools or automations.
+- **Export**: Added WebSocket command `yale_lock_manager/export_user_data` that returns the full user/slot storage payload (version, lock_node_id, users). Card and panel now have "Export" (header) and "Export backup" (bottom) buttons that download a JSON file (e.g. `yale_lock_manager_backup_YYYY-MM-DD.json`). Export contains PINs/codes; store backups securely.
+- **Import**: Added service `yale_lock_manager.import_user_data` (entity_id optional, data required) and coordinator method `async_import_user_data(data)` to restore user/slot data from a previously exported JSON. Card and panel have "Import backup" buttons that open a file picker; on success the view refreshes. Invalid data (missing `users` or not a dict) is rejected.
+
+---
+
 ## [1.8.4.45] - 2026-02-02
 
 ### Fix: notification chips refresh on click (card)

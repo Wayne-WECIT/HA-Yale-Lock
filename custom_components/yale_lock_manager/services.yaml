@@ -239,3 +239,22 @@ send_test_notification:
           min: 1
           max: 20
           mode: box
+
+import_user_data:
+  name: Import User Data
+  description: Restore user/slot data from a previously exported backup (e.g. after a lock reset)
+  fields:
+    entity_id:
+      name: Entity
+      description: Lock entity (optional if only one lock)
+      required: false
+      selector:
+        entity:
+          domain: lock
+          integration: yale_lock_manager
+    data:
+      name: Backup Data
+      description: The backup object (must have a "users" dict from an export)
+      required: true
+      selector:
+        object:

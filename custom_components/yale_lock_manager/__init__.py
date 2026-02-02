@@ -15,7 +15,7 @@ from homeassistant.helpers import device_registry as dr
 from .const import CONF_LOCK_NODE_ID, DOMAIN
 from .coordinator import YaleLockCoordinator
 from .services import async_setup_services
-from .websocket import ws_get_notification_services
+from .websocket import ws_export_user_data, ws_get_notification_services
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -104,9 +104,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Set up services
     await async_setup_services(hass)
 
-    # Register WebSocket command once (for get_notification_services list)
+    # Register WebSocket commands once (for get_notification_services list and export_user_data)
     if len(hass.data[DOMAIN]) == 1:
         websocket_api.async_register_command(hass, ws_get_notification_services)
+        websocket_api.async_register_command(hass, ws_export_user_data)
 
     return True
 
