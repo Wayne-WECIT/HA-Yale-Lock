@@ -8,8 +8,9 @@ import voluptuous as vol
 
 from homeassistant import config_entries
 from homeassistant.components.zwave_js import DOMAIN as ZWAVE_JS_DOMAIN
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_NAME
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.data_entry_flow import FlowResult
 from homeassistant.helpers import device_registry as dr, entity_registry as er
 
@@ -17,7 +18,9 @@ from .const import (
     CONF_LOCK_ENTITY_ID,
     CONF_LOCK_NAME,
     CONF_LOCK_NODE_ID,
+    DEFAULT_SCHEDULE_CHECK_INTERVAL_MINUTES,
     DOMAIN,
+    OPTION_SCHEDULE_CHECK_INTERVAL_MINUTES,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -149,4 +152,38 @@ class YaleLockManagerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 }
             ),
             errors=errors,
+        )
+
+    @staticmethod
+    @callback
+    def async_get_options_flow(config_entry: ConfigEntry) -> YaleLockManagerOptionsFlowHandler:
+        """Return the options flow handler."""
+        return YaleLockManagerOptionsFlowHandler()
+
+
+class YaleLockManagerOptionsFlowHandler(config_entries.OptionsFlow):
+    """Handle Yale Lock Manager options."""
+
+    async def async_step_init(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Manage the options."""
+        if user_input is not None:
+            self.hass.config_entries.async_schedule_reload(self.config_entry.entry_id)
+            return self.async_create_entry(title="", data=user_input)
+
+        interval = self.config_entry.options.get(
+            OPTION_SCHEDULE_CHECK_INTERVAL_MINUTES,
+            DEFAULT_SCHEDULE_CHECK_INTERVAL_MINUTES,
+        )
+        return self.async_show_form(
+            step_id="init",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(
+                        OPTION_SCHEDULE_CHECK_INTERVAL_MINUTES,
+                        default=interval,
+                    ): vol.All(vol.Coerce(int), vol.Range(min=1, max=60)),
+                }
+            ),
         )

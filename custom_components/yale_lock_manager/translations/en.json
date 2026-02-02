@@ -23,7 +23,10 @@
     "step": {
       "init": {
         "title": "Yale Lock Manager Options",
-        "description": "Configure options for Yale Lock Manager"
+        "description": "Configure options for Yale Lock Manager",
+        "data": {
+          "schedule_check_interval_minutes": "Schedule check interval (minutes)"
+        }
       }
     }
   }

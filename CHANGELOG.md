@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.8.4.49] - 2026-01-27
+
+### Auto-schedule checker
+
+- **Background task**: A periodic job runs (default every 5 minutes) to check user code schedules. For slots with a start/end schedule, it compares desired state (enabled and within schedule) vs current lock state; if they differ, it calls the existing push logic to set or clear the code on the lock.
+- **Events**: `yale_lock_manager_schedule_started` when a code is pushed onto the lock because the schedule became valid; `yale_lock_manager_schedule_ended` when a code is cleared because the schedule became invalid. Event data includes `entity_id`, `slot`, `user_name`, `timestamp`, `schedule_start`, `schedule_end`.
+- **Configurable interval**: Integration options (Settings → Devices & Services → Yale Lock Manager → Configure): **Schedule check interval (minutes)** 1–60, default 5. Saving options reloads the integration so the new interval takes effect.
+- **Timezone**: Schedule validity uses `dt_util.now()` so it respects Home Assistant’s configured time zone.
+
+---
+
 ## [1.8.4.48] - 2026-01-27
 
 ### Duplicate PIN warning, example automations, sync check verified

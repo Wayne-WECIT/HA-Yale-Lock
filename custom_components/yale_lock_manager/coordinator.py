@@ -40,6 +40,8 @@ from .const import (
     EVENT_CODE_EXPIRED,
     EVENT_LOCKED,
     EVENT_REFRESH_PROGRESS,
+    EVENT_SCHEDULE_ENDED,
+    EVENT_SCHEDULE_STARTED,
     EVENT_UNLOCKED,
     EVENT_USAGE_LIMIT_REACHED,
     MAX_USER_SLOTS,
@@ -597,7 +599,7 @@ class YaleLockCoordinator(DataUpdateCoordinator):
             # No schedule restrictions
             return True
 
-        now = datetime.now()
+        now = dt_util.now()
 
         if start:
             start_dt = datetime.fromisoformat(start)
@@ -1373,6 +1375,53 @@ class YaleLockCoordinator(DataUpdateCoordinator):
             user_data["synced_to_lock"] = False
             await self.async_save_user_data()
             raise
+
+    async def async_check_schedules(self) -> None:
+        """Check all slots with schedules; push or clear codes when schedule starts or ends."""
+        for slot_str, user_data in list(self._user_data["users"].items()):
+            slot = int(slot_str)
+            if user_data.get("code_type") == CODE_TYPE_FOB:
+                continue
+            schedule = user_data.get("schedule", {})
+            start = schedule.get("start")
+            end = schedule.get("end")
+            if not start and not end:
+                continue
+            valid_now = self._is_code_valid(slot)
+            enabled = user_data.get("enabled", False)
+            lock_status = user_data.get("lock_status_from_lock")
+            lock_code = user_data.get("lock_code") or ""
+            code_on_lock = (
+                lock_status == USER_STATUS_ENABLED and bool(lock_code)
+            )
+            should_be_on_lock = enabled and valid_now
+            if code_on_lock == should_be_on_lock:
+                continue
+            try:
+                await self.async_push_code_to_lock(slot)
+                user_name = user_data.get("name", f"User {slot}")
+                event_type = EVENT_SCHEDULE_STARTED if should_be_on_lock else EVENT_SCHEDULE_ENDED
+                self._fire_event(
+                    event_type,
+                    {
+                        "entity_id": self.lock_entity_id,
+                        "slot": slot,
+                        "user_name": user_name,
+                        "timestamp": dt_util.utcnow().isoformat(),
+                        "schedule_start": schedule.get("start"),
+                        "schedule_end": schedule.get("end"),
+                    },
+                )
+                _LOGGER.info(
+                    "Schedule %s for slot %s (%s): code %s on lock",
+                    "started" if should_be_on_lock else "ended",
+                    slot,
+                    user_name,
+                    "set" if should_be_on_lock else "cleared",
+                )
+            except Exception as err:
+                _LOGGER.warning("Auto-schedule check failed for slot %s: %s", slot, err)
+            await asyncio.sleep(1)
 
     async def async_pull_codes_from_lock(self) -> None:
         """Pull all codes from the lock and update our data."""

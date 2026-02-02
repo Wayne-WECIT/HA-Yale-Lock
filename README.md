@@ -140,7 +140,12 @@ action:
 - `yale_lock_manager_code_expired`
 - `yale_lock_manager_usage_limit_reached`
 
-Event data typically includes `user_slot`, `user_name`, `timestamp`, and (where relevant) `usage_count`.
+**Schedule started / ended** (auto-schedule checker)
+
+- `yale_lock_manager_schedule_started` – fired when a code is pushed onto the lock because its schedule became valid.
+- `yale_lock_manager_schedule_ended` – fired when a code is cleared from the lock because its schedule became invalid.
+
+Event data typically includes `user_slot`, `user_name`, `timestamp`, and (where relevant) `usage_count`, `schedule_start`, `schedule_end`.
 
 ### Example automations
 
@@ -210,6 +215,18 @@ action:
       message: "Yale lock battery is at {{ states('sensor.smart_door_lock_manager_battery') }}%. Consider replacing soon."
 ```
 
+**Notify when a guest code becomes active** (schedule started – auto-schedule checker pushed the code):
+
+```yaml
+trigger:
+  - platform: event
+    event_type: yale_lock_manager_schedule_started
+action:
+  - service: notify.mobile_app_iphone
+    data:
+      message: "Guest code for {{ trigger.event.data.user_name }} (Slot {{ trigger.event.data.slot }}) is now active."
+```
+
 **Send a temporary code to a visitor** (manual flow: create the code in the card/panel, then send it via notification):
 
 ```yaml
@@ -222,6 +239,10 @@ action:
       title: "Your door code"
       message: "Your temporary code is [add code manually or use a template]. It is valid until [end time]."
 ```
+
+### Options (schedule check interval)
+
+In **Settings → Devices & Services → Yale Lock Manager → Configure** you can set **Schedule check interval (minutes)** (1–60, default 5). This is how often the integration checks schedules and automatically pushes or clears codes when a schedule starts or ends. Saving options reloads the integration so the new interval takes effect.
 
 ### Notifications (per-slot)
 
@@ -254,7 +275,7 @@ The same PIN cannot be used in more than one slot. If you try to save a code tha
 
 ## Version and changelog
 
-Current version: **1.8.4.48**
+Current version: **1.8.4.49**
 
 See [CHANGELOG.md](CHANGELOG.md) for version history.
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 import logging
 import os
 import shutil
+from datetime import timedelta
 from pathlib import Path
 
 from homeassistant.components import websocket_api
@@ -11,8 +12,14 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers.event import async_track_time_interval
 
-from .const import CONF_LOCK_NODE_ID, DOMAIN
+from .const import (
+    CONF_LOCK_NODE_ID,
+    DEFAULT_SCHEDULE_CHECK_INTERVAL_MINUTES,
+    DOMAIN,
+    OPTION_SCHEDULE_CHECK_INTERVAL_MINUTES,
+)
 from .coordinator import YaleLockCoordinator
 from .services import async_setup_services
 from .websocket import ws_export_user_data, ws_get_notification_services
@@ -108,6 +115,26 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if len(hass.data[DOMAIN]) == 1:
         websocket_api.async_register_command(hass, ws_get_notification_services)
         websocket_api.async_register_command(hass, ws_export_user_data)
+
+    # Auto-schedule checker: run periodically to push/clear codes when schedules start/end
+    interval_minutes = entry.options.get(
+        OPTION_SCHEDULE_CHECK_INTERVAL_MINUTES,
+        DEFAULT_SCHEDULE_CHECK_INTERVAL_MINUTES,
+    )
+    interval_minutes = max(1, min(60, int(interval_minutes)))
+
+    async def _schedule_check(_now):
+        coord = hass.data.get(DOMAIN, {}).get(entry.entry_id)
+        if coord:
+            await coord.async_check_schedules()
+
+    remove = async_track_time_interval(
+        hass, _schedule_check, timedelta(minutes=interval_minutes)
+    )
+    entry.async_on_unload(remove)
+
+    # Run first check so lock is synced with schedules after load
+    hass.async_create_task(coordinator.async_check_schedules())
 
     return True
 

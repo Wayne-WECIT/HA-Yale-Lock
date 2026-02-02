@@ -2,7 +2,7 @@
 from typing import Final
 
 DOMAIN: Final = "yale_lock_manager"
-VERSION: Final = "1.8.4.48"
+VERSION: Final = "1.8.4.49"
 
 # Z-Wave JS Domain
 ZWAVE_JS_DOMAIN: Final = "zwave_js"
@@ -69,6 +69,12 @@ EVENT_CODE_EXPIRED: Final = f"{DOMAIN}_code_expired"
 EVENT_USAGE_LIMIT_REACHED: Final = f"{DOMAIN}_usage_limit_reached"
 EVENT_JAMMED: Final = f"{DOMAIN}_jammed"
 EVENT_REFRESH_PROGRESS: Final = f"{DOMAIN}_refresh_progress"
+EVENT_SCHEDULE_STARTED: Final = f"{DOMAIN}_schedule_started"
+EVENT_SCHEDULE_ENDED: Final = f"{DOMAIN}_schedule_ended"
+
+# Config entry options (auto-schedule checker)
+OPTION_SCHEDULE_CHECK_INTERVAL_MINUTES: Final = "schedule_check_interval_minutes"
+DEFAULT_SCHEDULE_CHECK_INTERVAL_MINUTES: Final = 5
 
 # Services
 SERVICE_SET_USER_CODE: Final = "set_user_code"
