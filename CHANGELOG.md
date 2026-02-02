@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.8.4.45] - 2026-02-02
+
+### Fix: notification chips refresh on click (card)
+
+- **Card**: In `getHTML()`, notification chips now use a `chipUser` object whose `notification_services` come from `_formValues[user.slot]` when set, instead of always from entity state. After clicking a chip, `toggleNotificationService()` updates `_formValues` and calls `render()`; the re-render now shows the updated selection immediately without closing and reopening the slot.
+
+---
+
 ## [1.8.4.44] - 2026-02-02
 
 ### Show specific mobiles in notification UI

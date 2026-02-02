@@ -1429,6 +1429,15 @@ class YaleLockManagerCard extends HTMLElement {
       // hasCachedPin already declared above
       const hasName = formName && formName.trim() !== '' && formName.trim() !== `User ${user.slot}`;
       const hasData = hasLockPin || hasCachedPin || hasName;
+      // Use _formValues for notification chips so re-render after chip click shows updated selection (entity state lags)
+      const chipUser = {
+        ...user,
+        notification_services: (this._formValues[user.slot]?.notificationServices != null)
+          ? (Array.isArray(this._formValues[user.slot].notificationServices)
+            ? this._formValues[user.slot].notificationServices
+            : [this._formValues[user.slot].notificationServices])
+          : (user.notification_services ?? (user.notification_service ? [user.notification_service] : ['notify.persistent_notification']))
+      };
               
               return `
         <tr class="clickable" onclick="card.toggleExpand(${user.slot})">
@@ -1729,7 +1738,7 @@ class YaleLockManagerCard extends HTMLElement {
                 <div class="form-group">
                   <label>Notification Service:</label>
                   <div class="notification-chips" id="notification-services-${user.slot}">
-                    ${this.renderNotificationServiceChips(user.slot, user)}
+                    ${this.renderNotificationServiceChips(user.slot, chipUser)}
                   </div>
                 </div>
                           
