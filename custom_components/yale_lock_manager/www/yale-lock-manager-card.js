@@ -18,6 +18,8 @@ class YaleLockManagerCard extends HTMLElement {
     this._expandedSlot = null;
     this._statusMessages = {}; // Per-slot status messages
     this._showClearCacheConfirm = false;
+    this._showExportConfirm = false;
+    this._showImportConfirm = false;
     this._formValues = {}; // Store form field values independently per slot
     // Format: { slot: { name, code, type, cachedStatus, schedule, usageLimit, notificationsEnabled, notificationServices } }
     this._refreshProgressListener = null; // Event listener for refresh progress
@@ -1780,7 +1782,7 @@ class YaleLockManagerCard extends HTMLElement {
           <div class="controls">
             <button onclick="card.toggleLock()">${isLocked ? 'Unlock' : 'Lock'}</button>
             <button class="secondary" onclick="card.refresh()">Refresh</button>
-            <button class="secondary" onclick="card.exportBackup().catch(e => console.error(e))">Export</button>
+            <button class="secondary" onclick="card.showExportConfirm()">Export</button>
           </div>
         </div>
         
@@ -1812,8 +1814,26 @@ class YaleLockManagerCard extends HTMLElement {
         
         <hr style="margin: 24px 0 16px 0;">
         <div style="text-align: center; margin-bottom: 12px;">
-          <button class="secondary" onclick="card.exportBackup().catch(e => console.error(e))">Export backup</button>
-          <button class="secondary" onclick="card.triggerImportBackup()">Import backup</button>
+          ${this._showExportConfirm ? `
+            <div style="background: var(--warning-color-background, rgba(255, 152, 0, 0.1)); border: 1px solid var(--warning-color, #ff9800); border-radius: 4px; padding: 12px; margin-bottom: 12px;">
+              <p style="margin: 0 0 12px 0; color: var(--warning-color, #ff9800); font-weight: 500;">The backup file contains sensitive data (PINs and codes). Store it securely. Download anyway?</p>
+              <div style="display: flex; gap: 8px; justify-content: center;">
+                <button onclick="card.confirmExportDownload()">Download</button>
+                <button class="secondary" onclick="card.cancelExportConfirm()">Cancel</button>
+              </div>
+            </div>
+          ` : ''}
+          ${this._showImportConfirm ? `
+            <div style="background: var(--warning-color-background, rgba(255, 152, 0, 0.1)); border: 1px solid var(--warning-color, #ff9800); border-radius: 4px; padding: 12px; margin-bottom: 12px;">
+              <p style="margin: 0 0 12px 0; color: var(--warning-color, #ff9800); font-weight: 500;">Import replaces all stored user/slot data (names, codes, schedules, notifications) with the backup. Current data will be lost. The lock is not updated until you Push. Continue to choose a file?</p>
+              <div style="display: flex; gap: 8px; justify-content: center;">
+                <button onclick="card.confirmImportChooseFile()">Choose backup file</button>
+                <button class="secondary" onclick="card.cancelImportConfirm()">Cancel</button>
+              </div>
+            </div>
+          ` : ''}
+          <button class="secondary" onclick="card.showExportConfirm()">Export backup</button>
+          <button class="secondary" onclick="card.showImportConfirm()">Import backup</button>
         </div>
         <input type="file" id="import-file-input" accept=".json" style="display: none;">
         <div id="clear-cache-section" style="text-align: center; padding: 16px 0;">
@@ -2442,6 +2462,41 @@ class YaleLockManagerCard extends HTMLElement {
   changeNotificationService(slot, service) {
     // Legacy method - redirect to toggleNotificationService
     this.toggleNotificationService(slot, service);
+  }
+
+  showExportConfirm() {
+    this._showExportConfirm = true;
+    this.render();
+  }
+
+  cancelExportConfirm() {
+    this._showExportConfirm = false;
+    this.render();
+  }
+
+  async confirmExportDownload() {
+    try {
+      await this.exportBackup();
+    } finally {
+      this._showExportConfirm = false;
+      this.render();
+    }
+  }
+
+  showImportConfirm() {
+    this._showImportConfirm = true;
+    this.render();
+  }
+
+  cancelImportConfirm() {
+    this._showImportConfirm = false;
+    this.render();
+  }
+
+  confirmImportChooseFile() {
+    this._showImportConfirm = false;
+    this.render();
+    this.triggerImportBackup();
   }
 
   async exportBackup() {

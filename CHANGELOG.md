@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.8.4.47] - 2026-01-27
+
+### Export/Import confirmation and notices
+
+- **Export**: Before downloading a backup, the card and panel now show a confirmation: "The backup file contains sensitive data (PINs and codes). Store it securely. Download anyway?" with [Download] and [Cancel]. Export buttons (header and bottom) open this confirmation; the file is downloaded only after the user clicks Download.
+- **Import**: Before opening the file picker, the card and panel now show a notice: "Import replaces all stored user/slot data (names, codes, schedules, notifications) with the backup. Current data will be lost. The lock is not updated until you Push. Continue to choose a file?" with [Choose backup file] and [Cancel]. The file picker opens only after the user clicks Choose backup file.
+
+---
+
 ## [1.8.4.46] - 2026-01-27
 
 ### Remove test notification buttons; add Export/Import backup
