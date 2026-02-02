@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.8.4.52] - 2026-02-02
+
+### Fix: offset-naive and offset-aware datetime in schedule validation
+
+- **Root cause**: Schedule `start`/`end` from the frontend (datetime-local) are stored as ISO strings without timezone; `datetime.fromisoformat()` returns naive datetimes. Comparing them with `dt_util.now()` (aware) raised `TypeError: can't compare offset-naive and offset-aware datetimes`.
+- **Fix**: In `_is_code_valid`, after parsing start/end, if the datetime is naive (`tzinfo is None`), localize it with `replace(tzinfo=now.tzinfo)` so it matches HA local time. This removes the comparison error.
+- **Resolves**: Lock entity add failure (Error adding entity), `set_user_code` failure when saving a user, and the panel showing wrong or default data (name, status, last used, battery/bolt 0% or unknown, code from lock not shown, notification off when on) because state was never successfully written.
+
+---
+
 ## [1.8.4.51] - 2026-01-27
 
 ### Schedule window: restrict Cached Status and disable Push outside window

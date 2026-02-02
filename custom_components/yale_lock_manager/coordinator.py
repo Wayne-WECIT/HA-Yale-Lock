@@ -603,11 +603,15 @@ class YaleLockCoordinator(DataUpdateCoordinator):
 
         if start:
             start_dt = datetime.fromisoformat(start)
+            if start_dt.tzinfo is None:
+                start_dt = start_dt.replace(tzinfo=now.tzinfo)
             if now < start_dt:
                 return False
 
         if end:
             end_dt = datetime.fromisoformat(end)
+            if end_dt.tzinfo is None:
+                end_dt = end_dt.replace(tzinfo=now.tzinfo)
             if now > end_dt:
                 return False
 
