@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.8.4.44] - 2026-02-02
+
+### Show specific mobiles in notification UI
+
+- **Card**: Load notification services when `hass` is set (same as panel), so the card fetches and caches the list and shows UI, All Mobiles, and individual devices in the notification chips. Previously the card never called `getAvailableNotificationServices()`, so it always showed only UI + All Mobiles.
+- **Backend**: Added `get_notification_services_list()` on the coordinator (same source as "All Mobiles" resolution) and WebSocket command `yale_lock_manager/get_notification_services` that returns the list of notify services (id, name, type: ui|all|device) for the frontend. Added `websocket_api` dependency and [websocket.py](custom_components/yale_lock_manager/websocket.py) to register the command.
+- **Frontend (card + panel)**: If `get_services` returns no device entries, call the backend WebSocket command and merge the returned devices into the list so individual mobiles (e.g. iToy, S Fone) always appear when HASS has them. Users can now select specific mobiles or All Mobiles in the notification chips.
+
+---
+
 ## [1.8.4.43] - 2026-02-02
 
 ### Debug mobile discovery and fix "notify.mobile_app not found"

@@ -501,6 +501,31 @@ class YaleLockCoordinator(DataUpdateCoordinator):
                 out.append(r)
         return out
 
+    def get_notification_services_list(self) -> list[dict[str, Any]]:
+        """Return list of notify services for the UI (id, name, type: ui|all|device). Same source as _resolve_notification_services."""
+        result: list[dict[str, Any]] = []
+        try:
+            notify_services = self.hass.services.async_services().get("notify", {})
+        except Exception:
+            notify_services = {}
+        for key in notify_services:
+            full_id = f"notify.{key}"
+            if key == "persistent_notification":
+                result.append({"id": full_id, "name": "UI", "type": "ui"})
+            elif key == "mobile_app":
+                result.append({"id": full_id, "name": "All Mobiles", "type": "all"})
+            elif key.startswith("mobile_app_"):
+                device_name = key.replace("mobile_app_", "").replace("_", " ").title()
+                result.append({"id": full_id, "name": device_name or key, "type": "device"})
+        # Ensure UI and All Mobiles exist
+        has_ui = any(s["type"] == "ui" for s in result)
+        has_all = any(s["type"] == "all" for s in result)
+        if not has_ui:
+            result.insert(0, {"id": "notify.persistent_notification", "name": "UI", "type": "ui"})
+        if not has_all:
+            result.insert(1 if has_ui else 0, {"id": "notify.mobile_app", "name": "All Mobiles", "type": "all"})
+        return result
+
     async def async_send_test_notification(self, slot: int) -> None:
         """Send a test notification using the same path as access events (for testing)."""
         user_data = self._user_data["users"].get(str(slot))

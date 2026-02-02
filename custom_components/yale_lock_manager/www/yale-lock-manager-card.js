@@ -74,6 +74,15 @@ class YaleLockManagerCard extends HTMLElement {
     
     this._hass = hass;
     
+    // Load available notification services when hass is set (so card shows UI, All Mobiles, and individual devices)
+    if (hass && !this._availableNotificationServices) {
+      this.getAvailableNotificationServices().then(() => {
+        if (this._expandedSlot !== null) {
+          this.render(); // Re-render to show updated services in chips
+        }
+      });
+    }
+    
     // Subscribe to refresh progress events when hass is first set
     if (hass && !this._refreshProgressListener && hass.connection) {
       this._subscribeToRefreshProgress();
@@ -2343,6 +2352,26 @@ class YaleLockManagerCard extends HTMLElement {
           name: 'All Mobiles',
           type: 'all'
         });
+      }
+      
+      // Fallback: if get_services did not return any device entries, get list from backend (same source as All Mobiles)
+      const hasDevices = notifyServices.some(s => s.type === 'device');
+      if (!hasDevices && this._hass.connection) {
+        try {
+          const res = await this._hass.callWS({ type: 'yale_lock_manager/get_notification_services' });
+          const list = (res?.result?.services != null) ? res.result.services : (res?.services || []);
+          if (Array.isArray(list) && list.length > 0) {
+            const devices = list.filter(s => s.type === 'device');
+            if (devices.length > 0) {
+              const uiAndAll = notifyServices.filter(s => s.type === 'ui' || s.type === 'all');
+              notifyServices.length = 0;
+              notifyServices.push(...uiAndAll, ...devices);
+              console.log('[Yale Lock Manager] Notification services from backend fallback:', notifyServices.length, 'total,', devices.length, 'devices');
+            }
+          }
+        } catch (e) {
+          console.warn('[Yale Lock Manager] Backend get_notification_services fallback failed:', e);
+        }
       }
       
       this._availableNotificationServices = notifyServices;

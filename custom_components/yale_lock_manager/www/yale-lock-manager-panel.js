@@ -1723,6 +1723,26 @@ class YaleLockManagerPanel extends HTMLElement {
         });
       }
       
+      // Fallback: if get_services did not return any device entries, get list from backend (same source as All Mobiles)
+      const hasDevices = notifyServices.some(s => s.type === 'device');
+      if (!hasDevices && this._hass.connection) {
+        try {
+          const res = await this._hass.callWS({ type: 'yale_lock_manager/get_notification_services' });
+          const list = (res?.result?.services != null) ? res.result.services : (res?.services || []);
+          if (Array.isArray(list) && list.length > 0) {
+            const devices = list.filter(s => s.type === 'device');
+            if (devices.length > 0) {
+              const uiAndAll = notifyServices.filter(s => s.type === 'ui' || s.type === 'all');
+              notifyServices.length = 0;
+              notifyServices.push(...uiAndAll, ...devices);
+              console.log('[Yale Lock Manager] Notification services from backend fallback:', notifyServices.length, 'total,', devices.length, 'devices');
+            }
+          }
+        } catch (e) {
+          console.warn('[Yale Lock Manager] Backend get_notification_services fallback failed:', e);
+        }
+      }
+      
       this._availableNotificationServices = notifyServices;
       return notifyServices;
     } catch (error) {
