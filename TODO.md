@@ -1,7 +1,7 @@
 # TODO - Yale Lock Manager
 
-**Current Version**: 1.1.2.0  
-**Last Updated**: 2026-01-22
+**Current Version**: 1.8.4.47  
+**Last Updated**: 2026-01-27
 
 ---
 
@@ -102,11 +102,13 @@ Features that would enhance functionality but aren't critical.
   - Service: `disable_multiple_users` - Bulk disable
   - Add bulk actions to card UI
 
-- [ ] **Import/export functionality**
-  - Service: `export_codes` - Export to JSON/YAML
-  - Service: `import_codes` - Import from JSON/YAML
-  - Add backup/restore buttons to card
-  - Include encryption for exported files
+- [x] **Import/export functionality** *(completed 2026-01-27)*
+  - [x] WebSocket `export_user_data` + Export backup (JSON download)
+  - [x] Service `import_user_data` + Import backup (file picker)
+  - [x] Export/Import buttons on card and panel
+  - [x] Export confirmation (sensitive-data warning before download)
+  - [x] Import confirmation (notice: replaces all data, lock not updated until Push)
+  - [ ] Include encryption for exported files *(optional future enhancement)*
 
 - [ ] **Lock history/access logs**
   - Store access history in database
@@ -255,7 +257,7 @@ These are ideas for future major versions:
 
 ## ✅ Completed Features
 
-These have been implemented in v1.1.2.0:
+These have been implemented (through v1.8.4.47):
 
 - ✅ Full lock/unlock control
 - ✅ User code management (20 slots)
@@ -274,6 +276,10 @@ These have been implemented in v1.1.2.0:
 - ✅ Documentation (README, QUICKSTART, CHANGELOG)
 - ✅ GitHub repository setup
 - ✅ Auto-versioning and releases
+- ✅ **Export/Import backup** – Export user/slot data to JSON; import from backup with confirmations (sensitive-data warning for export; notice that import replaces all data and lock not updated until Push)
+- ✅ **Notification services** – Per-slot notification targets (UI, All Mobiles, individual devices); backend expands "All Mobiles" to all `notify.mobile_app_*` services
+- ✅ **Test notification** – Backend service `send_test_notification` (entity_id, slot) for Developer Tools/automations (UI test buttons removed)
+- ✅ **Panel** – Full-page Yale Lock Manager panel with same features as card
 
 ---
 
