@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.8.4.43] - 2026-02-02
+
+### Debug mobile discovery and fix "notify.mobile_app not found"
+
+- **Frontend (card + panel)**: Fixed `get_services` response path. The WebSocket API returns `{ result: { notify: {...} } }`; the code now uses `services?.result?.notify` when present, falling back to `services?.notify`, so mobile devices are discovered correctly. Added console logging: "get_services raw response top-level keys" and "notify service keys used" so you can verify discovery in the browser console (F12).
+- **Backend (coordinator)**: Added `_resolve_notification_services()` to expand "All Mobiles" (`notify.mobile_app`) into all available `notify.mobile_app_*` device services before sending. Home Assistant does not provide a single `notify.mobile_app` service; each device is `notify.mobile_app_<device>`. The coordinator now resolves the list before calling the notify service in both `_handle_access_event` and `async_send_test_notification`, so "All Mobiles" sends to every mobile device and test notification no longer fails with "Action notify.mobile_app not found".
+- **Project**: Added Cursor rule `.cursor/rules/git-push-after-changes.mdc` so the agent commits and pushes after code changes.
+
+---
+
 ## [1.8.4.42] - 2026-01-27
 
 ### Test notification button and mobile service discovery fix
