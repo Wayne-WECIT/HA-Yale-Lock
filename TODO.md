@@ -1,6 +1,6 @@
 # TODO - Yale Lock Manager
 
-**Current Version**: 1.8.4.48  
+**Current Version**: 1.8.4.49  
 **Last Updated**: 2026-01-27
 
 ---
@@ -31,11 +31,12 @@ Features that would enhance functionality but aren't critical.
   - Update card to support lock selection
   - Separate storage per lock
 
-- [ ] **Auto-schedule checker**
-  - Add background task to check schedules periodically
-  - Automatically disable codes when schedule expires
-  - Automatically enable codes when schedule starts
-  - Fire events for auto-enable/disable
+- [x] **Auto-schedule checker** *(completed 2026-01-27)*
+  - [x] Background task runs periodically (interval configurable via integration options, 1–60 min, default 5)
+  - [x] Automatically push code to lock when schedule starts; clear from lock when schedule expires
+  - [x] Events: `yale_lock_manager_schedule_started`, `yale_lock_manager_schedule_ended`
+  - [x] Options flow: Settings → Yale Lock Manager → Configure → Schedule check interval (minutes)
+  - [x] Schedule validity uses `dt_util.now()` (HA time zone)
 
 - [x] **Duplicate code warning** *(completed 2026-01-27)*
   - [x] Backend: `async_set_user_code` rejects duplicate PIN (raises ValueError with slot number)
@@ -195,7 +196,7 @@ These are ideas for future major versions:
 
 ## ✅ Completed Features
 
-These have been implemented (through v1.8.4.48):
+These have been implemented (through v1.8.4.49):
 
 - ✅ Full lock/unlock control
 - ✅ User code management (20 slots)
@@ -220,6 +221,7 @@ These have been implemented (through v1.8.4.48):
 - ✅ **Panel** – Full-page Yale Lock Manager panel with same features as card
 - ✅ **Duplicate PIN warning** – Backend rejects duplicate PIN across slots; card/panel block save with error
 - ✅ **Example automations** – README section with YAML examples (specific user, any unlock, code expired, usage limit, battery low, send code to visitor)
+- ✅ **Auto-schedule checker** – Periodic task (configurable interval 1–60 min) pushes/clears codes when schedules start/end; events `schedule_started` / `schedule_ended`; options flow for interval
 
 ---
 
