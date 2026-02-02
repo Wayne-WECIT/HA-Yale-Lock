@@ -2,7 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
-## [1.8.4.54] - 2026-01-27
+## [1.8.4.55] - 2026-02-02
+
+### Card: Clear Slot persists cleared slot to localStorage
+- When you click **Clear Slot** on the card, the backend already cleared that slot and purged its cache. The card now also calls **`_saveFormValuesToStorage()`** after removing that slot from `_formValues`, so the card's localStorage no longer contains the old name/PIN/status for that slot. After a reload, the slot shows the cleared state instead of stale cached values.
+
+### Cached Status: wait for Update User (like name, PIN)
+- **Card**: Changing the **Cached Status** dropdown no longer calls `set_user_status` or persists to localStorage immediately. It only updates in-memory form state and shows "unsaved changes"; status is saved to the backend and (on the card) to localStorage when you click **Update User**. Added optional `persist` to `_setFormValue(slot, field, value, options)`; when `persist === false`, localStorage is not written (used for Cached Status on dropdown change). Syncing from entity (e.g. after scheduler) still persists.
+- **Panel**: Changing the **Cached Status** dropdown no longer calls `set_user_status`. The dropdown value stays in the DOM; **Update User** (`saveUser`) reads it and sends it in `set_user_code`.
+
+---
+
+## [1.8.4.54] - 2026-02-02
 
 ### Scheduler: auto-enable once at start, do not re-enable after user disables, clear slot at end
 
@@ -14,7 +25,7 @@ All notable changes to this project will be documented in this file.
 
 ---
 
-## [1.8.4.53] - 2026-01-27
+## [1.8.4.53] - 2026-02-02
 
 ### Post-save message when outside schedule window
 - When a slot has a time-based schedule and the current time is **outside** the schedule window, saving the user now shows **"User saved. Scheduler will push when schedule is active."** instead of "Push required to sync with lock." in both panel and card (all save-success paths). This clarifies that manual push is not needed or allowed; the scheduler will push when the schedule becomes active.
@@ -39,7 +50,7 @@ All notable changes to this project will be documented in this file.
 
 ---
 
-## [1.8.4.51] - 2026-01-27
+## [1.8.4.51] - 2026-02-02
 
 ### Schedule window: restrict Cached Status and disable Push outside window
 
@@ -49,7 +60,7 @@ All notable changes to this project will be documented in this file.
 
 ---
 
-## [1.8.4.50] - 2026-01-27
+## [1.8.4.50] - 2026-02-02
 
 ### Options UI: schedule check interval
 
@@ -57,7 +68,7 @@ All notable changes to this project will be documented in this file.
 
 ---
 
-## [1.8.4.49] - 2026-01-27
+## [1.8.4.49] - 2026-02-02
 
 ### Auto-schedule checker
 
@@ -68,7 +79,7 @@ All notable changes to this project will be documented in this file.
 
 ---
 
-## [1.8.4.48] - 2026-01-27
+## [1.8.4.48] - 2026-02-02
 
 ### Duplicate PIN warning, example automations, sync check verified
 
@@ -78,7 +89,7 @@ All notable changes to this project will be documented in this file.
 
 ---
 
-## [1.8.4.47] - 2026-01-27
+## [1.8.4.47] - 2026-02-02
 
 ### Export/Import confirmation and notices
 
@@ -87,7 +98,7 @@ All notable changes to this project will be documented in this file.
 
 ---
 
-## [1.8.4.46] - 2026-01-27
+## [1.8.4.46] - 2026-02-02
 
 ### Remove test notification buttons; add Export/Import backup
 
@@ -125,7 +136,7 @@ All notable changes to this project will be documented in this file.
 
 ---
 
-## [1.8.4.42] - 2026-01-27
+## [1.8.4.42] - 2026-02-02
 
 ### Test notification button and mobile service discovery fix
 

@@ -99,11 +99,11 @@ class YaleLockManagerCard extends HTMLElement {
       }
     this.render();
     } else {
-      // Slot is expanded - only update non-editable parts (status messages, lock fields)
+      // Slot is expanded - sync editable and read-only fields from entity (e.g. after scheduler auto-enable)
       if (this._debugMode && entityChanged) {
-        console.log('[Yale Lock Manager] [REFRESH DEBUG] set hass() - calling _updateNonEditableParts() (slot expanded)');
+        console.log('[Yale Lock Manager] [REFRESH DEBUG] set hass() - calling _updateSlotFromEntityState() (slot expanded)');
       }
-      this._updateNonEditableParts();
+      this._updateSlotFromEntityState(this._expandedSlot);
     }
   }
   
@@ -414,6 +414,7 @@ class YaleLockManagerCard extends HTMLElement {
             ? user.lock_status 
             : (user.enabled ? 1 : 2);
           statusField.value = cachedStatus.toString();
+          this._setFormValue(slot, 'cachedStatus', cachedStatus);
         } else {
           console.log(`[Yale Lock Manager] Skipping status field update for slot ${slot} - field has focus`);
         }
@@ -647,14 +648,16 @@ class YaleLockManagerCard extends HTMLElement {
     return defaultValue;
   }
 
-  _setFormValue(slot, field, value) {
+  _setFormValue(slot, field, value, options = {}) {
     // Store form value independently
     if (!this._formValues[slot]) {
       this._formValues[slot] = {};
     }
     this._formValues[slot][field] = value;
-    // Save to localStorage immediately
-    this._saveFormValuesToStorage();
+    // Save to localStorage only when persist is not false (e.g. Cached Status waits for Update User)
+    if (options.persist !== false) {
+      this._saveFormValuesToStorage();
+    }
   }
   
   // Make _setFormValue accessible from inline handlers
@@ -1940,8 +1943,9 @@ class YaleLockManagerCard extends HTMLElement {
       }
       if (statusField) {
         statusField.addEventListener('change', () => {
-          this.setFormValue(slot, 'cachedStatus', parseInt(statusField.value, 10));
+          this._setFormValue(slot, 'cachedStatus', parseInt(statusField.value, 10), { persist: false });
           this._checkForUnsavedChanges(slot);
+          this._validateSlot(slot);
         });
       }
     }
@@ -2650,45 +2654,13 @@ class YaleLockManagerCard extends HTMLElement {
     }
   }
 
-  async changeStatus(slot, statusValue) {
+  changeStatus(slot, statusValue) {
+    // Update in-memory form value only; do not call set_user_status or persist to localStorage.
+    // Status is saved to backend when user clicks Update User (set_user_code includes status).
     const status = parseInt(statusValue, 10);
-    
-    // CRITICAL: Check if user actually exists in entity state
-    // getUserData() returns all 20 slots with default objects, so we need to check the actual entity state
-    const stateObj = this._hass?.states[this._config?.entity];
-    const users = stateObj?.attributes?.users || {};
-    const slotStr = slot.toString();
-    const userExistsInEntity = slotStr in users && users[slotStr] && users[slotStr].name;
-    
-    // If user doesn't exist in entity state, don't call service
-    // This happens when:
-    // 1. Typing in username for an available slot and status changes programmatically
-    // 2. Manually changing status for a slot that hasn't been saved yet
-    if (!userExistsInEntity) {
-      // User doesn't exist in entity state - just update form value, don't call service
-      this._setFormValue(slot, 'cachedStatus', status);
-      return; // Exit silently - no error message needed
-    }
-    
-    // User exists in entity state - safe to call service
-    try {
-      await this._hass.callService('yale_lock_manager', 'set_user_status', {
-        entity_id: this._config.entity,
-        slot: parseInt(slot, 10),
-        status: status
-      });
-      
-      // Just update message, don't refresh fields
-      this.showStatus(slot, 'Status updated', 'success');
-      setTimeout(() => {
-        if (this._statusMessages[slot]?.message === 'Status updated') {
-          this.clearStatus(slot);
-        }
-      }, 2000);
-    } catch (error) {
-      // Show error - user exists so this is a real error
-      this.showStatus(slot, `Failed to set status: ${error.message}`, 'error');
-    }
+    this._setFormValue(slot, 'cachedStatus', status, { persist: false });
+    this._checkForUnsavedChanges(slot);
+    this._validateSlot(slot);
   }
 
   async pushCode(slot) {
@@ -3234,6 +3206,7 @@ class YaleLockManagerCard extends HTMLElement {
         setTimeout(() => {
           this._expandedSlot = null;
           delete this._formValues[slot]; // Clear form values - will be repopulated from entity state
+          this._saveFormValuesToStorage(); // Persist so this slot's cached data doesn't reappear on reload
           this.showStatus(slot, '✅ Slot cleared and cache updated', 'success');
           this.render();
         }, 1500);

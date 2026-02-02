@@ -80,10 +80,10 @@ class YaleLockManagerPanel extends HTMLElement {
         this.render();
       } else {
         if (this._debugMode && entityChanged) {
-          console.log('[Yale Lock Manager] [REFRESH DEBUG] set hass() - calling _updateNonEditableParts() (slot expanded)');
+          console.log('[Yale Lock Manager] [REFRESH DEBUG] set hass() - calling _updateSlotFromEntityState() (slot expanded)');
         }
-        // Slot is expanded - only update non-editable parts
-        this._updateNonEditableParts();
+        // Slot is expanded - sync editable and read-only fields from entity (e.g. after scheduler auto-enable)
+        this._updateSlotFromEntityState(this._expandedSlot);
       }
     }
   }
@@ -1587,25 +1587,9 @@ class YaleLockManagerPanel extends HTMLElement {
     }
   }
 
-  async changeStatus(slot, statusValue) {
-    const status = parseInt(statusValue, 10);
-    
-    try {
-      await this._hass.callService('yale_lock_manager', 'set_user_status', {
-        entity_id: this._config.entity,
-        slot: parseInt(slot, 10),
-        status: status
-      });
-      
-      this.showStatus(slot, 'Status updated', 'success');
-      setTimeout(() => {
-        if (this._statusMessages[slot]?.message === 'Status updated') {
-          this.clearStatus(slot);
-        }
-      }, 2000);
-    } catch (error) {
-      this.showStatus(slot, `Failed to set status: ${error.message}`, 'error');
-    }
+  changeStatus(slot, statusValue) {
+    // Do not call set_user_status on dropdown change. Cached Status is saved when user clicks Update User (saveUser sends it in set_user_code).
+    // Dropdown is uncontrolled so the selected value stays in the DOM; saveUser(slot) reads cached-status-${slot} and sends it.
   }
 
   async pushCode(slot) {
