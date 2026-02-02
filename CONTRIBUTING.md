@@ -47,6 +47,7 @@ Thank you for your interest in contributing to Yale Lock Manager! This document 
 - Keep functions focused and small
 - Comment complex logic
 - Update README/docs as needed
+- When changing features or version: update version in **three places** (`manifest.json`, `const.py`, `CHANGELOG.md`) per project guidelines
 
 #### Testing
 

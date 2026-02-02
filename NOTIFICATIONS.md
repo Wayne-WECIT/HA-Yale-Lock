@@ -1,160 +1,136 @@
 # Notification Configuration Guide
 
-This guide explains how to configure notifications for the Yale Lock Manager integration, including push notifications to iOS and Android mobile devices.
+How per-slot notifications work in Yale Lock Manager and how to set them up (card and panel).
 
 ## Overview
 
-The Yale Lock Manager supports per-slot notifications that can be sent when a user code (PIN or FOB) is used to access the lock. Notifications can be configured to appear in the Home Assistant UI only, or as push notifications to mobile devices.
+Each user slot can have its own notification targets. When that slot is used to unlock the lock (PIN or FOB), the integration sends a notification to the targets you chose. You can pick:
 
-## Mobile App Setup
+- **Persistent Notification (UI)** – Notifications only in the Home Assistant UI
+- **All Mobiles** – All registered mobile app devices (`notify.mobile_app_*`)
+- **Individual devices** – One or more specific devices (e.g. iPhone, Android)
 
-To receive push notifications on your iOS or Android device, you need to:
+Configuration is done in the **expanded slot** in the card or panel (not in the main table). There are no “Test notification” buttons in the UI; you can test via the `send_test_notification` service in Developer Tools or in automations.
 
-1. **Install the Home Assistant Mobile App**:
-   - iOS: Download from the [App Store](https://apps.apple.com/app/home-assistant/id1099568401)
-   - Android: Download from [Google Play](https://play.google.com/store/apps/details?id=io.homeassistant.companion.android)
+---
 
-2. **Register Your Device**:
-   - Open the Home Assistant mobile app
-   - Sign in to your Home Assistant instance
-   - The app will automatically register with Home Assistant
-   - Your device will appear in Home Assistant under **Settings > Devices & Services > Mobile App**
+## Where to configure
 
-3. **Verify Notification Service**:
-   - After registration, the following notification services should be available:
-     - `notify.mobile_app` - Sends to all registered mobile devices
-     - `notify.mobile_app_<device_id>` - Sends to a specific device (e.g., `notify.mobile_app_iphone`)
+1. Open the Yale Lock Manager **card** or **panel**.
+2. Click a **slot row** to expand it.
+3. In the expanded area, find **Notifications** (toggle) and the **chips** (UI, All Mobiles, individual devices).
+4. Turn **Notifications** on, then tap one or more chips to select where to send.
+5. Changes are saved immediately.
 
-## Configuring Notifications via UI
+Only one of the two UIs (card or panel) is needed; both use the same backend and storage.
 
-### Enable Notifications for a Slot
+---
 
-1. Open the Yale Lock Manager card or panel in Home Assistant
-2. Find the slot you want to configure
-3. Toggle the **Notifications** switch in the main table (the bell icon column)
-4. The notification will be enabled immediately
+## Mobile app setup (for push notifications)
 
-### Select Notification Service
+To receive push notifications on a phone or tablet:
 
-1. Expand the slot row to view detailed settings
-2. Scroll to the **Notification Service** dropdown
-3. Select your preferred service:
-   - **Persistent Notification (UI only)** - Shows notifications only in the Home Assistant UI
-   - **Mobile App (All devices)** - Sends push notifications to all registered mobile devices
+1. Install the **Home Assistant** app (iOS App Store or Google Play).
+2. Sign in to your Home Assistant instance so the device registers.
+3. In Home Assistant: **Settings** → **Devices & Services** → **Mobile App** and confirm the device is listed and connected.
+4. Enable **Notifications** for the app (iOS: Settings → Home Assistant → Notifications; Android: App settings → Notifications).
 
-4. The service selection is saved immediately when changed
+After registration, Home Assistant creates a notify service per device, e.g.:
 
-## Available Notification Services
+- `notify.mobile_app_iphone`
+- `notify.mobile_app_android`
 
-### `notify.persistent_notification` (Default)
-- **Type**: UI-only notifications
-- **Where**: Appears in Home Assistant UI (Notifications panel)
-- **Use Case**: When you only want to see notifications in the Home Assistant interface
-- **No Setup Required**: Works out of the box
+There is no single `notify.mobile_app` service that sends to all devices. The integration **expands “All Mobiles”** internally: when you choose **All Mobiles**, the backend finds all `notify.mobile_app_*` services and sends to each of them. So “All Mobiles” in the UI really does send to every registered mobile device.
 
-### `notify.mobile_app`
-- **Type**: Push notifications
-- **Where**: All registered iOS and Android devices
-- **Use Case**: When you want push notifications on all your mobile devices
-- **Setup Required**: Home Assistant mobile app must be installed and registered
+Individual device chips (e.g. “iPhone”, “S Fone”) appear in the list when the integration discovers `notify.mobile_app_*` services (from the frontend and/or the backend WebSocket `yale_lock_manager/get_notification_services`). Pick one or more devices if you want notifications only on specific phones/tablets.
 
-### `notify.mobile_app_<device_id>`
-- **Type**: Push notifications to specific device
-- **Where**: One specific mobile device
-- **Use Case**: When you want notifications only on a specific device
-- **Setup Required**: Home Assistant mobile app must be installed and registered
-- **Finding Device ID**: Check **Settings > Devices & Services > Mobile App** in Home Assistant
+---
 
-## Notification Content
+## What gets sent
 
-When a slot with notifications enabled is used, a notification is sent with:
+When a slot with notifications enabled is used to access the lock, the integration sends:
 
-- **Title**: "Lock Access"
-- **Message**: "{user_name} (Slot {user_slot}) unlocked the door via {method}"
-- **Data**:
-  - `entity_id`: The lock entity ID
-  - `user_name`: Name of the user/slot
-  - `user_slot`: Slot number (1-20)
-  - `method`: Access method (PIN, FOB, etc.)
-  - `timestamp`: ISO timestamp of the access event
-  - `usage_count`: Current usage count for the slot
+- **Title**: “Lock Access”
+- **Message**: “{user_name} (Slot {user_slot}) unlocked the door via {method}”
+- **Data** (for advanced use): entity_id, user_name, user_slot, method, timestamp, usage_count
 
-## Advanced: Service Call Method
+---
 
-For advanced users, you can configure notifications programmatically using Home Assistant service calls:
+## Testing notifications
 
-### Enable Notifications
+There are **no “Test notification” buttons** in the card or panel. To test:
+
+1. **Developer Tools** → **Services**
+2. Service: `yale_lock_manager.send_test_notification`
+3. Data: `entity_id: lock.smart_door_lock_manager` (your lock entity), `slot: 1` (or the slot you configured)
+4. **Call service**
+
+A test message is sent to that slot’s configured notification services (UI, All Mobiles, and/or the specific devices you selected). You can also call this service from automations or scripts.
+
+---
+
+## Configuring via services (advanced)
+
+**Enable notifications and set targets**
 
 ```yaml
 service: yale_lock_manager.set_notification_enabled
 data:
-  entity_id: lock.smart_door_lock
+  entity_id: lock.smart_door_lock_manager
   slot: 1
   enabled: true
-  notification_service: notify.mobile_app
+  notification_services:
+    - notify.persistent_notification
+    - notify.mobile_app_iphone
 ```
 
-### Disable Notifications
+**Disable notifications**
 
 ```yaml
 service: yale_lock_manager.set_notification_enabled
 data:
-  entity_id: lock.smart_door_lock
+  entity_id: lock.smart_door_lock_manager
   slot: 1
   enabled: false
 ```
 
-### Change Notification Service
+`notification_services` is a list. Use `notify.persistent_notification` for UI-only; use one or more `notify.mobile_app_<device_id>` for specific devices. The backend expands “All Mobiles” only when sending (e.g. on access or test); in the service you pass the exact service IDs you want.
 
-```yaml
-service: yale_lock_manager.set_notification_enabled
-data:
-  entity_id: lock.smart_door_lock
-  slot: 1
-  enabled: true
-  notification_service: notify.mobile_app_iphone
-```
+---
 
 ## Troubleshooting
 
-### Notifications Not Appearing on Mobile Device
+**Notifications not appearing on my phone**
 
-1. **Check Mobile App Registration**:
-   - Open Home Assistant
-   - Go to **Settings > Devices & Services > Mobile App**
-   - Verify your device is listed and shows as "Connected"
+- Confirm the device is under **Settings** → **Devices & Services** → **Mobile App** and shows as connected.
+- Check app notification permissions (Settings → Home Assistant → Notifications, or Android app notifications).
+- In Developer Tools → Services, call `yale_lock_manager.send_test_notification` for that slot and see if the UI notification and/or mobile app receive it.
 
-2. **Check Notification Permissions**:
-   - iOS: Settings > Home Assistant > Notifications (must be enabled)
-   - Android: Settings > Apps > Home Assistant > Notifications (must be enabled)
+**“All Mobiles” or individual devices not in the list**
 
-3. **Verify Service Availability**:
-   - Go to **Developer Tools > Services** in Home Assistant
-   - Search for `notify.mobile_app`
-   - If it doesn't appear, the mobile app may not be properly registered
+- Ensure at least one mobile app device is registered (Mobile App in HA).
+- Reload the card/panel (refresh the page). The list is built from discovered notify services and from the backend WebSocket `get_notification_services` if needed.
+- Check the browser console (F12) for errors when loading the card/panel.
 
-4. **Check Home Assistant Logs**:
-   - Look for errors related to notification sending
-   - Check if the notification service name is correct
+**Service not found / Action notify.mobile_app not found**
 
-### Notification Service Not Available in Dropdown
+- Do **not** call `notify.mobile_app` directly; it does not exist. Use `notify.mobile_app_<device_id>` or, in the UI, use “All Mobiles” (the integration expands it for you).
+- When calling `send_test_notification` or when the integration sends on access, it uses the slot’s stored `notification_services`; “All Mobiles” is expanded on the backend before calling notify.
 
-The UI currently shows two common options:
-- `notify.persistent_notification` (always available)
-- `notify.mobile_app` (requires mobile app)
+---
 
-If you need a device-specific service (e.g., `notify.mobile_app_iphone`), you can:
-1. Use the service call method (see Advanced section above)
-2. Or manually edit the service name if the UI supports it in the future
+## Best practices
 
-## Best Practices
+- Use **UI** for slots where you only need a log in Home Assistant.
+- Use **All Mobiles** when you want everyone with the HA app to get the alert.
+- Use **specific devices** when only certain people should get that slot’s notifications.
+- After changing targets, use **Developer Tools** → `yale_lock_manager.send_test_notification` to confirm delivery.
+- Export/backup files contain notification settings; store them securely (they are in the same JSON as PINs).
 
-1. **Use Mobile App for Important Slots**: Enable mobile app notifications for slots you want to monitor closely
-2. **Use Persistent Notifications for Logging**: Use UI-only notifications for slots where you just want a record in Home Assistant
-3. **Test After Setup**: After configuring notifications, test by using the slot to ensure notifications are received
-4. **Battery Considerations**: Mobile push notifications use device battery, so consider this for frequently-used slots
+---
 
-## Related Documentation
+## Related
 
-- [Home Assistant Mobile App Documentation](https://www.home-assistant.io/integrations/mobile_app/)
-- [Home Assistant Notifications](https://www.home-assistant.io/integrations/notify/)
+- [README.md](README.md) – Main docs and services
+- [QUICKSTART.md](QUICKSTART.md) – First-time setup
+- [PANEL_SETUP.md](PANEL_SETUP.md) – Full-page panel

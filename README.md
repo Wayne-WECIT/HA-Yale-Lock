@@ -4,325 +4,179 @@
 [![Version](https://img.shields.io/github/v/release/Wayne-WECIT/HA-Yale-Lock)](https://github.com/Wayne-WECIT/HA-Yale-Lock/releases)
 [![License](https://img.shields.io/github/license/Wayne-WECIT/HA-Yale-Lock)](LICENSE)
 
-A comprehensive Home Assistant custom integration for managing Yale front door locks via Z-Wave JS. This integration provides full control over user codes, PINs, FOBs/RFIDs, time-based access, usage limits, and real-time notifications.
+A Home Assistant custom integration for managing Yale front door locks via Z-Wave JS. Control user codes (PINs and FOBs), time-based access, usage limits, per-slot notifications, and backup/restore—with a Lovelace card and a full-page panel.
 
-## ✨ Features
+## Features
 
-- 🔐 **Full Lock Control**: Lock and unlock your Yale Z-Wave lock directly from Home Assistant
-- 👥 **User Code Management**: Add, update, and remove user codes (up to 20 slots) with custom names
-- 🔑 **Multiple Code Types**: Support for PIN codes and FOB/RFID cards
-- ⏰ **Time-Based Access**: Set start and end dates/times for temporary access codes
-- 🔢 **Usage Limits**: Configure codes that can only be used a limited number of times
-- 🔔 **Real-Time Notifications**: Get notified when someone opens the lock (who and when)
-- 📊 **Lovelace Dashboard**: Beautiful dashboard card to manage everything visually with inline controls
-- 🛡️ **Slot Protection**: Prevents accidental overwriting of existing user codes
-- 📈 **Status Tracking**: Track battery level, door status, bolt status, and usage statistics
-- 🔄 **Manual Sync Control**: No automatic updates pushed to lock - you control when codes sync
+- **Lock control** – Lock and unlock your Yale Z-Wave lock from Home Assistant
+- **User codes** – Up to 20 slots with names, PINs or FOB/RFID, enable/disable
+- **Time-based access** – Start/end dates and times per slot
+- **Usage limits** – Max uses per code; auto-disable when limit reached
+- **Per-slot notifications** – Choose where to send access alerts: UI only, All Mobiles, or specific devices (chips in expanded slot)
+- **Export/Import backup** – Download user/slot data as JSON; restore from backup with confirmations (sensitive-data warning for export; import replaces all stored data; lock not updated until you Push)
+- **Slot protection** – Prevents overwriting slots that contain unknown codes
+- **Manual sync** – You decide when to push codes to the lock or refresh from the lock
+- **Sensors** – Battery, door, bolt, last access (timestamp, user, method)
+- **Events** – For automations: access, code expired, usage limit reached, etc.
 
-## 📋 Requirements
+## Requirements
 
 - Home Assistant 2026.1.2 or later
 - Z-Wave JS integration configured and running
-- Yale Smart Door Lock paired with Z-Wave JS (tested with P-KFCON-MOD-YALE)
+- Yale Smart Door Lock paired with Z-Wave JS (e.g. P-KFCON-MOD-YALE)
 
-## 🚀 Installation
+## Installation
 
-### HACS (Recommended)
+### HACS (recommended)
 
-1. Open HACS in Home Assistant
-2. Click on "Integrations"
-3. Click the three dots in the top right corner
-4. Select "Custom repositories"
-5. Add this repository URL: `https://github.com/Wayne-WECIT/HA-Yale-Lock`
-6. Select category: "Integration"
-7. Click "Add"
-8. Find "Yale Lock Manager" in HACS and click "Install"
-9. Restart Home Assistant
+1. In Home Assistant: **HACS** → **Integrations** → **⋮** → **Custom repositories**
+2. Add `https://github.com/Wayne-WECIT/HA-Yale-Lock`, category **Integration**, then **Add**
+3. Search for **Yale Lock Manager**, install, then restart Home Assistant
 
-### Manual Installation
+### Manual
 
-1. Download the latest release from the [releases page](https://github.com/Wayne-WECIT/HA-Yale-Lock/releases)
-2. Extract the `yale_lock_manager` folder from the archive
-3. Copy the `custom_components/yale_lock_manager` folder to your Home Assistant's `custom_components` directory
-4. Copy the `www/yale-lock-manager-card` folder to your Home Assistant's `www` directory
-5. Restart Home Assistant
+1. Download the latest release from [releases](https://github.com/Wayne-WECIT/HA-Yale-Lock/releases)
+2. Copy `custom_components/yale_lock_manager` into your Home Assistant `custom_components` folder
+3. Restart Home Assistant (the integration copies the card and panel files into `www/yale_lock_manager/` on first load)
 
-## ⚙️ Configuration
+## Configuration
 
-### Integration Setup
+### Add the integration
 
-1. Go to **Settings** → **Devices & Services**
-2. Click **"+ Add Integration"**
-3. Search for **"Yale Lock Manager"**
-4. Select your Yale lock from the list of available Z-Wave locks
-5. Click **Submit**
+1. **Settings** → **Devices & Services** → **+ Add Integration**
+2. Search for **Yale Lock Manager**, select your Yale lock, then **Submit**
 
-**Note:** Currently, only one lock can be configured. Multi-lock support is planned for a future release.
+Only one lock is supported per integration instance. A new device **Smart Door Lock Manager** is created with its own lock entity and sensors.
 
-### Lovelace Card Setup
+### Lovelace card
 
-1. Add the custom card resource:
-   - Go to **Settings** → **Dashboards** → **Resources** (three dots menu)
-   - Click **"+ Add Resource"**
-   - URL: `/local/yale_lock_manager/yale-lock-manager-card.js`
-   - Resource type: **JavaScript Module**
-   - Click **Create**
-   
-   **Note:** The integration automatically copies the card to `www/yale_lock_manager/` when you add it.
+1. **Settings** → **Dashboards** → **⋮** → **Resources** → **+ Add Resource**
+2. URL: `/local/yale_lock_manager/yale-lock-manager-card.js`, type: **JavaScript Module**, **Create**
+3. On a dashboard, add card → **Custom: Yale Lock Manager Card**, set entity to your Yale Lock Manager lock (e.g. `lock.smart_door_lock_manager`)
 
-2. Add the card to your dashboard:
-   ```yaml
-   type: custom:yale-lock-manager-card
-   entity: lock.smart_door_lock_manager  # Use the Yale Lock Manager entity
-   ```
-
-**Important:** The integration creates a **separate "Smart Door Lock Manager" device** with:
-- Lock entity: `lock.smart_door_lock_manager` (for lock/unlock control)
-- Battery sensor: `sensor.smart_door_lock_manager_battery`
-- Access sensors: Last access, last user, last access method
-- Status sensors: Door and bolt binary sensors
-- All user code management and tracking
-
-Your original Z-Wave lock remains as a separate device.
-
-## 🏗️ Device Structure
-
-The integration creates **two separate devices** in Home Assistant:
-
-### Device 1: Smart Door Lock Manager (Yale Lock Manager)
-This is the management device created by this integration:
-```
-📱 Smart Door Lock Manager
-├── 🔐 lock.smart_door_lock_manager (lock/unlock control)
-├── 🔋 sensor.smart_door_lock_manager_battery
-├── 🕐 sensor.smart_door_lock_manager_last_access
-├── 👤 sensor.smart_door_lock_manager_last_user
-├── 🔑 sensor.smart_door_lock_manager_last_access_method
-├── 🚪 binary_sensor.smart_door_lock_manager_door
-└── 🔩 binary_sensor.smart_door_lock_manager_bolt
-```
-
-**Use this device for:**
-- Setting user codes
-- Managing schedules and limits
-- Monitoring access history
-- Lovelace card configuration
-
-### Device 2: Smart Door Lock (Z-Wave JS)
-This is your original Z-Wave lock device:
-```
-📱 Smart Door Lock
-├── 🔐 lock.smart_door_lock (original Z-Wave entity)
-└── (other Z-Wave sensors)
-```
-
-**Why two devices?**
-- ✅ Clean separation of concerns
-- ✅ No entity naming conflicts
-- ✅ Independent management and control
-- ✅ Both devices show relationship via `via_device`
-
-## 📖 Usage
-
-### Managing User Codes
-
-#### Via Lovelace Card
-
-The Lovelace card provides an intuitive interface for managing all aspects of your lock:
-
-- **View All Slots**: See all 20 user code slots at a glance
-- **Set/Update Codes**: Click on any slot to expand and configure
-- **Enable/Disable Users**: Toggle user access with a switch
-- **Push to Lock**: Manually sync codes to the lock
-- **Set Schedules**: Configure time-based access restrictions
-- **Set Usage Limits**: Limit how many times a code can be used
-- **Monitor Status**: See sync status, battery level, and door state
-
-#### Via Services
-
-You can also manage codes through Home Assistant services:
-
-**Set a User Code:**
-```yaml
-service: yale_lock_manager.set_user_code
-data:
-  slot: 3
-  code: "1234"
-  name: "Guest"
-  code_type: "pin"  # or "fob"
-```
-
-**Clear a User Code:**
-```yaml
-service: yale_lock_manager.clear_user_code
-data:
-  slot: 3
-```
-
-**Set Schedule:**
-```yaml
-service: yale_lock_manager.set_user_schedule
-data:
-  slot: 3
-  start_datetime: "2026-01-01 00:00:00"
-  end_datetime: "2026-12-31 23:59:59"
-```
-
-**Set Usage Limit:**
-```yaml
-service: yale_lock_manager.set_usage_limit
-data:
-  slot: 3
-  max_uses: 10
-```
-
-**Push Code to Lock:**
-```yaml
-service: yale_lock_manager.push_code_to_lock
-data:
-  slot: 3
-```
-
-**Pull All Codes from Lock:**
-```yaml
-service: yale_lock_manager.pull_codes_from_lock
-```
-
-**Enable/Disable User:**
-```yaml
-service: yale_lock_manager.enable_user
-data:
-  slot: 3
-```
+Example YAML:
 
 ```yaml
-service: yale_lock_manager.disable_user
-data:
-  slot: 3
+type: custom:yale-lock-manager-card
+entity: lock.smart_door_lock_manager
 ```
+
+### Panel (full-page UI)
+
+Use the panel for a full-page view with the same features as the card. See [PANEL_SETUP.md](PANEL_SETUP.md) for adding it to the sidebar or via YAML.
+
+## Device structure
+
+The integration creates a **Smart Door Lock Manager** device (separate from the Z-Wave lock device):
+
+- `lock.smart_door_lock_manager` – Lock/unlock
+- `sensor.smart_door_lock_manager_battery`
+- `sensor.smart_door_lock_manager_last_access` / `last_user` / `last_access_method`
+- `binary_sensor.smart_door_lock_manager_door` / `bolt`
+
+Use this device (and its lock entity) for the card, panel, and services. The original Z-Wave lock device remains for low-level Z-Wave control.
+
+## Usage
+
+### Card and panel
+
+- **Header**: Lock/Unlock, Refresh, Export (opens confirmation: backup contains PINs; download anyway?)
+- **Table**: Slot, Name, Type, Status, Synced, Last Used. Click a row to expand.
+- **Expanded slot**: Name, code, type, status, schedule, usage limit, **Notifications** (toggle + chips: UI, All Mobiles, or specific devices), Set Code, Push, Clear, etc.
+- **Bottom**: Export backup / Import backup (both show confirmations), Clear Local Cache, Debug panel
+
+Export: confirmation warns that the file contains sensitive data; after **Download**, a JSON file is saved (e.g. `yale_lock_manager_backup_YYYY-MM-DD.json`). Store it securely.
+
+Import: confirmation explains that import replaces all stored user/slot data and the lock is not updated until you Push; **Choose backup file** opens the file picker; after selecting a valid JSON backup, data is restored and the UI refreshes.
+
+### Services
+
+**User codes**
+
+- `yale_lock_manager.set_user_code` – slot, code, name, code_type (pin/fob), optional override_protection
+- `yale_lock_manager.clear_user_code` – slot
+- `yale_lock_manager.enable_user` / `disable_user` – slot
+
+**Schedules and limits**
+
+- `yale_lock_manager.set_user_schedule` – slot, start_datetime, end_datetime
+- `yale_lock_manager.set_usage_limit` – slot, max_uses
+- `yale_lock_manager.reset_usage_count` – slot
+
+**Sync**
+
+- `yale_lock_manager.push_code_to_lock` – slot (push one slot to the lock)
+- `yale_lock_manager.pull_codes_from_lock` – refresh from lock (no slot)
+
+**Notifications**
+
+- `yale_lock_manager.set_notification_enabled` – entity_id, slot, enabled, notification_services (list)
+- `yale_lock_manager.send_test_notification` – entity_id, slot (optional). Sends a test notification to the slot’s configured services (e.g. from Developer Tools or automations). No test button in the UI.
+
+**Backup**
+
+- `yale_lock_manager.import_user_data` – entity_id (optional), data (dict, backup JSON). Restores user/slot data; validate that `data` has a `users` object. Export is done from the card/panel (downloads JSON).
+
+**Cache**
+
+- `yale_lock_manager.clear_local_cache` – entity_id. Clears all locally stored user data; use Refresh from lock to repopulate.
 
 ### Automations
 
-The integration fires several events that you can use in automations:
+**Access event** (e.g. keypad unlock):
 
-#### Access Event
-Fired when someone unlocks the lock:
 ```yaml
 trigger:
   - platform: event
     event_type: yale_lock_manager_access
-    event_data:
-      user_slot: 3
 action:
-  - service: notify.mobile_app
+  - service: notify.mobile_app_iphone  # or your device
     data:
-      message: "{{ trigger.event.data.user_name }} just unlocked the door!"
+      message: "{{ trigger.event.data.user_name }} unlocked the door"
 ```
 
-#### Code Expired Event
-Fired when someone tries to use an expired code:
-```yaml
-trigger:
-  - platform: event
-    event_type: yale_lock_manager_code_expired
-action:
-  - service: notify.mobile_app
-    data:
-      message: "{{ trigger.event.data.user_name }}'s code has expired!"
-```
+**Code expired / usage limit reached**
 
-#### Usage Limit Reached Event
-Fired when a code reaches its usage limit:
-```yaml
-trigger:
-  - platform: event
-    event_type: yale_lock_manager_usage_limit_reached
-action:
-  - service: notify.mobile_app
-    data:
-      message: "{{ trigger.event.data.user_name }}'s code has reached its usage limit!"
-```
+- `yale_lock_manager_code_expired`
+- `yale_lock_manager_usage_limit_reached`
 
-### FOB/RFID Handling
+Event data typically includes `user_slot`, `user_name`, `timestamp`, and (where relevant) `usage_count`.
 
-FOBs and RFID cards are typically programmed directly on the lock. The integration will detect them automatically:
+### Notifications (per-slot)
 
-1. Pull codes from the lock using the service or Lovelace card
-2. Slots with non-standard codes will be marked as FOB type
-3. You can manage schedules and usage limits for FOB users
-4. PIN codes cannot be set on FOB slots (hardware restriction)
+Notifications are configured in the **expanded slot** in the card or panel:
 
-## 🔐 Slot Protection
+1. Turn **Notifications** on for that slot.
+2. Choose one or more targets with the **chips**: **Persistent Notification (UI)**, **All Mobiles** (all `notify.mobile_app_*` devices), or individual devices (e.g. iPhone, Android).
+3. Selections are saved immediately.
 
-The integration prevents accidental code overwrites:
+When that slot is used to access the lock, the integration sends to the selected services. “All Mobiles” is expanded by the backend to all registered mobile app notify services. For more detail see [NOTIFICATIONS.md](NOTIFICATIONS.md).
 
-- Before setting a code, it checks if the slot is occupied
-- If a slot contains an unknown code, you'll get an error
-- You must clear the slot first before setting a new code
-- Codes you've set can be updated without clearing
+### FOB/RFID
 
-## 🔔 Notifications
+FOBs and RFID cards are usually programmed on the lock. Use **Refresh from Lock** so the integration sees them. Slots that contain a FOB show as FOB type; you can set schedules and usage limits but not the FOB code itself via HA.
 
-The integration provides several sensors for monitoring:
+## Slot protection
 
-- **Battery Level**: `sensor.yale_lock_battery`
-- **Last Access**: `sensor.yale_lock_last_access` (timestamp)
-- **Last User**: `sensor.yale_lock_last_user` (name)
-- **Last Access Method**: `sensor.yale_lock_last_access_method` (PIN/FOB/Manual/Remote/Auto)
-- **Door Status**: `binary_sensor.yale_lock_door` (open/closed)
-- **Bolt Status**: `binary_sensor.yale_lock_bolt` (locked/unlocked)
+If a slot already has a code that was not set through this integration (e.g. unknown code), the integration blocks overwriting it. Clear the slot first, or use the override option in the service (use with care).
 
-## 🛠️ Troubleshooting
+## Troubleshooting
 
-### Lock Not Showing in Setup
+- **Lock not in setup** – Ensure the lock is paired with Z-Wave JS and is a Yale lock.
+- **Codes not syncing** – Use **Push** in the card/panel; wake the lock (e.g. press a button); check Z-Wave network health; try **Refresh from Lock**.
+- **Card/panel not loading** – Ensure the resource is added (`/local/yale_lock_manager/yale-lock-manager-card.js`) and, if needed, clear browser cache.
+- **Notifications not received** – Check [NOTIFICATIONS.md](NOTIFICATIONS.md); ensure the mobile app is registered and notification permissions are granted; use **Developer Tools** → **Services** → `yale_lock_manager.send_test_notification` to test a slot.
 
-- Ensure your lock is properly paired with Z-Wave JS
-- Verify the lock appears in Z-Wave JS integration
-- Check that the lock is a Yale lock (manufacturer check)
+## Version and changelog
 
-### Codes Not Syncing
-
-- Use the "Push to Lock" button in the Lovelace card
-- Check Z-Wave network health
-- Ensure the lock is awake (battery-powered devices sleep)
-- Try the "Refresh from Lock" button
-
-### Integration Not Loading
-
-- Check Home Assistant logs for errors
-- Verify Z-Wave JS integration is running
-- Restart Home Assistant after installation
-
-## 📝 Version History
+Current version: **1.8.4.47**
 
 See [CHANGELOG.md](CHANGELOG.md) for version history.
 
-Current version: **1.0.0.0**
+## Contributing
 
-## 🤝 Contributing
+See [CONTRIBUTING.md](CONTRIBUTING.md). Pull requests and issues are welcome.
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+## License and disclaimer
 
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## 👤 Author
-
-**Wayne-WECIT**
-
-- GitHub: [@Wayne-WECIT](https://github.com/Wayne-WECIT)
-
-## 🙏 Acknowledgments
-
-- Home Assistant community
-- Z-Wave JS developers
-- Yale for making great locks
-
-## 🐛 Issues
-
-If you find a bug or have a feature request, please open an issue on [GitHub](https://github.com/Wayne-WECIT/HA-Yale-Lock/issues).
-
-## ⚠️ Disclaimer
-
-This integration is not affiliated with or endorsed by Yale or ASSA ABLOY. Use at your own risk.
+MIT License. See [LICENSE](LICENSE). This integration is not affiliated with or endorsed by Yale or ASSA ABLOY. Use at your own risk.

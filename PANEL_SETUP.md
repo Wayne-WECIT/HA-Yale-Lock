@@ -1,28 +1,36 @@
 # Yale Lock Manager Panel Setup
 
-## Custom Panel Dashboard
+The integration includes a **full-page custom panel** with the same features as the Lovelace card: user slots, expanded settings, notifications (chips), Export/Import (with confirmations), Clear Cache, and Debug panel.
 
-The integration now includes a **full-page custom panel dashboard** that provides a better UX for managing your Yale lock codes.
-
-## Accessing the Panel
+## Accessing the panel
 
 ### Option 1: Direct URL
-Navigate to:
+
+Open in your browser (replace with your HA host/port if needed):
+
 ```
 http://your-ha-ip:8123/local/yale_lock_manager/yale-lock-manager-panel.html
 ```
 
-### Option 2: Add to Sidebar (Manual)
-1. Go to **Settings** → **Dashboards** → **Panels**
-2. Click **"+ Add Panel"**
-3. Enter:
-   - **Title**: Yale Lock Manager
-   - **URL**: `/local/yale_lock_manager/yale-lock-manager-panel.html`
-   - **Icon**: `mdi:lock` (optional)
-4. Click **Save**
+Or from the HA frontend:
 
-### Option 3: Add via Configuration (YAML)
-Add to your `configuration.yaml`:
+```
+/config/www/yale_lock_manager/yale-lock-manager-panel.html
+```
+
+### Option 2: Add to sidebar (manual)
+
+1. **Settings** → **Dashboards** → **Panels**
+2. **+ Add Panel**
+3. **Title**: Yale Lock Manager  
+   **URL**: `/local/yale_lock_manager/yale-lock-manager-panel.html`  
+   **Icon**: `mdi:lock` (optional)
+4. **Save**
+
+### Option 3: YAML (panel_custom)
+
+Add to `configuration.yaml`:
+
 ```yaml
 panel_custom:
   - name: yale-lock-manager
@@ -33,34 +41,54 @@ panel_custom:
     embed_iframe: true
 ```
 
-Then restart Home Assistant.
+Restart Home Assistant.
 
-## Features
+---
 
-✅ **Full-page interface** - More space for managing codes  
-✅ **Uncontrolled input pattern** - Form fields never revert after save  
-✅ **Auto-detects entity** - Automatically finds your Yale Lock Manager entity  
-✅ **Same functionality** - All features from the card, optimized for dashboard  
+## Panel features
 
-## How It Solves the Refresh Issue
+- **Same as the card**: Lock/Unlock, Refresh, Export (with sensitive-data confirmation), table of slots, expanded slot (name, code, type, schedule, usage limit, notification chips), Set Code, Push, Clear, Export backup / Import backup (with confirmations), Clear Local Cache, Debug panel.
+- **Full-page layout**: More space for the table and expanded slot.
+- **Uncontrolled inputs**: Form values are set once when the slot expands and read from the DOM; entity updates do not overwrite what you typed until you change or collapse the slot.
+- **Auto entity**: If no entity is configured, the panel tries to find the Yale Lock Manager lock entity automatically.
 
-The panel uses the **uncontrolled input pattern**:
-- Form field values are set **once** when the slot expands
-- After that, values are **read from the DOM**, never overwritten
-- Entity state updates **don't affect** what you've typed
-- Your input persists until you change it or collapse the slot
+---
 
-This is the same pattern used by React, Vue, and other modern frameworks for form state management.
+## File locations
+
+The integration copies frontend files into `www/yale_lock_manager/` when the integration loads. You should have:
+
+- `config/www/yale_lock_manager/yale-lock-manager-panel.html`
+- `config/www/yale_lock_manager/yale-lock-manager-panel.js`
+- `config/www/yale_lock_manager/yale-lock-manager-card.js`
+
+Resource URL for the **card** (Lovelace): `/local/yale_lock_manager/yale-lock-manager-card.js`  
+Panel URL: `/local/yale_lock_manager/yale-lock-manager-panel.html`
+
+---
 
 ## Troubleshooting
 
-**Panel shows "No Yale Lock Manager found":**
-- Make sure the integration is set up and the entity exists
-- Check that the entity ID contains "manager" (e.g., `lock.smart_door_lock_manager`)
+**“No Yale Lock Manager found”**
 
-**Panel doesn't load:**
-- Check that files are copied to `/config/www/yale_lock_manager/`
-- Verify the files exist:
-  - `yale-lock-manager-panel.html`
-  - `yale-lock-manager-panel.js`
-- Restart Home Assistant after installation
+- Ensure the integration is installed and the Yale Lock Manager device/entity exists.
+- The panel looks for an entity whose ID contains “manager” (e.g. `lock.smart_door_lock_manager`). If your entity name is different, you may need to set the entity in the panel config (if supported) or ensure the integration created the expected entity.
+
+**Panel doesn’t load / blank page**
+
+- Confirm the files exist under `config/www/yale_lock_manager/` (panel HTML and JS).
+- Restart Home Assistant after installing or updating the integration.
+- Check the browser console (F12) for errors.
+- Clear browser cache and reload.
+
+**Export/Import or notifications not working**
+
+- Export/Import and notifications work the same as on the card; see [README.md](README.md), [NOTIFICATIONS.md](NOTIFICATIONS.md), and [QUICKSTART.md](QUICKSTART.md).
+
+---
+
+## Related
+
+- [README.md](README.md) – Main docs
+- [QUICKSTART.md](QUICKSTART.md) – First-time setup
+- [NOTIFICATIONS.md](NOTIFICATIONS.md) – Per-slot notifications

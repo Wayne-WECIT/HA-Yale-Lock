@@ -132,6 +132,6 @@ Potential features using the device specifications:
 
 ---
 
-**Last Updated:** 2026-01-22  
-**Integration Version:** 1.2.1.0  
+**Last Updated:** 2026-01-27  
+**Integration Version:** 1.8.4.47  
 **Source:** [Z-Wave JS Device Database](https://devices.zwave-js.io/?jumpTo=0x0129:0x0007:0x0000)

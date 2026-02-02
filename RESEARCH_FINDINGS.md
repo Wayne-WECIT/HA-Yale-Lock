@@ -1,5 +1,7 @@
 # Lock Code Manager Research Findings
 
+**Last reviewed:** 2026-01-27 (integration at v1.8.4.47; architecture unchanged relative to this research)
+
 ## Overview
 Research into `lock_code_manager` (https://github.com/raman325/lock_code_manager) to identify improvements for our Yale Lock Manager implementation.
 
