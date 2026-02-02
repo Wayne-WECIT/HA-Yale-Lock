@@ -142,6 +142,87 @@ action:
 
 Event data typically includes `user_slot`, `user_name`, `timestamp`, and (where relevant) `usage_count`.
 
+### Example automations
+
+**Notify when a specific user unlocks** (e.g. slot 3 or by name):
+
+```yaml
+trigger:
+  - platform: event
+    event_type: yale_lock_manager_access
+    event_data:
+      user_slot: 3
+action:
+  - service: notify.mobile_app_iphone
+    data:
+      title: "Door unlocked"
+      message: "{{ trigger.event.data.user_name }} (Slot {{ trigger.event.data.user_slot }}) unlocked the door via {{ trigger.event.data.method }}"
+```
+
+**Notify on any unlock** (all users):
+
+```yaml
+trigger:
+  - platform: event
+    event_type: yale_lock_manager_access
+action:
+  - service: notify.mobile_app_iphone
+    data:
+      message: "{{ trigger.event.data.user_name }} unlocked the door at {{ trigger.event.data.timestamp }}"
+```
+
+**Notify when a code has expired** (someone tried an out-of-schedule or expired code):
+
+```yaml
+trigger:
+  - platform: event
+    event_type: yale_lock_manager_code_expired
+action:
+  - service: notify.persistent_notification
+    data:
+      message: "{{ trigger.event.data.user_name }}'s code has expired or is outside the schedule."
+```
+
+**Notify when usage limit is reached** (code auto-disabled after max uses):
+
+```yaml
+trigger:
+  - platform: event
+    event_type: yale_lock_manager_usage_limit_reached
+action:
+  - service: notify.mobile_app_iphone
+    data:
+      message: "{{ trigger.event.data.user_name }}'s code has reached its usage limit ({{ trigger.event.data.usage_count }} uses) and was disabled."
+```
+
+**Battery low alert** (use your lock manager battery sensor entity):
+
+```yaml
+trigger:
+  - platform: numeric_state
+    entity_id:
+      - sensor.smart_door_lock_manager_battery
+    below: 20
+action:
+  - service: notify.mobile_app_iphone
+    data:
+      title: "Lock battery low"
+      message: "Yale lock battery is at {{ states('sensor.smart_door_lock_manager_battery') }}%. Consider replacing soon."
+```
+
+**Send a temporary code to a visitor** (manual flow: create the code in the card/panel, then send it via notification):
+
+```yaml
+# Example: run from a script or automation trigger (e.g. button, Alexa)
+# 1. Create the guest code in Yale Lock Manager (slot, schedule, etc.)
+# 2. Call this script with slot number and visitor's notify target
+action:
+  - service: notify.mobile_app_visitor_phone
+    data:
+      title: "Your door code"
+      message: "Your temporary code is [add code manually or use a template]. It is valid until [end time]."
+```
+
 ### Notifications (per-slot)
 
 Notifications are configured in the **expanded slot** in the card or panel:
@@ -160,6 +241,10 @@ FOBs and RFID cards are usually programmed on the lock. Use **Refresh from Lock*
 
 If a slot already has a code that was not set through this integration (e.g. unknown code), the integration blocks overwriting it. Clear the slot first, or use the override option in the service (use with care).
 
+## Duplicate PIN
+
+The same PIN cannot be used in more than one slot. If you try to save a code that is already used in another slot, the card/panel shows an error and the backend rejects the change. Use a different PIN for each slot.
+
 ## Troubleshooting
 
 - **Lock not in setup** – Ensure the lock is paired with Z-Wave JS and is a Yale lock.
@@ -169,7 +254,7 @@ If a slot already has a code that was not set through this integration (e.g. unk
 
 ## Version and changelog
 
-Current version: **1.8.4.47**
+Current version: **1.8.4.48**
 
 See [CHANGELOG.md](CHANGELOG.md) for version history.
 

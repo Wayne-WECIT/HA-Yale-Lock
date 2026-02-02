@@ -1,60 +1,7 @@
 # TODO - Yale Lock Manager
 
-**Current Version**: 1.8.4.47  
+**Current Version**: 1.8.4.48  
 **Last Updated**: 2026-01-27
-
----
-
-## 🧪 Testing & Validation
-
-### Priority: HIGH
-These items need testing with real hardware to ensure everything works correctly.
-
-- [ ] **Test basic lock operations**
-  - Lock/unlock from Home Assistant
-  - Verify lock state updates
-  - Test lock/unlock via services
-
-- [ ] **Test Lovelace card UI**
-  - Set user code via card
-  - Enable/disable user toggle
-  - Push code to lock button
-  - Clear code button
-  - Expand/collapse slot details
-  - Set schedules via card
-  - Set usage limits via card
-  - Verify card shows stored data on reload
-
-- [ ] **Test pull codes from lock**
-  - Click "Refresh from Lock" button
-  - Verify codes are read (if supported by lock model)
-  - Check if unknown codes are detected
-  - Note: May not work on all Yale models (security feature)
-
-- [ ] **Test event notifications**
-  - Unlock with PIN code
-  - Verify `yale_lock_manager_access` event fires
-  - Check event data (user_slot, user_name, method, timestamp)
-  - Test automation triggers with events
-
-- [ ] **Test time-based schedules**
-  - Set start/end datetime for a code
-  - Verify code only works within schedule
-  - Test code outside of schedule (should fail)
-  - Verify `yale_lock_manager_code_expired` event fires
-
-- [ ] **Test usage limits**
-  - Set max_uses limit on a code
-  - Use code multiple times
-  - Verify auto-disable when limit reached
-  - Verify `yale_lock_manager_usage_limit_reached` event fires
-  - Check usage_count increments correctly
-
-- [ ] **Test slot protection**
-  - Push unknown code to lock manually
-  - Try to overwrite that slot via Home Assistant
-  - Verify error/warning prevents overwrite
-  - Test "Pull from Lock" to discover unknown codes
 
 ---
 
@@ -90,10 +37,10 @@ Features that would enhance functionality but aren't critical.
   - Automatically enable codes when schedule starts
   - Fire events for auto-enable/disable
 
-- [ ] **Duplicate code warning**
-  - Check if same PIN is used in multiple slots
-  - Warn user when setting duplicate code
-  - Optional: Prevent duplicates (configurable)
+- [x] **Duplicate code warning** *(completed 2026-01-27)*
+  - [x] Backend: `async_set_user_code` rejects duplicate PIN (raises ValueError with slot number)
+  - [x] Frontend (card + panel): `saveUser()` checks other slots for same PIN and blocks save with error message
+  - [x] Documented in README (Duplicate PIN section)
 
 - [ ] **Bulk operations**
   - Service: `set_multiple_codes` - Set codes for multiple slots
@@ -172,13 +119,10 @@ Nice-to-have improvements for better user experience.
 ### Priority: MEDIUM
 Important for user adoption and support.
 
-- [ ] **Example automations**
-  - Add automation examples to README
-  - Notify when specific user unlocks
-  - Auto-disable guest codes
-  - Send code to visitor via notification
-  - Battery low warning
-  - Lock jammed alert
+- [x] **Example automations** *(completed 2026-01-27)*
+  - [x] Added "Example automations" section to README with full YAML examples
+  - [x] Notify when specific user unlocks (by user_slot), any unlock, code expired, usage limit reached
+  - [x] Battery low alert (numeric_state), send temporary code to visitor (script/notification)
 
 - [ ] **Comprehensive troubleshooting guide**
   - "No locks found" - How to fix
@@ -187,12 +131,6 @@ Important for user adoption and support.
   - "Card not loading" - Resource issues
   - Z-Wave network health tips
   - Debug logging instructions
-
-- [ ] **Video/GIF demos**
-  - Installation walkthrough
-  - Setting up first code
-  - Using the Lovelace card
-  - Creating automations
 
 - [ ] **API documentation**
   - Document all services with examples
@@ -257,7 +195,7 @@ These are ideas for future major versions:
 
 ## ✅ Completed Features
 
-These have been implemented (through v1.8.4.47):
+These have been implemented (through v1.8.4.48):
 
 - ✅ Full lock/unlock control
 - ✅ User code management (20 slots)
@@ -280,6 +218,8 @@ These have been implemented (through v1.8.4.47):
 - ✅ **Notification services** – Per-slot notification targets (UI, All Mobiles, individual devices); backend expands "All Mobiles" to all `notify.mobile_app_*` services
 - ✅ **Test notification** – Backend service `send_test_notification` (entity_id, slot) for Developer Tools/automations (UI test buttons removed)
 - ✅ **Panel** – Full-page Yale Lock Manager panel with same features as card
+- ✅ **Duplicate PIN warning** – Backend rejects duplicate PIN across slots; card/panel block save with error
+- ✅ **Example automations** – README section with YAML examples (specific user, any unlock, code expired, usage limit, battery low, send code to visitor)
 
 ---
 
@@ -288,11 +228,10 @@ These have been implemented (through v1.8.4.47):
 ### Priority: LOW
 Code quality improvements and optimizations that don't affect functionality.
 
-- [ ] **Remove redundant sync check after save**
-  - Currently `async_set_user_code` queries the lock and calculates sync status
-  - Frontend also calls `check_sync_status` after save, causing duplicate lock queries
-  - Remove the redundant `check_sync_status` call from `saveUser()` in the card
-  - The sync status is already calculated correctly in `async_set_user_code`
+- [x] **Remove redundant sync check after save** *(verified 2026-01-27)*
+  - Verified: `async_set_user_code` does **not** query the lock; it uses existing `lock_code` / `lock_status_from_lock` from storage and computes `synced_to_lock` from them.
+  - Verified: Frontend (card and panel) do **not** call `check_sync_status` after save or after push; they only use entity state (`getUserData()`) to show sync status.
+  - No redundant lock query after save; no code change required.
 
 ## 📝 Notes
 

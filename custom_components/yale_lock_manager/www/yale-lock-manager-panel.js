@@ -1939,6 +1939,18 @@ class YaleLockManagerPanel extends HTMLElement {
       return;
     }
 
+    // Duplicate PIN: same code already used in another slot
+    if (codeType === 'pin' && code) {
+      const users = this.getUserData();
+      const duplicateSlot = users.find(u => u.slot !== slot && (
+        (u.code && u.code === code) || (u.lock_code && u.lock_code === code)
+      ));
+      if (duplicateSlot) {
+        this.showStatus(slot, `Another slot (Slot ${duplicateSlot.slot}) already uses this PIN. Use a different PIN.`, 'error');
+        return;
+      }
+    }
+
     try {
       this.showStatus(slot, '⏳ Saving user data...', 'info');
       

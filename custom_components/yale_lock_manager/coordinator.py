@@ -937,6 +937,17 @@ class YaleLockCoordinator(DataUpdateCoordinator):
             if not code or len(code) < 4:
                 raise ValueError("PIN code must be at least 4 digits")
 
+            # Reject duplicate PIN: same code must not be used in another slot
+            for slot_str, other in self._user_data["users"].items():
+                if int(slot_str) == slot:
+                    continue
+                other_code = (other.get("code") or "").strip()
+                if other_code and other_code == code:
+                    raise ValueError(
+                        f"Duplicate PIN: the same code is already used in slot {slot_str}. "
+                        "Use a different PIN for each slot."
+                    )
+
             # Check slot protection (unless override is True)
             if not override_protection and not await self._is_slot_safe_to_write(slot):
                 raise ValueError(f"Slot {slot} is occupied by an unknown code. Use override_protection=True to overwrite.")

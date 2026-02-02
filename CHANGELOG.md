@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.8.4.48] - 2026-01-27
+
+### Duplicate PIN warning, example automations, sync check verified
+
+- **Duplicate PIN**: The same PIN cannot be used in more than one slot. Backend (`async_set_user_code`) rejects duplicate PINs with a clear error including the other slot number. Card and panel check before save and block with message "Another slot (Slot X) already uses this PIN. Use a different PIN." Documented in README (Duplicate PIN section).
+- **Example automations**: Added "Example automations" section to README with full YAML examples: notify when specific user unlocks, any unlock, code expired, usage limit reached, battery low alert, send temporary code to visitor.
+- **Code cleanup**: Verified no redundant sync check after save: `async_set_user_code` does not query the lock; frontend does not call `check_sync_status` after save or push. Marked "Remove redundant sync check after save" in TODO as completed.
+
+---
+
 ## [1.8.4.47] - 2026-01-27
 
 ### Export/Import confirmation and notices

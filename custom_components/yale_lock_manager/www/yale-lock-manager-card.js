@@ -2905,6 +2905,18 @@ class YaleLockManagerCard extends HTMLElement {
           return;
         }
       }
+
+      // Duplicate PIN: same code already used in another slot
+      if (code) {
+        const users = this.getUserData();
+        const duplicateSlot = users.find(u => u.slot !== slot && (
+          (u.code && u.code === code) || (u.lock_code && u.lock_code === code)
+        ));
+        if (duplicateSlot) {
+          this.showStatus(slot, `Another slot (Slot ${duplicateSlot.slot}) already uses this PIN. Use a different PIN.`, 'error');
+          return;
+        }
+      }
     }
 
     try {
