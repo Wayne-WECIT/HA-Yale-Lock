@@ -414,6 +414,9 @@ class YaleLockCoordinator(DataUpdateCoordinator):
                 # Ensure it's a list
                 notification_services = [notification_services] if notification_services else ["notify.persistent_notification"]
             
+            # Expand notify.mobile_app (All Mobiles) to all notify.mobile_app_* device services
+            notification_services = await self._resolve_notification_services(notification_services)
+            
             method_display = method.upper() if method else "Unknown"
             message = f"{user_name} (Slot {user_slot}) unlocked the door via {method_display}"
             
@@ -457,6 +460,47 @@ class YaleLockCoordinator(DataUpdateCoordinator):
                         err,
                     )
 
+    async def _resolve_notification_services(self, notification_services: list[str]) -> list[str]:
+        """Expand notify.mobile_app (All Mobiles) to all notify.mobile_app_* device services."""
+        resolved: list[str] = []
+        for svc in notification_services:
+            s = svc.strip()
+            if not s:
+                continue
+            # Normalize: "mobile_app" or "notify.mobile_app" -> expand to all mobile devices
+            service_name = s.split(".", 1)[-1] if "." in s else s
+            if service_name == "mobile_app":
+                # Replace with all available notify.mobile_app_* services
+                try:
+                    notify_services = self.hass.services.async_services().get("notify", {})
+                except Exception:
+                    notify_services = {}
+                mobile_services = [
+                    f"notify.{k}" for k in notify_services
+                    if k.startswith("mobile_app_")
+                ]
+                if mobile_services:
+                    _LOGGER.debug(
+                        "Resolved notify.mobile_app to %d device(s): %s",
+                        len(mobile_services),
+                        ", ".join(mobile_services),
+                    )
+                    resolved.extend(mobile_services)
+                else:
+                    _LOGGER.warning(
+                        "notify.mobile_app selected but no notify.mobile_app_* services found; skipping"
+                    )
+            else:
+                resolved.append(s)
+        # Dedupe while preserving order
+        seen: set[str] = set()
+        out: list[str] = []
+        for r in resolved:
+            if r not in seen:
+                seen.add(r)
+                out.append(r)
+        return out
+
     async def async_send_test_notification(self, slot: int) -> None:
         """Send a test notification using the same path as access events (for testing)."""
         user_data = self._user_data["users"].get(str(slot))
@@ -473,6 +517,9 @@ class YaleLockCoordinator(DataUpdateCoordinator):
             notification_services = [old_service] if old_service else ["notify.persistent_notification"]
         elif not isinstance(notification_services, list):
             notification_services = [notification_services] if notification_services else ["notify.persistent_notification"]
+
+        # Expand notify.mobile_app (All Mobiles) to all notify.mobile_app_* device services
+        notification_services = await self._resolve_notification_services(notification_services)
 
         notification_data = {
             "title": "Lock Access (Test)",

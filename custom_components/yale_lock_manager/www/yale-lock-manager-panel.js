@@ -1677,11 +1677,15 @@ class YaleLockManagerPanel extends HTMLElement {
       const services = await this._hass.callWS({
         type: 'get_services',
       });
+      // Debug: raw response structure (API may return { result: { notify: {...} } } or unwrapped)
+      console.log('[Yale Lock Manager] get_services raw response top-level keys:', Object.keys(services || {}));
+      const notifyDomain = (services?.result && services.result.notify) ? services.result.notify : (services?.notify || {});
+      console.log('[Yale Lock Manager] notify service keys used:', Object.keys(notifyDomain));
       
       // Filter for notify services - treat any key containing mobile_app_ (except "mobile_app") as a device
       const notifyServices = [];
-      if (services && services.notify) {
-        const keys = Object.keys(services.notify);
+      if (Object.keys(notifyDomain).length > 0) {
+        const keys = Object.keys(notifyDomain);
         for (const key of keys) {
           const id = key.startsWith('notify.') ? key : `notify.${key}`;
           if (key === 'persistent_notification') {
