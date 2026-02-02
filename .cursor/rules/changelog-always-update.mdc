@@ -1,0 +1,20 @@
+---
+description: Always update CHANGELOG (and version when needed) when making code or feature changes
+alwaysApply: true
+---
+
+# Changelog: Always Update
+
+When you make any code or feature changes in this project:
+
+1. **Update CHANGELOG.md**: Add a new section at the **top** of the changelog (below the "Changelog" heading), using the format already in the file:
+   - `## [X.Y.Z.W] - YYYY-MM-DD`
+   - A short heading and bullet list of what changed (frontend, backend, fixes, etc.).
+
+2. **Bump version when releasing**: If the change is user-facing (features, fixes, UI), update the version in **both**:
+   - `custom_components/yale_lock_manager/const.py` — set `VERSION` to the new value (e.g. `1.8.4.44`).
+   - `custom_components/yale_lock_manager/manifest.json` — set `"version"` to the same value.
+
+3. **Include CHANGELOG and version files in the same commit** as the code change (or in the follow-up commit that documents the release).
+
+Do not merge or ship code changes without a corresponding CHANGELOG entry.
