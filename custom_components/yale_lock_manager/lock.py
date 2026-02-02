@@ -146,6 +146,7 @@ class YaleLockManagerLock(CoordinatorEntity, LockEntity):
         for slot_str, user_data in users_raw.items():
             # Create a new dict for each user to ensure new object references
             users[slot_str] = dict(user_data)
+            users[slot_str]["schedule_valid_now"] = self.coordinator._is_code_valid(int(slot_str))
         
         enabled_users = [u for u in users.values() if u.get("enabled")]
         total_users = len([u for u in users.values() if u.get("name")])

@@ -1279,6 +1279,13 @@ class YaleLockCoordinator(DataUpdateCoordinator):
             await self.async_request_refresh()
             return
 
+        # When schedule is on and outside the window, push is handled by the scheduler
+        schedule = user_data.get("schedule", {})
+        if (schedule.get("start") or schedule.get("end")) and not self._is_code_valid(slot):
+            raise HomeAssistantError(
+                "Time slot is not active; push is handled by the scheduler when the schedule is active."
+            )
+
         code = user_data["code"]
         enabled = user_data["enabled"]
         

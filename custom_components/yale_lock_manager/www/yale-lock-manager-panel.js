@@ -1096,6 +1096,8 @@ class YaleLockManagerPanel extends HTMLElement {
     const hasCachedPin = formCode && formCode.trim() !== '';
     const hasName = formName && formName.trim() !== '' && formName.trim() !== `User ${user.slot}`;
     const hasData = hasLockPin || hasCachedPin || hasName;
+    const scheduleHasWindow = user.schedule && (user.schedule.start || user.schedule.end);
+    const outsideWindow = scheduleHasWindow && user.schedule_valid_now === false;
     
     return `
       <tr class="clickable" onclick="panel.toggleExpand(${user.slot})">
@@ -1146,15 +1148,21 @@ class YaleLockManagerPanel extends HTMLElement {
                   <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
                     <div>
                       <label>📝 Cached Status (editable):</label>
-                      <select id="cached-status-${user.slot}" style="width: 100%;">
+                      <select id="cached-status-${user.slot}" style="width: 100%;" ${outsideWindow && formCachedStatus === 1 ? 'disabled' : ''}>
                         ${!hasData ? `
                           <option value="0" ${formCachedStatus === 0 ? 'selected' : ''}>Available</option>
+                        ` : outsideWindow ? `
+                          <option value="2" selected>Disabled</option>
                         ` : `
                           <option value="1" ${formCachedStatus === 1 ? 'selected' : ''}>Enabled</option>
                           <option value="2" ${formCachedStatus === 2 ? 'selected' : ''}>Disabled</option>
                         `}
                       </select>
-                      <p style="color: var(--secondary-text-color); font-size: 0.75em; margin: 4px 0 0 0;">Status stored locally</p>
+                      ${outsideWindow && formCachedStatus === 1 ? `
+                        <p style="color: var(--secondary-text-color); font-size: 0.75em; margin: 4px 0 0 0;">Stored status is Enabled; scheduler will apply when schedule is active. Only Disabled can be set outside the schedule window.</p>
+                      ` : `
+                        <p style="color: var(--secondary-text-color); font-size: 0.75em; margin: 4px 0 0 0;">Status stored locally</p>
+                      `}
                     </div>
                     <div>
                       <label>🔒 Lock Status (from lock):</label>
@@ -1356,7 +1364,8 @@ class YaleLockManagerPanel extends HTMLElement {
                 <div class="button-group" style="margin-top: 12px;">
                   <button 
                     onclick="panel.pushCode(${user.slot})"
-                    style="${!user.synced_to_lock ? 'background: #ff9800; color: white; font-weight: bold;' : ''}"
+                    style="${!user.synced_to_lock && !outsideWindow ? 'background: #ff9800; color: white; font-weight: bold;' : ''}"
+                    ${outsideWindow ? 'disabled title="Push is handled by the scheduler when the schedule is active."' : ''}
                   >${user.synced_to_lock ? 'Push' : 'Push Required'}</button>
                 </div>
               ` : ''}

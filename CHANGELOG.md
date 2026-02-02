@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.8.4.51] - 2026-01-27
+
+### Schedule window: restrict Cached Status and disable Push outside window
+
+- **Cached Status**: When time-based schedule is on and the current time is **outside** the schedule window (before start or after end), **Enabled** is no longer an option. Only **Disabled** can be set. If the stored status is Enabled, a read-only note explains that the scheduler will apply it when the schedule is active.
+- **Push**: When the time slot is not active, the Push button is disabled in the card and panel (tooltip: "Push is handled by the scheduler when the schedule is active."). The backend rejects the push service call with a clear error when outside the window so the scheduler remains the only path that pushes/clears in that case.
+- **Backend**: Entity state now includes `schedule_valid_now` per user (within schedule window or not). Coordinator `async_push_code_to_lock` raises `HomeAssistantError` when the slot has a schedule window and the current time is outside it.
+
+---
+
 ## [1.8.4.50] - 2026-01-27
 
 ### Options UI: schedule check interval

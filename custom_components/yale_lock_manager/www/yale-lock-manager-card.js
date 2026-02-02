@@ -1431,6 +1431,8 @@ class YaleLockManagerCard extends HTMLElement {
       // hasCachedPin already declared above
       const hasName = formName && formName.trim() !== '' && formName.trim() !== `User ${user.slot}`;
       const hasData = hasLockPin || hasCachedPin || hasName;
+      const scheduleHasWindow = user.schedule && (user.schedule.start || user.schedule.end);
+      const outsideWindow = scheduleHasWindow && user.schedule_valid_now === false;
       // Use _formValues for notification chips so re-render after chip click shows updated selection (entity state lags)
       const chipUser = {
         ...user,
@@ -1505,11 +1507,20 @@ class YaleLockManagerCard extends HTMLElement {
                           id="cached-status-${user.slot}" 
                           onchange="card.changeStatus(${user.slot}, this.value); card._checkForUnsavedChanges(${user.slot}); card._validateSlot(${user.slot})" 
                           style="width: 100%;"
+                          ${outsideWindow && formCachedStatus === 1 ? 'disabled' : ''}
                         >
+                          ${outsideWindow ? `
+                          <option value="2" selected>Disabled</option>
+                          ` : `
                           <option value="1" ${formCachedStatus === 1 ? 'selected' : ''}>Enabled</option>
                           <option value="2" ${formCachedStatus === 2 ? 'selected' : ''}>Disabled</option>
+                          `}
                           </select>
+                        ${outsideWindow && formCachedStatus === 1 ? `
+                        <p style="color: var(--secondary-text-color); font-size: 0.75em; margin: 4px 0 0 0;">Stored status is Enabled; scheduler will apply when schedule is active. Only Disabled can be set outside the schedule window.</p>
+                        ` : `
                         <p style="color: var(--secondary-text-color); font-size: 0.75em; margin: 4px 0 0 0;">Status stored locally (Enabled = code on lock, Disabled = code cleared)</p>
+                        `}
                         </div>
                       <div>
                         <label>🔒 Lock Status (from lock):</label>
@@ -1758,8 +1769,9 @@ class YaleLockManagerCard extends HTMLElement {
                     <button 
                       id="push-button-${user.slot}"
                       onclick="card.pushCode(${user.slot})"
-                      style="${!user.synced_to_lock ? 'background: #ff9800; color: white; font-weight: bold;' : ''}"
+                      style="${!user.synced_to_lock && !outsideWindow ? 'background: #ff9800; color: white; font-weight: bold;' : ''}"
                       disabled
+                      ${outsideWindow ? 'title="Push is handled by the scheduler when the schedule is active."' : ''}
                     >${user.synced_to_lock ? 'Push' : 'Push Required'}</button>
                           </div>
                         ` : ''}
@@ -2032,27 +2044,37 @@ class YaleLockManagerCard extends HTMLElement {
      * 
      * Rules:
      * - Save button: Enabled if validation passes AND there are unsaved changes
-     * - Push button: Enabled only if slot has been saved (no unsaved changes) AND lock-affecting changes (PIN/status) were made
+     * - Push button: Enabled only if slot has been saved (no unsaved changes) AND lock-affecting changes (PIN/status) were made AND not outside schedule window
      */
     const saveButton = this.shadowRoot.getElementById(`save-button-${slot}`);
     const pushButton = this.shadowRoot.getElementById(`push-button-${slot}`);
     const hasUnsavedChanges = this._unsavedChanges[slot];
     const isSaved = this._savedSlots[slot];
     const hasLockAffectingChanges = this._lockAffectingChanges[slot] === true;
+    const user = this.getUserData().find(u => u.slot === slot);
+    const scheduleHasWindow = user && user.schedule && (user.schedule.start || user.schedule.end);
+    const outsideWindow = scheduleHasWindow && user.schedule_valid_now === false;
     
     // Save button: enabled if validation passes (handled by _validateSlot) AND has unsaved changes
     // We don't disable it here - _validateSlot handles that
     
-    // Push button: enabled only if slot is saved (no unsaved changes) AND lock-affecting changes were made
+    // Push button: enabled only if slot is saved (no unsaved changes) AND lock-affecting changes were made AND not outside schedule window
     if (pushButton) {
-      if (isSaved && !hasUnsavedChanges && hasLockAffectingChanges) {
+      if (outsideWindow) {
+        pushButton.disabled = true;
+        pushButton.style.opacity = '0.5';
+        pushButton.style.cursor = 'not-allowed';
+        pushButton.title = 'Push is handled by the scheduler when the schedule is active.';
+      } else if (isSaved && !hasUnsavedChanges && hasLockAffectingChanges) {
         pushButton.disabled = false;
         pushButton.style.opacity = '1';
         pushButton.style.cursor = 'pointer';
+        pushButton.title = '';
       } else {
         pushButton.disabled = true;
         pushButton.style.opacity = '0.5';
         pushButton.style.cursor = 'not-allowed';
+        pushButton.title = '';
       }
     }
   }
